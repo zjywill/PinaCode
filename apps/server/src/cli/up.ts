@@ -22,7 +22,6 @@ import { projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
 import {
   connectSubcommands,
   disconnectCloud,
-  headlessFlag,
   linkEnvironmentForConnect,
   requireConnectAllowed,
   runCloudCommand,
@@ -93,7 +92,7 @@ const readSetup = Effect.fn("cli.up.read_setup")(function* () {
 
 /**
  * The routes `t3 up` starts from. With no route flag it asks about every
- * route, starting a machine with no service from T3 Connect. Any route flag
+ * route, keeping the existing routes. Any route flag
  * means it asks nothing and keeps the routes not named as they are.
  */
 export const planRoutes = (
@@ -102,7 +101,7 @@ export const planRoutes = (
 ) => {
   const ask = Option.isNone(flags.connect) && Option.isNone(flags.lan);
   const start = {
-    connect: setup.connect === true || (ask && !setup.installed && setup.connect !== null),
+    connect: setup.connect === true,
     lan: setup.lan,
   };
   return {
@@ -183,9 +182,7 @@ const formatSetup = (setup: Setup) => {
 
 const formatNextSteps = (routes: Routes, serviceInstalled: boolean, pairCommand: string) =>
   [
-    ...(routes.connect
-      ? ["On your other device, sign in to T3 Connect with the same account."]
-      : []),
+    ...(routes.connect ? ["Previously authorized devices can use the T3 Connect tunnel."] : []),
     ...(routes.lan ? [`Run \`${pairCommand}\`. Use the code on your other device.`] : []),
     ...(routes.connect || routes.lan
       ? []
@@ -203,7 +200,6 @@ const setUp = Effect.fn("cli.up")(function* (flags: {
   readonly connect: Option.Option<boolean>;
   readonly lan: Option.Option<boolean>;
   readonly yes: boolean;
-  readonly headless: boolean;
 }) {
   const { baseDir } = yield* ServerConfig.ServerConfig;
   const service = yield* BootService.BootService;
@@ -305,13 +301,10 @@ const setUp = Effect.fn("cli.up")(function* (flags: {
 
   if (routes.connect && !current.connect) {
     const linked = yield* linkEnvironmentForConnect({
-      headless: flags.headless,
       installRelayClient: true,
     });
     if (linked === null) return;
-    yield* Console.log(
-      `✓ Signed in to T3 Connect${linked.identity ? ` as ${linked.identity}` : ""}`,
-    );
+    yield* Console.log(`✓ Linked to T3 Connect${linked.identity ? ` as ${linked.identity}` : ""}`);
   }
   // A running server unlinks live; when that fails, only a restart stops its tunnel.
   const unlinkFailed =
@@ -453,11 +446,10 @@ export const upCommand = Command.make("up", {
   ),
   yes: Flag.Boolean("yes").pipe(
     Flag.withDescription(
-      "Ask nothing. Keep the access settings; a new machine gets T3 Connect. A restart stops running agent turns.",
+      "Ask nothing. Keep the current access settings. A restart stops running agent turns.",
     ),
     Flag.withDefault(false),
   ),
-  headless: headlessFlag,
 }).pipe(
   Command.withShortDescription("Set up remote access and the T3 Code background service."),
   Command.withDescription(
@@ -476,7 +468,6 @@ export const upCommand = Command.make("up", {
 
 export const connectCommand = Command.make("connect", {
   ...projectLocationFlags,
-  headless: headlessFlag,
 }).pipe(
   Command.withDescription("Set up T3 Connect for this machine. Same as `t3 up --connect`."),
   Command.withHandler((flags) =>

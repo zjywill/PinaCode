@@ -52,7 +52,7 @@ describe("workspace tab selections", () => {
   });
 
   it("doesn't remember pages a Settings row doesn't open", () => {
-    for (const name of ["SettingsEnvironmentNew", "SettingsProjectOverview", "SettingsAuth"]) {
+    for (const name of ["SettingsEnvironmentNew", "SettingsProjectOverview", "SettingsLegal"]) {
       expect(workspaceSelectionsIn([home, settings, { key: name, name }], {}).settings).toBe(
         undefined,
       );
@@ -199,7 +199,7 @@ describe("opening a workspace tab", () => {
   });
 
   it("keeps an open sheet on top", () => {
-    const sheet = { key: "sheet", name: "ConnectOnboarding" };
+    const sheet = { key: "sheet", name: "Connections" };
     const next = workspaceTabNavigationState(
       { routes: [home] },
       "threads",
@@ -209,7 +209,7 @@ describe("opening a workspace tab", () => {
         overlays: [sheet],
       },
     );
-    expect(names(next)).toEqual(["Home", "Thread", "ConnectOnboarding"]);
+    expect(names(next)).toEqual(["Home", "Thread", "Connections"]);
     expect(next.index).toBe(2);
   });
 });
@@ -256,7 +256,7 @@ describe("Settings links", () => {
   });
 
   it("opens the sign-in link as a modal over the workspace", () => {
-    const state = { routes: [{ name: "Home" }, { name: "SettingsAuth" }] };
+    const state = { routes: [{ name: "Home" }, { name: "SettingsLegal" }] };
     expect(restoreSettingsLinkState(state, "SettingsAppearance")).toBe(state);
   });
 });

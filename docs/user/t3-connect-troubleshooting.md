@@ -99,34 +99,6 @@ Fix:
    Tailscale address. See
    [Reach one machine several ways](./remote-access.md#reach-one-machine-several-ways).
 
-## Sign-in, account, or link problems
-
-This device's T3 Connect sign-in is not ready yet, or T3 Connect does not have
-an active link between your account and the host.
-
-- **The host is linked to a different account.** Sign in to the same T3 Connect
-  account on this device and on the host. On the host, run `t3 connect logout`,
-  then `t3 connect`.
-- **T3 Connect is off on the host, or the host only publishes agent activity.**
-  On the host, open **Settings > Sharing & access** and turn **T3 Connect** on, or
-  run `t3 connect`.
-- **The host was linked, but the server did not apply the link yet.** Restart
-  the server on the host: quit and reopen the T3 Code desktop app, run
-  `t3 service restart`, or stop `t3 serve` and run it again.
-- **This device's sign-in expired, or the host no longer accepts this
-  device.** Sign out of T3 Connect and sign in again.
-- **This device is still loading its T3 Connect sign-in.** Wait a moment;
-  T3 Code retries on its own. If it keeps waiting, reload or restart T3 Code on
-  this device.
-- **The host is waiting for you to approve this device.** The host requires
-  approval for new devices. Approve the code this device shows from a device
-  that is already connected, or run `t3 auth connect-device approve <code>` on
-  the host. See [Approve new devices](./remote-access.md#approve-new-devices).
-- **Your account reached its tunnel limit.** Remove an environment you do not
-  use from your T3 account's T3 Connect page, or
-  [link a paid T3 Chat account](./remote-access.md#more-machines-with-t3-chat)
-  for a higher limit. Then restart T3 Code on the host.
-
 ## The clock is off
 
 T3 Connect signs requests with short-lived proofs. When the clock on this
@@ -143,7 +115,7 @@ This app needs a newer T3 Code on the host. Update T3 Code on the host. See
 | Error                                                     | Fix                                                                                                                                                                                                  |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `environment_link_limit_exceeded` or managed tunnel limit | Remove an unused environment or link a paid T3 Chat account, then restart T3 Code on the host.                                                                                                       |
-| `auth_invalid` or `invalid_bearer`                        | Run `t3 connect login`. If credentials were revoked, run `t3 connect logout`, then `t3 connect` again. Restart the server after signing in.                                                          |
+| `auth_invalid` or `invalid_bearer`                        | Use a pairing link for direct access. New T3 account sign-ins are unavailable in PinaCode.                                                                                                           |
 | Expired or invalid link proof                             | Check the host's date and time, update T3 Code, then restart it.                                                                                                                                     |
 | HTTP 403 without a recognized error                       | If the host requires approval for new devices, update T3 Code on this device and approve it. Otherwise check relay access, proxies, and firewall rules. Keep any Cloudflare Ray ID for a bug report. |
 | HTTP 408, 429, or 5xx                                     | Wait a few minutes. T3 Code retries temporary failures on its own.                                                                                                                                   |

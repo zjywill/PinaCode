@@ -46,7 +46,7 @@ export class ThreadTitleRegenerationService extends Context.Service<
       | ThreadManagementService.ThreadManagementProviderInstanceDisabledError
     >;
   }
->()("t3/orchestration-v2/ThreadTitleRegenerationService") {}
+>()("pinacode/orchestration-v2/ThreadTitleRegenerationService") {}
 
 type Outcome =
   | { readonly status: "renamed"; readonly title: string }

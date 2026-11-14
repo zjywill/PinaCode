@@ -122,7 +122,6 @@ describe("searchSettings", () => {
 
   it("hides settings whose controls are unavailable", () => {
     const available = filterAvailableSettingsSearchItems({
-      hasCloudPublicConfig: false,
       hasEnvironment: false,
       hasProviderSettingsEnvironment: false,
       canManageLocalBackend: false,
@@ -154,7 +153,6 @@ describe("searchSettings", () => {
 
   it("finds linked environments on a remote host without local maintenance access", () => {
     const availability = {
-      hasCloudPublicConfig: false,
       hasEnvironment: true,
       hasProviderSettingsEnvironment: true,
       canManageLocalBackend: false,
@@ -179,7 +177,6 @@ describe("searchSettings", () => {
 
   it("finds the Welcome page only where a primary computer can open it", () => {
     const availability = {
-      hasCloudPublicConfig: true,
       hasEnvironment: true,
       hasProviderSettingsEnvironment: true,
       canManageLocalBackend: false,
@@ -287,7 +284,6 @@ describe("auto-settlement search availability", () => {
     const availability = getThreadAutoSettlementSearchAvailability(environments);
     expect(availability.eligibleEnvironmentIds).toEqual([capable.environmentId]);
     const items = filterAvailableSettingsSearchItems({
-      hasCloudPublicConfig: false,
       hasEnvironment: true,
       hasProviderSettingsEnvironment: true,
       canManageLocalBackend: false,

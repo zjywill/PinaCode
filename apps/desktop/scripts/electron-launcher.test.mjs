@@ -20,7 +20,7 @@ describe("electron development launcher", () => {
     const environmentScript = makeDevelopmentEnvironmentScript({
       VITE_DEV_SERVER_URL: "http://127.0.0.1:8526",
       T3CODE_PORT: "16566",
-      T3CODE_HOME: "/tmp/t3",
+      PINACODE_HOME: "/tmp/t3",
       T3CODE_OTLP_PROTOCOL: "http/protobuf",
     });
 
@@ -50,7 +50,7 @@ describe("electron development launcher", () => {
     assert.notInclude(script, "VITE_DEV_SERVER_URL");
     assert.include(
       script,
-      "exec '/repo/node_modules/electron/Electron' --t3code-dev-root='/repo/apps/desktop' '/repo/apps/desktop/dist-electron/main.cjs' \"$@\"",
+      "exec '/repo/node_modules/electron/Electron' --pinacode-dev-root='/repo/apps/desktop' '/repo/apps/desktop/dist-electron/main.cjs' \"$@\"",
     );
   });
 
@@ -258,14 +258,14 @@ it
     "/tmp/t3-feature.one [two](three)+?^${four}|back\\slash*/apps/desktop",
   ])("dev cleanup matches only the literal root argument: %s", async (desktopDir) => {
   const pattern = await startupCleanupPattern(desktopDir);
-  const flag = `--t3code-dev-root=${desktopDir}`;
+  const flag = `--pinacode-dev-root=${desktopDir}`;
   const argvCases = [
     [flag],
     [flag, "main.cjs"],
     [flag.replace(".one", "Xone")],
     [`${flag}-two`],
     [`prefix${flag}`],
-    [`--t3code-dev-root=/other${desktopDir}`],
+    [`--pinacode-dev-root=/other${desktopDir}`],
   ];
   const children = [];
   try {

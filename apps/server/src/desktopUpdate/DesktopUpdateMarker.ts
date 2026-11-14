@@ -20,7 +20,7 @@ export class DesktopUpdateMarker extends Context.Service<
      */
     readonly remainingWait: (markerFile: string) => Effect.Effect<Option.Option<number>>;
   }
->()("t3/desktopUpdate/DesktopUpdateMarker") {}
+>()("pinacode/desktopUpdate/DesktopUpdateMarker") {}
 
 const make = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;

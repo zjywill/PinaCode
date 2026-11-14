@@ -245,10 +245,8 @@ describe("releaseManagedTunnelOnShutdown", () => {
         Effect.provideService(
           CliTokenManager.CloudCliTokenManager,
           CliTokenManager.CloudCliTokenManager.of({
-            get: unusedSecretStoreOperation(),
             getExisting: harness.getExisting ?? Effect.succeedSome(cliToken),
             hasCredential: unusedSecretStoreOperation(),
-            store: () => unusedSecretStoreOperation(),
             clear: unusedSecretStoreOperation(),
           }),
         ),

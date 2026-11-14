@@ -115,7 +115,7 @@ export class ServiceLauncherClient extends Context.Service<
       readonly baseDir: string;
     }) => Effect.Effect<ServerSelfUpdateOutcome | undefined, ServiceLauncherClientError>;
   }
->()("t3/cloud/serviceLauncherClient") {}
+>()("pinacode/cloud/serviceLauncherClient") {}
 
 const resolveStartup = Effect.fn("cloud.service_launcher_client.resolve_startup")(
   function* (options?: { readonly currentVersion?: string }) {

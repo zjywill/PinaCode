@@ -1,4 +1,3 @@
-import { useAuth } from "@clerk/react";
 import { useAtomValue } from "@effect/atom-react";
 import type {
   AgentSessionProjectCandidate,
@@ -18,8 +17,7 @@ import {
 import {
   AgentSessionSource,
   AuthProvidersManageScope,
-  AuthRelayReadScope,
-  AuthRelayWriteScope,
+  AuthAccessWriteScope,
   AuthTerminalOperateScope,
   CommandId,
   AuthOrchestrationOperateScope,
@@ -37,19 +35,15 @@ import {
   SmartphoneIcon,
   TerminalIcon,
 } from "lucide-react";
-import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
 import { MOBILE_APP_URL } from "../../branding";
 import { isElectron } from "../../env";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { usePersistEnvironmentProviderInstanceMutation } from "../../hooks/useSettings";
-import { useCloudLinkState } from "../../cloud/cloudLinkState";
-import { hasCloudPublicConfig } from "../../cloud/publicConfig";
 import { PRIVACY_POLICY_URL } from "../../legalLinks";
 import { workspaceAreaProps } from "../../lib/workspaceFocus";
-import { retryClerkLoad, useClerkLoadFailed } from "../clerk/clerkLoadFailure";
-import { useT3ConnectAuthPrompt } from "../clerk/useT3ConnectAuthPrompt";
 import { completeOnboarding } from "../../onboarding/firstRun";
 import {
   groupOnboardingProjects,
@@ -136,13 +130,10 @@ export function WelcomePage({
   const agentReady = useWelcomeAgents(environmentId).readyCount > 0;
   // The phone and `t3` on PATH belong to the primary computer, so only it offers them.
   const isPrimary = usePrimaryEnvironmentId() === environmentId;
-  // The same access Settings → Sharing & access checks.
-  const canReadRelay = useEnvironmentScope(environmentId, AuthRelayReadScope);
-  const canWriteRelay = useEnvironmentScope(environmentId, AuthRelayWriteScope);
+  const canPair = useEnvironmentScope(environmentId, AuthAccessWriteScope);
   const showPhone = welcomeOffersPhone({
     isPrimary,
-    cloud: hasCloudPublicConfig(),
-    canShare: canReadRelay && canWriteRelay,
+    canShare: canPair,
     policy: useManagedPolicy(environmentId),
   });
   const scans = useProjectScans([environmentId]);
@@ -289,7 +280,7 @@ export function WelcomePage({
                 projectImport={projectImport}
                 isImporting={isImporting}
               />
-              {showPhone ? <PhoneSection environmentId={environmentId} /> : null}
+              {showPhone ? <PhoneSection /> : null}
             </div>
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
               {agentReady ? (
@@ -907,7 +898,7 @@ function ProjectsSection({
   );
 }
 
-function PhoneSection({ environmentId }: { readonly environmentId: EnvironmentId }) {
+function PhoneSection() {
   const [open, setOpen] = useState(false);
   return (
     <WelcomeSection title="Phone">
@@ -931,7 +922,9 @@ function PhoneSection({ environmentId }: { readonly environmentId: EnvironmentId
                 <p className="text-sm text-foreground">Scan with your phone to get the app.</p>
               </PhoneStep>
               <PhoneStep step={2}>
-                <PhoneConnectLink environmentId={environmentId} />
+                <Button variant="outline" size="xs" render={<Link to="/settings/access" />}>
+                  Pair your phone
+                </Button>
               </PhoneStep>
             </ol>
             {/* One code for both stores: the link opens the store that matches the phone. */}
@@ -957,90 +950,6 @@ function PhoneStep({ step, children }: { readonly step: number; readonly childre
       <span className="w-3 shrink-0 text-sm text-muted-foreground tabular-nums">{step}</span>
       <div className="flex min-w-0 flex-col items-start gap-2">{children}</div>
     </li>
-  );
-}
-
-function PhoneConnectLink({ environmentId }: { readonly environmentId: EnvironmentId }) {
-  const { isLoaded, isSignedIn, userId } = useAuth({ treatPendingAsSignedOut: false });
-  const loadFailed = useClerkLoadFailed();
-  const { openAuthPrompt } = useT3ConnectAuthPrompt();
-  const linkState = useCloudLinkState(environmentId);
-  const refreshLinkState = useEffectEvent(linkState.refresh);
-  // The server rechecks the tunnel every 30 s; read its latest result while this panel is open.
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- 30 s interval that refreshes the cloud link reachability while mounted
-  useEffect(() => {
-    const interval = window.setInterval(() => refreshLinkState(), 30_000);
-    return () => window.clearInterval(interval);
-  }, []);
-  const link = linkState.data;
-  // The phone reaches this computer through its tunnel; older servers leave that flag out.
-  const shared =
-    link !== null &&
-    link.linked &&
-    link.linkRevoked !== true &&
-    link.cloudUserId === userId &&
-    link.managedTunnelActive !== false;
-  // The server checks the tunnel on its own; until it has, the result is unknown.
-  const reachability = shared ? link.reachability?.status : undefined;
-  const settingsLink = (label: string) => (
-    <Button variant="outline" size="xs" render={<Link to="/settings/access" />}>
-      {label}
-    </Button>
-  );
-  if (isSignedIn && link === null && linkState.isPending) {
-    return <p className="text-sm text-muted-foreground">Checking T3 Connect…</p>;
-  }
-  if (isSignedIn && linkState.error !== null) {
-    return (
-      <>
-        <p className="text-sm text-foreground">Could not check T3 Connect.</p>
-        {settingsLink("Check T3 Connect")}
-      </>
-    );
-  }
-  if (isSignedIn && reachability === "reachable") {
-    return (
-      <p className="flex gap-1.5 text-sm text-foreground">
-        <CheckIcon className="mt-0.5 size-4 shrink-0 text-success-foreground" />
-        Your phone can reach this computer. Sign in to the app with the same account.
-      </p>
-    );
-  }
-  if (isSignedIn && shared && reachability === undefined) {
-    return (
-      <p className="text-sm text-foreground">
-        T3 Connect is on for this computer. Sign in to the app with the same account.
-      </p>
-    );
-  }
-  if (isSignedIn) {
-    // Signing in alone does not share this computer, for example after "Not now".
-    return (
-      <>
-        <p className="text-sm text-foreground">
-          {shared
-            ? "T3 Connect is on, but the app cannot reach this computer."
-            : "Signed in. Share this computer so the app can reach it."}
-        </p>
-        {settingsLink(shared ? "Check T3 Connect" : "Set up T3 Connect")}
-      </>
-    );
-  }
-  return (
-    <>
-      <p className="text-sm text-foreground">
-        Sign in to T3 Connect here, then in the app with the same account.
-      </p>
-      {loadFailed ? (
-        <Button variant="outline" size="xs" onClick={retryClerkLoad}>
-          Retry sign-in
-        </Button>
-      ) : (
-        <Button variant="outline" size="xs" disabled={!isLoaded} onClick={openAuthPrompt}>
-          Sign in to T3 Connect
-        </Button>
-      )}
-    </>
   );
 }
 

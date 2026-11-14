@@ -133,7 +133,7 @@ export class WorkspaceFileSystem extends Context.Service<
       | KnownWorkspaces.UnknownWorkspaceError
     >;
   }
->()("t3/workspace/WorkspaceFileSystem") {}
+>()("pinacode/workspace/WorkspaceFileSystem") {}
 
 /** @public */
 export const make = Effect.gen(function* () {

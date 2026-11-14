@@ -118,7 +118,7 @@ export class CloudSpeech extends Context.Service<
       model?: string | undefined,
     ) => Effect.Effect<string, CloudSpeechError | SpeechInvalidAudioError | ServerSettingsError>;
   }
->()("t3/speech/CloudSpeech") {}
+>()("pinacode/speech/CloudSpeech") {}
 
 export const layer = Layer.effect(
   CloudSpeech,

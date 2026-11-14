@@ -149,7 +149,7 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
         const home = path.join(root, "home");
         const env = {
           PATH: (yield* HostProcess.Environment).PATH,
-          T3CODE_HOME: home,
+          PINACODE_HOME: home,
           T3CODE_TEST_CALLS: path.join(root, "calls"),
           T3CODE_RELEASE_BASE_URL: release.baseUrl,
         };
@@ -221,7 +221,7 @@ it.layer(NodeServices.layer)("build-npm-launcher", (it) => {
         const raceHome = path.join(root, "race-home");
         const launch = run(process.execPath, [launcher, "--version"], {
           cwd: root,
-          env: { ...env, T3CODE_HOME: raceHome },
+          env: { ...env, PINACODE_HOME: raceHome },
         });
         const [one, two] = yield* Effect.all([launch, launch], { concurrency: "unbounded" });
         assert.equal(one.exitCode, 0, one.stderr);
@@ -299,7 +299,7 @@ fs.readFileSync = (file, ...rest) => {
         const recovered = yield* run(
           process.execPath,
           ["--import", peerHook, launcher, "--version"],
-          { cwd: root, env: { ...env, T3CODE_HOME: staleHome } },
+          { cwd: root, env: { ...env, PINACODE_HOME: staleHome } },
         );
         const checks = (yield* fs.readFileString(peerChecks)).trim().split("\n");
         assert.isAtLeast(checks.length, 2);
@@ -319,7 +319,7 @@ fs.readFileSync = (file, ...rest) => {
         yield* fs.makeDirectory(`${staleOnlyDir}.lock`);
         const locked = yield* run(process.execPath, [launcher, "--version"], {
           cwd: root,
-          env: { ...env, T3CODE_HOME: staleOnlyHome },
+          env: { ...env, PINACODE_HOME: staleOnlyHome },
         });
         assert.equal(locked.exitCode, 1);
         assert.include(locked.stderr, `delete ${staleOnlyDir}.lock`);
@@ -329,7 +329,7 @@ fs.readFileSync = (file, ...rest) => {
         yield* fs.remove(`${staleOnlyDir}.lock`, { recursive: true });
         const replaced = yield* run(process.execPath, [launcher, "--version"], {
           cwd: root,
-          env: { ...env, T3CODE_HOME: staleOnlyHome },
+          env: { ...env, PINACODE_HOME: staleOnlyHome },
         });
         assert.equal(replaced.stdout.trim(), VERSION, replaced.stderr);
         assert.equal(replaced.exitCode, 0);
@@ -341,7 +341,7 @@ fs.readFileSync = (file, ...rest) => {
         release.corruptChecksum();
         const corrupt = yield* run(process.execPath, [launcher, "--version"], {
           cwd: root,
-          env: { ...env, T3CODE_HOME: path.join(root, "other-home") },
+          env: { ...env, PINACODE_HOME: path.join(root, "other-home") },
         });
         assert.equal(corrupt.exitCode, 1);
         assert.include(corrupt.stderr, "checksum mismatch");
@@ -384,7 +384,7 @@ syncBuiltinESMExports();
           );
           const env = {
             PATH: (yield* HostProcess.Environment).PATH,
-            T3CODE_HOME: home,
+            PINACODE_HOME: home,
             T3CODE_RELEASE_BASE_URL: release.baseUrl,
             T3CODE_TEST_READY: path.join(root, "probe-ready"),
             T3CODE_TEST_TERM: path.join(root, "probe-term"),
@@ -457,7 +457,7 @@ console.log(process.pid, provider.pid);
         const launcher = NodeChildProcess.spawn(
           process.execPath,
           [path.join(installed, "package/bin/t3.mjs"), "serve"],
-          { cwd: root, env: { PATH: hostPath, T3CODE_HOME: home }, stdio: "pipe" },
+          { cwd: root, env: { PATH: hostPath, PINACODE_HOME: home }, stdio: "pipe" },
         );
         let pids: Array<number> = [];
         yield* Effect.addFinalizer(() =>

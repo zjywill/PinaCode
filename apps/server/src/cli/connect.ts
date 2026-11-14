@@ -13,7 +13,6 @@ import * as RelayClient from "@t3tools/shared/relayClient";
 import { withRelayClientTracing } from "@t3tools/shared/relayTracing";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
-import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Duration from "effect/Duration";
@@ -24,7 +23,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as References from "effect/References";
-import * as Schema from "effect/Schema";
 import { Command, Flag, GlobalFlag, Prompt } from "effect/cli";
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as HttpApiClient from "effect/http-api/HttpApiClient";
@@ -63,79 +61,6 @@ const jsonFlag = Flag.Boolean("json").pipe(
   Flag.withDescription("Emit JSON instead of human-readable output."),
   Flag.withDefault(false),
 );
-
-const isCloudCliTokenManagerError = Schema.is(CliTokenManager.CloudCliTokenManagerError);
-
-export const headlessFlag = Flag.Boolean("headless").pipe(
-  Flag.withDescription(
-    "Sign in with a URL and code on any device. Automatic without a terminal or over SSH.",
-  ),
-  Flag.withDefault(false),
-);
-
-/**
- * Inside an SSH session there is no local browser to complete the loopback
- * OAuth callback, so the device authorization grant is the only flow that
- * can work.
- */
-const headlessSessionConfig = Config.all({
-  sshConnection: Config.String("SSH_CONNECTION").pipe(Config.option),
-  sshTty: Config.String("SSH_TTY").pipe(Config.option),
-}).pipe(
-  Config.map(({ sshConnection, sshTty }) => Option.isSome(sshConnection) || Option.isSome(sshTty)),
-);
-
-const showDeviceAuthorizationPrompt = (prompt: CliTokenManager.DeviceAuthorizationPrompt) =>
-  Console.log(formatDeviceAuthorizationPrompt(prompt));
-
-function formatDeviceAuthorizationPrompt(
-  prompt: CliTokenManager.DeviceAuthorizationPrompt,
-): string {
-  const minutes = Math.max(1, Math.round(Duration.toMinutes(prompt.expiresIn)));
-  return [
-    "Sign in to T3 Connect. Open on any device:",
-    `  ${prompt.verificationUriComplete ?? prompt.verificationUri}`,
-    `Code: ${prompt.userCode}`,
-    `Waiting for approval. Expires in ${minutes} min. Ctrl+C cancels.`,
-  ].join("\n");
-}
-
-const authorizeCli = Effect.fn("cloud.cli.authorize")(function* (options: {
-  readonly headless: boolean;
-}) {
-  const tokens = yield* CliTokenManager.CloudCliTokenManager;
-  // Without a terminal, no key press can open a browser, so sign in with a code.
-  const useOutOfBandOAuth =
-    options.headless ||
-    (yield* headlessSessionConfig) ||
-    !(process.stdin.isTTY && process.stdout.isTTY);
-  if (!useOutOfBandOAuth) {
-    const authorization = yield* tokens.get;
-    if (authorization._tag === "Authorized") {
-      return authorization.token.identity ?? null;
-    }
-  }
-  const existing = yield* tokens.getExisting.pipe(
-    Effect.catchTags({
-      CloudCliCredentialRefreshError: () =>
-        Console.log("T3 Connect sign-in expired. Sign in again.").pipe(Effect.as(Option.none())),
-    }),
-  );
-  if (Option.isSome(existing)) {
-    return existing.value.identity ?? null;
-  }
-  const { token, identity } = yield* CliTokenManager.deviceAuthorizationLogin(
-    showDeviceAuthorizationPrompt,
-  ).pipe(
-    Effect.mapError((cause) =>
-      isCloudCliTokenManagerError(cause)
-        ? cause
-        : new CliTokenManager.CloudCliAuthorizationError({ cause }),
-    ),
-  );
-  yield* tokens.store(token);
-  return identity;
-});
 
 function bytesToString(value: Uint8Array): string {
   return new TextDecoder().decode(value);
@@ -496,7 +421,7 @@ const reportCloudDisconnectResults = Effect.fn("cloud.cli.report_disconnect_resu
       );
     } else if (input.relayResult.value.status === "not-authenticated") {
       yield* Console.warn(
-        "The relay-side environment record was not revoked.\nDeregister it from the T3 Connect page of your T3 account, or run `t3 connect login` and retry.",
+        "The relay-side environment record was not revoked.\nRemove it using a client that manages the T3 Connect account.",
       );
     } else if (input.relayResult.value.status === "revoked") {
       yield* Console.log("Revoked the relay-side environment record.");
@@ -590,11 +515,18 @@ function formatRelayClientReady(version: string): string {
 }
 
 const linkEnvironmentForConnect = Effect.fn("cloud.cli.link_environment")(function* (options: {
-  readonly headless: boolean;
   readonly publishOnly?: boolean;
   /** For `t3 up`, where the user already chose T3 Connect: install it quietly, without asking. */
   readonly installRelayClient?: boolean;
 }) {
+  const credential = yield* (yield* CliTokenManager.CloudCliTokenManager).getExisting;
+  if (Option.isNone(credential)) {
+    yield* Console.log(
+      "This machine has no existing T3 Connect credential. Use t3 pair to connect a device.",
+    );
+    return null;
+  }
+  const identity = credential.value.identity ?? null;
   const publishOnly = options.publishOnly ?? false;
   if (!publishOnly) {
     const relayClient = yield* RelayClient.RelayClient;
@@ -617,7 +549,6 @@ const linkEnvironmentForConnect = Effect.fn("cloud.cli.link_environment")(functi
     }
   }
 
-  const identity = yield* authorizeCli(options);
   yield* CliState.setCliDesiredCloudLink(true, publishOnly ? "publish_only" : "managed");
   if (yield* CliState.dropRevokedCloudLink) {
     yield* Console.log("Replacing the link T3 Connect revoked.");
@@ -630,27 +561,8 @@ const linkEnvironmentForConnect = Effect.fn("cloud.cli.link_environment")(functi
 });
 export { linkEnvironmentForConnect };
 
-const connectLoginCommand = Command.make("login", {
-  ...projectLocationFlags,
-  headless: headlessFlag,
-}).pipe(
-  Command.withDescription("Authorize the T3 Connect CLI without enabling remote access."),
-  Command.withHandler((flags) =>
-    runCloudCommand(
-      flags,
-      Effect.gen(function* () {
-        yield* requireConnectAllowed;
-        yield* Console.log("T3 Connect\n");
-        const identity = yield* authorizeCli(flags);
-        yield* Console.log(`✓ Signed in${connectedAs(identity)}`);
-      }),
-    ),
-  ),
-);
-
 const connectLinkCommand = Command.make("link", {
   ...projectLocationFlags,
-  headless: headlessFlag,
   publishOnly: Flag.Boolean("publish-only").pipe(
     Flag.withDescription(
       "Link to publish agent activity only, with no managed tunnel. Reach this environment out of band (e.g. Tailscale).",
@@ -782,9 +694,7 @@ const connectPublishCommand = Command.make("publish", {
         }
 
         if (!(yield* tokens.hasCredential)) {
-          yield* Console.log(
-            "Run `t3 connect login` first so this environment can be authorized to publish.",
-          );
+          yield* Console.log("Publishing requires an existing T3 Connect credential.");
           return;
         }
         // A desired managed link already covers publishing and must not be downgraded.
@@ -823,7 +733,6 @@ const connectLogoutCommand = Command.make("logout", {
 
 // `t3 connect` itself is `t3 up --connect`, in up.ts.
 export const connectSubcommands = [
-  connectLoginCommand,
   connectLinkCommand,
   connectPublishCommand,
   connectStatusCommand,

@@ -3,6 +3,13 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
+import {
+  HyprlandCaptureSetup,
+  captureHyprlandWindow,
+  hyprlandCaptureExecutable,
+  hyprlandCaptureShortcut,
+} from "./HyprlandSnapShot.ts";
+import { CaptureSetupRequiredError } from "./linuxCaptureSession.ts";
 const execute = vi.hoisted(() => vi.fn());
 const startEffects = vi.hoisted(() => vi.fn());
 vi.mock("node:child_process", () => ({ execFile: execute }));
@@ -12,13 +19,6 @@ vi.mock("electron", () => ({
     createFromBuffer: () => ({ isEmpty: () => false, getSize: () => ({ width: 2, height: 1 }) }),
   },
 }));
-import {
-  HyprlandCaptureSetup,
-  captureHyprlandWindow,
-  hyprlandCaptureExecutable,
-  hyprlandCaptureShortcut,
-} from "./HyprlandSnapShot.ts";
-import { CaptureSetupRequiredError } from "./linuxCaptureSession.ts";
 
 let directory: string;
 let paths: { bundle: string; dataHome: string };
@@ -119,14 +119,14 @@ it.each([true, false])("uses the active config syntax and user bindings (Lua: %s
     NodePath.join(config, lua ? "bindings.lua" : "bindings.conf"),
     "custom bindings",
   );
-  const result = await hyprlandCaptureShortcut("com.t3tools.T3Code", "/home/test", directory);
+  const result = await hyprlandCaptureShortcut("app.pinacode.Client", "/home/test", directory);
   expect(result.shortcutConfigPath).toBe(
     NodePath.join(config, lua ? "bindings.lua" : "bindings.conf"),
   );
   expect(result.shortcutBinding).toBe(
     lua
-      ? 'hl.bind("CTRL + SHIFT + 2", hl.dsp.global("com.t3tools.T3Code:capture-window"))'
-      : "bind = CTRL SHIFT, 2, global, com.t3tools.T3Code:capture-window",
+      ? 'hl.bind("CTRL + SHIFT + 2", hl.dsp.global("app.pinacode.Client:capture-window"))'
+      : "bind = CTRL SHIFT, 2, global, app.pinacode.Client:capture-window",
   );
   expect(await NodeFSP.readFile(result.shortcutConfigPath, "utf8")).toBe("custom bindings");
 });

@@ -113,7 +113,7 @@ export class PeerLinks extends Context.Service<
       outcome: { readonly error: string | null },
     ) => Effect.Effect<void>;
   }
->()("t3/peer/PeerLinks") {}
+>()("pinacode/peer/PeerLinks") {}
 
 interface PeerLinkRow {
   readonly environment_id: string;

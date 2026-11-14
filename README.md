@@ -1,3 +1,9 @@
+# PinaCode
+
+PinaCode is a fork of T3 Code that runs alongside the original app. Its desktop CLI is `pinacode`, its default server port is `4773`, and it keeps its data in `~/.pinacode` (override with `PINACODE_HOME`). Use local or directly paired environments without a T3 account. Provider sign-in and environment authorization still apply.
+
+The links below describe the upstream T3 Code project.
+
 <p align="center">
   <a href="https://t3.codes">
     <img src="./assets/prod/t3-black-web-icon-192x192.png" width="80" height="80" alt="T3 Code logo" />

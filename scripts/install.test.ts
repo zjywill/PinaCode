@@ -37,7 +37,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer home
           env: {
             ...process.env,
             HOME: root,
-            T3CODE_HOME: homeName,
+            PINACODE_HOME: homeName,
             T3CODE_VERSION: version,
             T3CODE_INSTALL_BIN_DIR: NodePath.dirname(launcher),
             T3CODE_RELEASE_BASE_URL: "http://127.0.0.1:1",
@@ -106,7 +106,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer chan
               ...process.env,
               T3CODE_VERSION: "",
               T3CODE_CHANNEL: channel,
-              T3CODE_HOME: NodePath.join(root, "home"),
+              PINACODE_HOME: NodePath.join(root, "home"),
               T3CODE_INSTALL_BIN_DIR: NodePath.join(root, "bin"),
               // A wrong version must fail here instead of downloading a real release.
               T3CODE_RELEASE_BASE_URL: origin,
@@ -157,7 +157,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")(
                   ...process.env,
                   T3CODE_CHANNEL: "",
                   T3CODE_VERSION: "1.2.3",
-                  T3CODE_HOME: NodePath.join(root, "home"),
+                  PINACODE_HOME: NodePath.join(root, "home"),
                   T3CODE_INSTALL_BIN_DIR: NodePath.join(root, "bin"),
                   T3CODE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}`,
                 },
@@ -205,7 +205,7 @@ async function installOver(input: {
       ...process.env,
       T3CODE_CHANNEL: "",
       T3CODE_VERSION: "1.2.3",
-      T3CODE_HOME: input.home,
+      PINACODE_HOME: input.home,
       T3CODE_INSTALL_BIN_DIR: input.binDir,
       T3CODE_RELEASE_BASE_URL: "http://127.0.0.1:9",
       ...input.env,
@@ -338,7 +338,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "win32")("install.ps1 t3
       expect(await NodeFSP.readFile(shim, "utf8")).toBe(desktopShim);
 
       // A hand-edited wrapper may set its own environment; replacing it would drop that.
-      const edited = `@echo off\r\nset "T3CODE_HOME=D:\\other"\r\n"${NodePath.join(home, "runtime", "versions", "1.0.0", "t3.exe")}" %*`;
+      const edited = `@echo off\r\nset "PINACODE_HOME=D:\\other"\r\n"${NodePath.join(home, "runtime", "versions", "1.0.0", "t3.exe")}" %*`;
       await NodeFSP.writeFile(shim, edited, "utf8");
       const wrapper = await installOver({ script: "install.ps1", home, binDir });
       expect(wrapper.code).not.toBe(0);
@@ -478,7 +478,7 @@ describe.skipIf(HostProcess.Platform.defaultValue() !== "linux")("installer chec
                     ...process.env,
                     PATH: tools,
                     T3CODE_VERSION: version,
-                    T3CODE_HOME: home,
+                    PINACODE_HOME: home,
                     T3CODE_INSTALL_BIN_DIR: NodePath.join(root, "bin"),
                     T3CODE_RELEASE_BASE_URL: `http://127.0.0.1:${address.port}`,
                   },

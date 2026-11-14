@@ -12,7 +12,6 @@ import { usePrimaryEnvironmentId } from "../state/environments";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
 import { readCloudLinkState, type CloudLinkTarget } from "./linkEnvironment";
-import { hasCloudPublicConfig } from "./publicConfig";
 
 const cloudLinkStateAtom = Atom.family((environmentId: EnvironmentId) =>
   connectionAtomRuntime
@@ -44,7 +43,7 @@ export function useCloudLinkState(environmentId: EnvironmentId | null) {
   const canReadRelay = useEnvironmentScope(environmentId, AuthRelayReadScope);
   const target: CloudLinkTarget | null = environmentId === null ? null : { environmentId };
   const atom =
-    environmentId !== null && hasCloudPublicConfig() && canReadRelay
+    environmentId !== null && canReadRelay
       ? cloudLinkStateAtom(environmentId)
       : EMPTY_CLOUD_LINK_STATE_ATOM;
   const result = useAtomValue(atom);

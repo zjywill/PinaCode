@@ -1,7 +1,6 @@
 import { Button } from "../../components/ui/Button";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { ConnectionTraceId } from "./ConnectionTraceId";
-import { useAuth } from "@clerk/expo";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import {
   hasSavedBearerRoute,
@@ -26,7 +25,6 @@ import type { ConnectedEnvironmentSummary } from "../../state/remote-runtime-typ
 import { serverEnvironment } from "../../state/server";
 import { environmentPresentations } from "../../state/presentation";
 import { availableCloudEnvironmentPresentation } from "../cloud/cloudEnvironmentPresentation";
-import { hasCloudPublicConfig } from "../cloud/publicConfig";
 import { ConnectionStatusDot } from "./ConnectionStatusDot";
 import { useConnectionDiagnosis } from "./ConnectionDiagnosisDetails";
 import { environmentStatusText } from "./environmentStatusText";
@@ -48,16 +46,7 @@ export function CloudEnvironmentRows(props: CloudEnvironmentRowsProps) {
     return props.showcaseSignedIn ? <CloudEnvironmentRowsContent {...props} /> : null;
   }
   // No cloud config means no `ClerkProvider` either, so `useAuth` would throw.
-  if (!hasCloudPublicConfig()) {
-    return <ConnectedOnlyCloudEnvironmentRows {...props} />;
-  }
-  return <SignedInCloudEnvironmentRows {...props} />;
-}
-
-function SignedInCloudEnvironmentRows(props: CloudEnvironmentRowsProps) {
-  const { isSignedIn } = useAuth({ treatPendingAsSignedOut: false });
-  if (!isSignedIn) return <ConnectedOnlyCloudEnvironmentRows {...props} />;
-  return <CloudEnvironmentRowsContent {...props} />;
+  return <ConnectedOnlyCloudEnvironmentRows {...props} />;
 }
 
 function ConnectedOnlyCloudEnvironmentRows(props: CloudEnvironmentRowsProps) {
