@@ -33,7 +33,7 @@ if (
 const icon = fromRepoRoot("assets/pinacode/icon.png");
 const assets = {
   appIcon: icon,
-  iosIcon: icon,
+  iosIcon: fromRepoRoot("assets/pinacode/pinacode.icon"),
   splashIcon: icon,
   androidAdaptiveForeground: icon,
   androidAdaptiveBackgroundColor: "#000000",
@@ -197,7 +197,7 @@ const config: ExpoConfig = {
   slug: "pinacode",
   platforms: ["ios", "android"],
   scheme: variant.scheme,
-  version: repoEnv.T3CODE_MOBILE_VERSION ?? "2.3.0",
+  version: repoEnv.T3CODE_MOBILE_VERSION ?? "1.0",
   runtimeVersion: {
     // Skip costly fingerprinting on dev launches; preview and production OTAs require matching native projects.
     policy: runtimeVersionPolicy,
@@ -213,11 +213,12 @@ const config: ExpoConfig = {
   },
   ios: {
     icon: variant.assets.iosIcon,
+    buildNumber: "2",
     supportsTablet: true,
     requireFullScreen: process.env.T3_SHOWCASE_CAPTURE_BUILD === "1",
     bundleIdentifier: iosBundleIdentifier,
     // Avoid Personal Team fallback: it cannot sign App Groups, Apple sign-in or push entitlements.
-    appleTeamId: "ARK85ZXQ4Z",
+    appleTeamId: "NGM7GX8DGB",
 
     entitlements: {
       "keychain-access-groups": [`$(AppIdentifierPrefix)${variant.iosBundleIdentifier}`],
