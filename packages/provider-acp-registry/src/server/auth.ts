@@ -1,5 +1,6 @@
 import {
   ProviderSetupError,
+  isDimCodeAlphaCommand,
   type ProviderAuthMethod,
   type ProviderInstanceId,
 } from "@t3tools/contracts";
@@ -13,6 +14,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import type * as AcpSchema from "effect-acp/compat";
@@ -20,10 +22,25 @@ import * as EffectAcpErrors from "effect-acp/errors";
 
 import * as PtyAdapter from "@t3tools/shared/PtyAdapter";
 import * as ProviderAuthFlow from "@t3tools/provider-core/server/providerAuthFlow";
-import { normalizeAcpRegistryAuthMethods, normalizeAcpRegistryWebUrl } from "./probe.ts";
+import {
+  normalizeAcpRegistryAuthMethods,
+  normalizeAcpRegistryWebUrl,
+  terminalAuthArgs,
+} from "./probe.ts";
 import * as AcpRegistrySupport from "./AcpRegistrySupport.ts";
 import * as AcpRegistryRuntimeCoordinator from "./AcpRegistryRuntimeCoordinator.ts";
 import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+
+const decodeDimBrowserMethod = Schema.decodeOption(
+  Schema.fromJsonString(
+    Schema.Tuple([
+      Schema.Literal("dim"),
+      Schema.String,
+      Schema.Literal("browser"),
+      Schema.Literal("agent"),
+    ]),
+  ),
+);
 
 const isAcpRequestError = Schema.is(EffectAcpErrors.AcpRequestError);
 
@@ -67,6 +84,7 @@ export const makeAcpRegistryAuth = Effect.fn("makeAcpRegistryAuth")(function* (o
   const coordinator = yield* Effect.serviceOption(
     AcpRegistryRuntimeCoordinator.AcpRegistryRuntimeCoordinator,
   );
+  const dimCode = isDimCodeAlphaCommand(options.settings);
   const agentKey =
     options.settings.source === "local" ? `local:${options.instanceId}` : options.settings.agentId;
   const failure = (operation: string, detail: string, cause?: unknown) =>
@@ -150,12 +168,27 @@ export const makeAcpRegistryAuth = Effect.fn("makeAcpRegistryAuth")(function* (o
         .slice(0, 32)
         .map((method) => ({
           id: method.id,
-          name: method.name,
+          name:
+            method.type === "terminal" &&
+            initialized.authMethods?.some(
+              (other) => other.name === method.name && other.type !== "terminal",
+            )
+              ? method.name + " via terminal"
+              : method.name,
           description: method.description,
           type: method.type === "env_var" ? ("credentials" as const) : method.type,
         }));
-      knownMethods = { version: inspected.version, methods: advertised };
-      return advertised;
+      const preferred =
+        dimCode && advertised.length > 1
+          ? (advertised.find(
+              (method) =>
+                method.type === "terminal" &&
+                method.id === '["dim","dimcode-api-oauth","device","terminal"]',
+            ) ?? advertised[0])
+          : undefined;
+      const methods = preferred ? [preferred] : advertised;
+      knownMethods = { version: inspected.version, methods };
+      return methods;
     }),
   ).pipe(
     Effect.timeoutOrElse({
@@ -195,7 +228,7 @@ export const makeAcpRegistryAuth = Effect.fn("makeAcpRegistryAuth")(function* (o
     const process = yield* pty.value
       .spawn({
         shell: resolved.spawn.command,
-        args: [...resolved.spawn.args, ...(method.args ?? [])],
+        args: [...terminalAuthArgs(resolved.spawn, method.args)],
         cwd: options.cwd,
         cols: 80,
         rows: 24,
@@ -305,6 +338,7 @@ export const makeAcpRegistryAuth = Effect.fn("makeAcpRegistryAuth")(function* (o
         if (method.type === "terminal") {
           yield* Scope.close(runtimeScope, Exit.void);
           yield* runTerminal(resolved, method, context).pipe(Effect.scoped);
+          if (dimCode) return;
           // Terminal login is a separate invocation. Reconnect after it exits so
           // the ACP process reads the credentials its login command persisted.
           const verifiedRuntime = yield* makeRuntime(resolved.spawn);
@@ -331,6 +365,26 @@ export const makeAcpRegistryAuth = Effect.fn("makeAcpRegistryAuth")(function* (o
                   failure("start", "The ACP agent could not complete sign-in.", cause),
                 ),
               );
+            if (dimCode) {
+              // Dim confirms the account before authenticate returns. Browser login can leave its catalog empty.
+              const id = decodeDimBrowserMethod(methodId);
+              if (Option.isSome(id)) {
+                const command = ChildProcess.make(
+                  resolved.spawn.command,
+                  ["models", id.value[1], "--refresh"],
+                  {
+                    cwd: options.cwd,
+                    env: { ...options.environment, ...resolved.spawn.env },
+                    stdout: "ignore",
+                    stderr: "ignore",
+                  },
+                );
+                yield* spawner
+                  .exitCode(command)
+                  .pipe(Effect.timeoutOption("30 seconds"), Effect.ignore);
+              }
+              return;
+            }
           }
           // Legacy env_var methods use the secret-backed environment fields in
           // provider settings. Never send their ID to authenticate.
@@ -379,7 +433,9 @@ export const makeAcpRegistryAuth = Effect.fn("makeAcpRegistryAuth")(function* (o
     // ACP omits credential scope; assume an agent's instances share credentials in this environment.
     credentialBinding: { owner: "provider", key: `acp:${agentKey}` },
     methods,
-    ...(options.settings.authMethodId ? { defaultMethodId: options.settings.authMethodId } : {}),
+    ...(!dimCode && options.settings.authMethodId
+      ? { defaultMethodId: options.settings.authMethodId }
+      : {}),
     authenticate,
     logout: signOut,
   });

@@ -1,4 +1,6 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   AcpRegistryOperationError,
@@ -542,10 +544,101 @@ const driverLayer = TestProviderHost.layer({ runBackgroundWork: false }).pipe(
       ProviderEventLoggers.NoOpProviderEventLoggers,
     ),
   ),
-  Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      NodeServices.layer,
+      NodeCrypto.layer,
+      ProviderLatestVersions.layer,
+      FetchHttpClient.layer,
+    ),
+  ),
 );
 
 it.layer(driverLayer, { excludeTestServices: true })("AcpRegistryDriver", (it) => {
+  it.effect("offers a first install of the alpha package when dima is missing", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const prefix = yield* fs.makeTempDirectoryScoped();
+      const bin = path.join(prefix, "bin");
+      yield* fs.makeDirectory(bin);
+      const npm = path.join(bin, "npm");
+      yield* fs.writeFileString(npm, `#!/bin/sh\n[ "$1 $2" = "prefix -g" ] && echo "${prefix}"\n`);
+      yield* fs.chmod(npm, 0o755);
+      const instance = yield* AcpRegistryDriver.create({
+        instanceId: identity.instanceId,
+        displayName: "DimCode Alpha",
+        enabled: true,
+        environment: [{ name: "PATH", value: bin, sensitive: false }],
+        config: decodeSettings({ source: "local", commandPath: "dima", commandArgs: ["acp"] }),
+      }).pipe(
+        Effect.provideService(
+          AcpRegistrySupport.AcpRegistryCatalog,
+          catalogWithInspection({
+            status: "missing_runner",
+            distribution: "local",
+            version: null,
+          }),
+        ),
+      );
+      expect(yield* instance.snapshot.getSnapshot).toMatchObject({
+        installed: false,
+        versionAdvisory: { canUpdate: true },
+      });
+      expect((yield* instance.snapshot.resolveMaintenance()).update?.args).toEqual([
+        "install",
+        "-g",
+        "--prefix",
+        prefix,
+        "dimcode-alpha@alpha",
+      ]);
+    }),
+  );
+
+  it.effect("offers an alpha update for the npm installation owning dima", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const prefix = yield* fs.makeTempDirectoryScoped();
+      const bin = path.join(prefix, "bin");
+      const installed = path.join(prefix, "lib/node_modules/dimcode-alpha/bin/dimcode.mjs");
+      yield* fs.makeDirectory(path.dirname(installed), { recursive: true });
+      yield* fs.makeDirectory(bin);
+      yield* fs.writeFileString(installed, "#!/bin/sh\nexit 0\n");
+      yield* fs.chmod(installed, 0o755);
+      const commandPath = path.join(bin, "dima");
+      yield* fs.symlink(installed, commandPath);
+      const instance = yield* AcpRegistryDriver.create({
+        instanceId: identity.instanceId,
+        displayName: "DimCode Alpha",
+        enabled: true,
+        environment: [],
+        config: decodeSettings({ source: "local", commandPath, commandArgs: ["acp"] }),
+      }).pipe(
+        Effect.provideService(
+          AcpRegistrySupport.AcpRegistryCatalog,
+          catalogWithInspection({
+            status: "ready",
+            agentId: "dima",
+            version: "0.1.0-alpha.23",
+            distribution: "local",
+          }),
+        ),
+      );
+      expect((yield* instance.snapshot.getSnapshot).iconUrl).toBe(
+        "https://cdn.agentclientprotocol.com/registry/v1/latest/dimcode.svg",
+      );
+      expect(yield* instance.snapshot.resolveMaintenance()).toMatchObject({
+        packageName: "dimcode-alpha",
+        npmDistTag: "alpha",
+        update: {
+          executable: "npm",
+          args: ["install", "-g", "--prefix", yield* fs.realPath(prefix), "dimcode-alpha@alpha"],
+        },
+      });
+    }),
+  );
+
   it.effect("drops cached and session-reported models when its caches are invalidated", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

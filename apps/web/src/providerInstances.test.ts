@@ -578,6 +578,28 @@ describe("provider icon metadata", () => {
     expect(localEntry?.enabled).toBe(false);
     expect(localEntry?.snapshot).toBe(snapshots[0]?.snapshot);
 
+    const [dimCode] = applyProviderInstanceSettings(
+      snapshots,
+      {
+        providerInstances: {
+          [instanceId]: {
+            driver,
+            enabled: true,
+            config: {
+              ...registryConfig,
+              source: "local",
+              commandPath: "dima",
+              commandArgs: ["acp"],
+            },
+          },
+        },
+        projectSettingsOverrides: {},
+      },
+      null,
+    );
+    expect(dimCode?.acpRegistryAgentId).toBe("dimcode");
+    expect(dimCode?.acpRegistryIconUrl).toBeUndefined();
+
     const [restoredEntry] = applyProviderInstanceSettings(
       localEntry ? [localEntry] : [],
       {

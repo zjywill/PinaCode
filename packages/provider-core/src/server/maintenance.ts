@@ -4,6 +4,7 @@ import type * as Effect from "effect/Effect";
 export interface ProviderMaintenanceCapabilities {
   readonly provider: ProviderDriverKind;
   readonly packageName: string | null;
+  readonly npmDistTag?: string;
   readonly update: ProviderMaintenanceCommandAction | null;
   /** undefined defers to npm; null means the installer could not determine the latest version. */
   readonly latestVersion?: string | null;

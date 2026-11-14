@@ -1,6 +1,7 @@
 import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 import {
   AcpRegistryListProvidersResult,
+  isDimCodeAlphaCommand,
   AcpRegistryOperationError,
   AcpRegistryListSessionsResult,
   AcpRegistryProbeResult,
@@ -104,6 +105,19 @@ function shellDisplayToken(token: string): string {
   return SHELL_SAFE_TOKEN.test(token) ? token : `'${token.replaceAll("'", `'\\''`)}'`;
 }
 
+export function terminalAuthArgs(
+  spawn: AcpRegistryAuthSpawnContext,
+  args: ReadonlyArray<string> = [],
+) {
+  // Dim advertises the complete helper invocation, including the acp subcommand and home.
+  if (
+    args[0] === "acp" &&
+    isDimCodeAlphaCommand({ source: "local", commandPath: spawn.command, commandArgs: spawn.args })
+  )
+    return args;
+  return [...spawn.args, ...args];
+}
+
 function terminalAuthCommand(
   method: Extract<EffectAcpSchema.AuthMethod, { readonly type: "terminal" }>,
   spawn: AcpRegistryAuthSpawnContext,
@@ -111,7 +125,7 @@ function terminalAuthCommand(
   const environmentPrefix = Object.entries(method.env ?? {}).map(
     ([name, value]) => `${name}=${shellDisplayToken(value)}`,
   );
-  const command = [spawn.command, ...spawn.args, ...(method.args ?? [])].map(shellDisplayToken);
+  const command = [spawn.command, ...terminalAuthArgs(spawn, method.args)].map(shellDisplayToken);
   const displayCommand = [...environmentPrefix, ...command].join(" ");
   return displayCommand.length <= MAX_COMMAND_LINE_LENGTH ? displayCommand : undefined;
 }
@@ -295,7 +309,9 @@ export function acpRegistryProbeFailure(
     reason: authenticationFailed ? "authentication_failed" : "probe_failed",
     message: authenticationFailed
       ? "The ACP agent could not complete authentication."
-      : "The ACP agent could not create a test session.",
+      : error._tag === "AcpRequestError" && error.errorMessage === "No available model"
+        ? "No model is available. Check the provider’s model catalog."
+        : "The ACP agent could not create a test session.",
     cause: error,
     ...(authMethods.length > 0 ? { authMethods } : {}),
     ...(authAction === undefined ? {} : { authAction }),

@@ -6,6 +6,7 @@ import { cn } from "~/lib/utils";
 import { Button, type ButtonVariant } from "~/components/ui/button";
 import {
   DIALOG_BACKDROP_CLASS,
+  DIALOG_DIMMED_BACKDROP_CLASS,
   DIALOG_MEDIA_BACKDROP_CLASS,
   DIALOG_MEDIA_POPUP_CLASS,
   DIALOG_MOBILE_SHEET_CLASS,
@@ -69,12 +70,16 @@ function DialogBackdrop({
   className,
   variant = "default",
   ...props
-}: DialogPrimitive.Backdrop.Props & { variant?: "default" | "media" }) {
+}: DialogPrimitive.Backdrop.Props & { variant?: "default" | "dimmed" | "media" }) {
   return (
     <DialogPrimitive.Backdrop
       forceRender
       className={cn(
-        variant === "media" ? DIALOG_MEDIA_BACKDROP_CLASS : DIALOG_BACKDROP_CLASS,
+        {
+          default: DIALOG_BACKDROP_CLASS,
+          dimmed: DIALOG_DIMMED_BACKDROP_CLASS,
+          media: DIALOG_MEDIA_BACKDROP_CLASS,
+        }[variant],
         className,
       )}
       data-slot="dialog-backdrop"
@@ -106,7 +111,7 @@ function DialogPopup({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
   bottomStickOnMobile?: boolean;
-  variant?: "default" | "media";
+  variant?: "default" | "dimmed" | "media";
 }) {
   const { popupRef, initialFocus } = useDialogActionInitialFocus();
   const popup = useRender({

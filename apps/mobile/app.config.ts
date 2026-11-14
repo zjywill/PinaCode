@@ -196,7 +196,7 @@ const config: ExpoConfig = {
   },
   ios: {
     icon: variant.assets.iosIcon,
-    buildNumber: "4",
+    buildNumber: "6",
     supportsTablet: true,
     requireFullScreen: process.env.T3_SHOWCASE_CAPTURE_BUILD === "1",
     bundleIdentifier: iosBundleIdentifier,

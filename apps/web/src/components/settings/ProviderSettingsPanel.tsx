@@ -16,6 +16,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   defaultInstanceIdForDriver,
+  isDimCodeAlphaCommand,
   type EnvironmentId,
   type AcpRegistryUrlAuthAction,
   PROVIDER_DISPLAY_NAMES,
@@ -1262,6 +1263,7 @@ function ProviderInstanceRow({
   readonly favorites: UnifiedSettings["favorites"];
   readonly actions: ProviderInstanceRowActions;
 }) {
+  const canManageProviders = useEnvironmentScope(environmentId, AuthProvidersManageScope);
   const allProjects = useProjects();
   const secretSources = useSecretSources(environmentId);
   const acpProjects =
@@ -1327,7 +1329,30 @@ function ProviderInstanceRow({
       }
       canWriteSettings={canWriteSettings}
       setup={
-        mode === "editor" && driver === "antigravity" ? (
+        mode === "editor" &&
+        liveProvider?.enabled &&
+        !liveProvider.installed &&
+        driver === "acpRegistry" &&
+        isDimCodeAlphaCommand(instance.config) &&
+        liveProvider.versionAdvisory?.canUpdate ? (
+          <SettingsRow
+            title="DimCode Alpha"
+            description={
+              liveProvider.updateState?.message ??
+              `Install dimcode-alpha@alpha with npm on ${environmentLabel}.`
+            }
+            control={
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={readOnly || !canManageProviders || isInstanceUpdateRunning}
+                onClick={() => void actions.runProviderUpdate(liveProvider)}
+              >
+                {isInstanceUpdateRunning ? "Installing…" : "Install DimCode Alpha"}
+              </Button>
+            }
+          />
+        ) : mode === "editor" && driver === "antigravity" ? (
           <ProviderSetupSection
             environmentId={environmentId}
             environmentLabel={environmentLabel}

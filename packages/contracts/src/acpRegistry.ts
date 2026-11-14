@@ -13,6 +13,21 @@ const AcpRegistryAgentId = TrimmedNonEmptyString.check(
 const ACP_REGISTRY_CDN_HOSTNAME = "cdn.agentclientprotocol.com";
 const ACP_REGISTRY_AGENT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]*$/;
 
+export function isDimCodeAlphaCommand(config: unknown): boolean {
+  return (
+    typeof config === "object" &&
+    config !== null &&
+    "source" in config &&
+    config.source === "local" &&
+    "commandPath" in config &&
+    typeof config.commandPath === "string" &&
+    /(?:^|[/\\])dima(?:\.exe)?$/i.test(config.commandPath.trim()) &&
+    "commandArgs" in config &&
+    Array.isArray(config.commandArgs) &&
+    config.commandArgs[0] === "acp"
+  );
+}
+
 export function officialAcpRegistryIconUrlForAgentId(
   agentId: string | null | undefined,
 ): string | null {

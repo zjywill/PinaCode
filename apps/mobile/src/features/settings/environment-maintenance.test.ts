@@ -1,7 +1,15 @@
-import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
+import { CLI_RELEASES_PAGE_URL, cliReleaseIndexPageUrl } from "@t3tools/shared/cliRelease";
+import * as Schema from "effect/Schema";
+import { ServerProvider, AuthOrchestrationOperateScope } from "@t3tools/contracts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { canMaintainEnvironment, findEnvironmentUpdate } from "./environment-maintenance";
+import {
+  canUpdateEnvironmentProvider,
+  canMaintainEnvironment,
+  findEnvironmentUpdate,
+} from "./environment-maintenance";
+
+const decodeProvider = Schema.decodeSync(ServerProvider);
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -54,6 +62,50 @@ describe("environment maintenance access", () => {
   );
 });
 
+it("offers first installation only for a missing npm-installable Dim instance", () => {
+  const provider = decodeProvider({
+    instanceId: "local_dim",
+    driver: "acpRegistry",
+    enabled: true,
+    installed: false,
+    version: null,
+    status: "error",
+    auth: { status: "unknown" },
+    checkedAt: "2026-11-14T00:00:00Z",
+    models: [],
+    versionAdvisory: {
+      currentVersion: null,
+      latestVersion: null,
+      status: "unknown",
+      checkedAt: null,
+      message: null,
+      canUpdate: true,
+      updateCommand: "npm install -g dimcode-alpha@alpha",
+    },
+  });
+  const dim = { source: "local", commandPath: "dima", commandArgs: ["acp"] };
+  expect(canUpdateEnvironmentProvider(provider, dim)).toBe(true);
+  expect(canUpdateEnvironmentProvider(provider, { ...dim, commandPath: "other" })).toBe(false);
+  expect(canUpdateEnvironmentProvider({ ...provider, versionAdvisory: undefined }, dim)).toBe(
+    false,
+  );
+  expect(
+    canUpdateEnvironmentProvider(
+      {
+        ...provider,
+        updateState: {
+          status: "queued",
+          startedAt: null,
+          finishedAt: null,
+          message: null,
+          output: null,
+        },
+      },
+      dim,
+    ),
+  ).toBe(false);
+});
+
 describe("environment release checks", () => {
   const signal = new AbortController().signal;
   const feed = (...tags: ReadonlyArray<string>) =>
@@ -67,7 +119,7 @@ describe("environment release checks", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) =>
-        url === "https://github.com/pingdotgg/t3code/releases.atom"
+        url === `${CLI_RELEASES_PAGE_URL}.atom`
           ? feed(
               "desktop-preview",
               "v1.0.0-preview.20260924.3",
@@ -93,11 +145,11 @@ describe("environment release checks", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => {
-        if (url === "https://github.com/pingdotgg/t3code/releases.atom") return feed(...nightlies);
-        if (url === "https://api.github.com/repos/pingdotgg/t3code/releases?per_page=100&page=1") {
+        if (url === `${CLI_RELEASES_PAGE_URL}.atom`) return feed(...nightlies);
+        if (url === cliReleaseIndexPageUrl(1)) {
           return Response.json(Array.from({ length: 100 }, () => ({ tag_name: "v2.0.0" })));
         }
-        if (url === "https://api.github.com/repos/pingdotgg/t3code/releases?per_page=100&page=2") {
+        if (url === cliReleaseIndexPageUrl(2)) {
           return Response.json([
             { tag_name: "v1.0.0-preview.20260925.1", draft: true },
             { tag_name: "v1.0.0-preview.20260924.3" },

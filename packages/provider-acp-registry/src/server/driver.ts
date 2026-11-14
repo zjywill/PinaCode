@@ -1,5 +1,6 @@
 import {
   officialAcpRegistryIconUrlForAgentId,
+  isDimCodeAlphaCommand,
   ProviderDriverKind,
   resolveOfficialAcpRegistryIconUrl,
   TextGenerationError,
@@ -15,6 +16,10 @@ import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as HttpClient from "effect/http/HttpClient";
+import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
@@ -37,7 +42,18 @@ import {
   providerModelsFromSettings,
   providerProbeEnvironment,
 } from "@t3tools/provider-core/server/snapshotProbe";
-import { makeManualOnlyProviderMaintenanceCapabilities } from "@t3tools/provider-core/server/maintenanceResolver";
+import {
+  makeManualOnlyProviderMaintenanceCapabilities,
+  makeCachedProviderMaintenanceResolution,
+  resolveProviderMaintenanceCapabilitiesEffect,
+  enrichProviderSnapshotWithVersionAdvisory,
+  makeProviderMaintenanceCapabilities,
+  resolveNpmGlobalPrefix,
+  resolveDefaultNpmGlobalPrefix,
+  createProviderVersionAdvisory,
+  normalizeCommandPath,
+  type ProviderMaintenanceCapabilitiesResolver,
+} from "@t3tools/provider-core/server/maintenanceResolver";
 import {
   haveProviderSnapshotSettingsChanged,
   makeProviderSnapshotSettingsSource,
@@ -70,6 +86,38 @@ const MAINTENANCE = makeManualOnlyProviderMaintenanceCapabilities({
   provider: DRIVER_KIND,
   packageName: null,
 });
+
+function dimCodeMaintenance(
+  commandPath: string,
+  env: NodeJS.ProcessEnv,
+): ProviderMaintenanceCapabilitiesResolver {
+  return {
+    resolve: Effect.fn("DimCode.resolveMaintenance")(function* (context) {
+      const packageName = "dimcode-alpha";
+      const prefix = context
+        ? yield* resolveNpmGlobalPrefix(context, packageName)
+        : commandPath.trim() === "dima"
+          ? yield* resolveDefaultNpmGlobalPrefix(env)
+          : null;
+      const capabilities = prefix
+        ? makeProviderMaintenanceCapabilities({
+            provider: DRIVER_KIND,
+            packageName,
+            updateExecutable: "npm",
+            updateArgs: ["install", "-g", "--prefix", prefix, packageName + "@alpha"],
+            updateLockKey: "npm-global:" + normalizeCommandPath(prefix),
+            env,
+            platform: yield* HostProcess.Platform,
+          })
+        : makeManualOnlyProviderMaintenanceCapabilities({
+            provider: DRIVER_KIND,
+            packageName,
+            ...(context && { installPath: context.realCommandPath }),
+          });
+      return { ...capabilities, npmDistTag: "alpha" };
+    }),
+  };
+}
 
 const makeUnsupportedTextGeneration = (): ProviderTextGeneration => {
   const unsupported = (operation: string) =>
@@ -222,7 +270,9 @@ function baseSnapshot(
 ): ServerProvider {
   const iconUrl =
     input.settings.source === "local"
-      ? null
+      ? officialAcpRegistryIconUrlForAgentId(
+          isDimCodeAlphaCommand(input.settings) ? "dimcode" : null,
+        )
       : (resolveOfficialAcpRegistryIconUrl(input.probe?.probe.icon) ??
         officialAcpRegistryIconUrlForAgentId(input.settings.agentId));
   return {
@@ -497,6 +547,8 @@ export const checkAcpRegistryProviderReadiness = Effect.fn(
 export type AcpRegistryDriverEnv =
   | AcpRegistryAdapterV2DriverEnv
   | Digest.Digest
+  | HttpClient.HttpClient
+  | ProviderLatestVersions.ProviderLatestVersions
   | ProviderHost.ProviderHost;
 
 export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryDriverEnv> = {
@@ -547,6 +599,25 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
     const processEnvironment = yield* mergeProviderInstanceEnvironment(
       environment,
       hostEnvironment,
+    );
+    const dimCode = isDimCodeAlphaCommand(config);
+    const services = yield* Effect.context<
+      | FileSystem.FileSystem
+      | Path.Path
+      | ChildProcessSpawner.ChildProcessSpawner
+      | HttpClient.HttpClient
+      | ProviderLatestVersions.ProviderLatestVersions
+    >();
+    const resolveMaintenance = yield* makeCachedProviderMaintenanceResolution(
+      dimCode
+        ? resolveProviderMaintenanceCapabilitiesEffect(
+            dimCodeMaintenance(config.commandPath, processEnvironment),
+            {
+              binaryPath: config.commandPath,
+              env: processEnvironment,
+            },
+          ).pipe(Effect.provideContext(services))
+        : Effect.succeed(MAINTENANCE),
     );
     const orchestrationAdapter = yield* AcpRegistryAdapterV2Driver.create({
       instanceId,
@@ -630,6 +701,20 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
     });
     const checkProvider = checkAcpRegistryProviderReadiness(readinessInput).pipe(
       Effect.provideService(AcpRegistrySupport.AcpRegistryCatalog, catalog),
+      Effect.filterOrElse(
+        (provider) => !dimCode || !provider.enabled || provider.installed,
+        (provider) =>
+          resolveMaintenance().pipe(
+            Effect.map((maintenanceCapabilities) => ({
+              ...provider,
+              versionAdvisory: createProviderVersionAdvisory({
+                driver: DRIVER_KIND,
+                currentVersion: null,
+                maintenanceCapabilities,
+              }),
+            })),
+          ),
+      ),
       Effect.flatMap(withLiveRuntimeState),
     );
     const enrichProvider = checkAcpRegistryProviderStatus(
@@ -691,13 +776,14 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
     const snapshot = yield* makeManagedServerProvider<
       ProviderSnapshotSettings<AcpRegistrySettings>
     >({
-      resolveMaintenance: () => Effect.succeed(MAINTENANCE),
+      resolveMaintenance,
       getSettings: snapshotSettings.getSettings,
       streamSettings: snapshotSettings.streamSettings,
       haveSettingsChanged: haveProviderSnapshotSettingsChanged,
       initialSnapshot: () => checkProvider,
       checkProvider,
       enrichSnapshot: Effect.fn("enrichSnapshot")(function ({
+        settings,
         snapshot,
         getSnapshot,
         publishSnapshot,
@@ -717,12 +803,24 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
             Option.match({
               onNone: () => Effect.void,
               onSome: ({ provider, generation }) =>
-                liveSnapshotSemaphore.withPermit(
-                  Ref.get(enrichmentCache).pipe(
-                    Effect.flatMap((current) =>
-                      current.generation === generation
-                        ? withLiveRuntimeState(provider).pipe(Effect.flatMap(publishSnapshot))
-                        : Effect.void,
+                (dimCode
+                  ? resolveMaintenance().pipe(
+                      Effect.flatMap((maintenance) =>
+                        enrichProviderSnapshotWithVersionAdvisory(provider, maintenance, settings),
+                      ),
+                      Effect.provideContext(services),
+                    )
+                  : Effect.succeed(provider)
+                ).pipe(
+                  Effect.flatMap((enriched) =>
+                    liveSnapshotSemaphore.withPermit(
+                      Ref.get(enrichmentCache).pipe(
+                        Effect.flatMap((current) =>
+                          current.generation === generation
+                            ? withLiveRuntimeState(enriched).pipe(Effect.flatMap(publishSnapshot))
+                            : Effect.void,
+                        ),
+                      ),
                     ),
                   ),
                 ),

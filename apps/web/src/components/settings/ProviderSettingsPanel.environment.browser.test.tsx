@@ -284,6 +284,47 @@ describe("EnvironmentProviderSettings routing", () => {
     );
   });
 
+  it("installs a missing DimCode Alpha on the selected environment", async () => {
+    await setup();
+    const instanceId = ProviderInstanceId.make("acpRegistry_dimcode_alpha");
+    const driver = ProviderDriverKind.make("acpRegistry");
+    state.settings = {
+      ...DEFAULT_UNIFIED_SETTINGS,
+      providerInstances: {
+        [instanceId]: {
+          driver,
+          enabled: true,
+          config: { source: "local", commandPath: "dima", commandArgs: ["acp"] },
+        },
+      },
+    };
+    await setProviders([
+      {
+        ...provider(),
+        instanceId,
+        driver,
+        installed: false,
+        version: null,
+        status: "error",
+        versionAdvisory: {
+          status: "unknown",
+          canUpdate: true,
+          currentVersion: null,
+          latestVersion: null,
+          checkedAt: null,
+          message: null,
+          updateCommand: "npm install -g dimcode-alpha@alpha",
+        },
+      },
+    ]);
+    await using _screen = await render(panel({ targetInstanceId: instanceId }));
+    await userEvent.click(page.getByRole("button", { name: "Install DimCode Alpha" }));
+    expect(state.updateProvider).toHaveBeenCalledWith({
+      environmentId,
+      input: { instanceId, provider: driver },
+    });
+  });
+
   it("routes explicit ACP browser authentication consent to the selected environment", async () => {
     await setup();
     const instanceId = ProviderInstanceId.make("acpRegistry_antigravity");

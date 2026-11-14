@@ -1,5 +1,6 @@
 import {
   ACP_REGISTRY_MAX_AGENTS,
+  isDimCodeAlphaCommand,
   AcpRegistryOperationError,
   AcpRegistryOperationErrorReason,
   TrimmedNonEmptyString,
@@ -1742,13 +1743,27 @@ export const makeAcpRegistryCatalog = Effect.fn("AcpRegistryCatalog.make")(funct
         if (!command) return { status: "unconfigured" } as const;
         const executable = resolveExecutable(command, platform, environment ?? hostEnvironment);
         if (executable !== undefined) yield* validateLocalExecutable(executable);
+        const version =
+          executable && isDimCodeAlphaCommand(settings)
+            ? yield* runCommand(executable, ["--version"], {
+                env: environment ?? hostEnvironment,
+                timeout: "4 seconds",
+                maxStdoutBytes: 256,
+              }).pipe(
+                Effect.map(
+                  (text) =>
+                    /^dimcode (\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/.exec(text.trim())?.[1] ?? null,
+                ),
+                Effect.orElseSucceed(() => null),
+              )
+            : null;
         return executable === undefined
           ? ({
               status: "missing_runner",
               version: null,
               distribution: "local",
             } as const)
-          : ({ status: "ready", agentId: command, version: null, distribution: "local" } as const);
+          : ({ status: "ready", agentId: command, version, distribution: "local" } as const);
       }
       const agentId = settings.agentId.trim();
       if (agentId.length === 0) return { status: "unconfigured" } as const;

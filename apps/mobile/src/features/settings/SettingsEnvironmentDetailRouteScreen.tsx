@@ -156,7 +156,10 @@ function EnvironmentDetail({ environmentId }: { readonly environmentId: Environm
     if (
       busy ||
       !readEnvironmentScope(environmentId, AuthProvidersManageScope) ||
-      !canUpdateEnvironmentProvider(provider)
+      !canUpdateEnvironmentProvider(
+        provider,
+        config?.settings.providerInstances[provider.instanceId]?.config,
+      )
     )
       return;
     void run(provider.instanceId, async () => {
@@ -380,10 +383,13 @@ function EnvironmentDetail({ environmentId }: { readonly environmentId: Environm
                             </Text>
                           ) : null}
                         </View>
-                        {canUpdateEnvironmentProvider(provider) ? (
+                        {canUpdateEnvironmentProvider(
+                          provider,
+                          config?.settings.providerInstances[provider.instanceId]?.config,
+                        ) ? (
                           <SettingsActionRow
                             icon="arrow.up.circle"
-                            label={`Update ${provider.displayName ?? provider.driver}`}
+                            label={`${provider.installed ? "Update" : "Install"} ${provider.displayName ?? provider.driver}`}
                             disabled={busy || !canManageProviders}
                             loading={pending === provider.instanceId}
                             onPress={() => requestProviderUpdate(provider)}

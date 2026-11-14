@@ -210,6 +210,26 @@ describe("AddProviderInstanceDialog environment routing", () => {
     });
   });
 
+  it("adds the featured DimCode Alpha provider using dima on the selected environment", async () => {
+    setup();
+    await using _screen = await render(dialog());
+    await act(async () => radio("DimCode Alpha")!.click());
+    await click("Next");
+    await click("Next");
+    await click("Add instance");
+    expect(settingsHooks.useMutation).toHaveBeenCalledWith(remoteEnvironmentId);
+    expect(settingsHooks.mutate).toHaveBeenCalledWith({
+      operation: "create",
+      instanceId: "acpRegistry_dimcode_alpha",
+      instance: {
+        driver: "acpRegistry",
+        enabled: true,
+        displayName: "DimCode Alpha",
+        config: { source: "local", commandPath: "dima", commandArgs: ["acp"] },
+      },
+    });
+  });
+
   it("awaits an atomic create before closing and retains prepared ACP metadata", async () => {
     setup();
     const mutation = deferred<{ readonly _tag: "Success"; readonly value: unknown }>();

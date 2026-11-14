@@ -1079,7 +1079,17 @@ const isVoltaPackageInstall = Effect.fn("isVoltaPackageInstall")(function* (
   return yield* fileSystem.exists(packageDir).pipe(Effect.orElseSucceed(() => false));
 });
 
-const resolveNpmGlobalPrefix = Effect.fn("resolveNpmGlobalPrefix")(function* (
+export const resolveDefaultNpmGlobalPrefix = Effect.fn("resolveDefaultNpmGlobalPrefix")(function* (
+  env: NodeJS.ProcessEnv,
+) {
+  const npm = yield* resolveCommandPath("npm", { env });
+  if (!npm) return null;
+  const prefix = (yield* runProbe(npm, ["prefix", "-g"], env))?.trim();
+  const path = yield* Path.Path;
+  return prefix && path.isAbsolute(prefix) ? prefix : null;
+});
+
+export const resolveNpmGlobalPrefix = Effect.fn("resolveNpmGlobalPrefix")(function* (
   context: ProviderMaintenanceResolutionContext,
   packageName: string,
 ) {
@@ -1158,7 +1168,7 @@ const withConfiguredNpmVersionLookup = Effect.fn("withConfiguredNpmVersionLookup
       "--global",
       ...(prefix ? ["--prefix", prefix] : []),
       "--json",
-      `${packageName}@latest`,
+      `${packageName}@${capabilities.npmDistTag ?? "latest"}`,
       "version",
     ],
     env,
@@ -1181,7 +1191,7 @@ const withConfiguredNpmVersionLookup = Effect.fn("withConfiguredNpmVersionLookup
     latestVersionCacheKey: [
       "configured-npm",
       npmPath,
-      packageName,
+      npmVersionCacheKey(capabilities),
       prefix ?? "",
       environmentCacheKey(env),
       installerLatestVersionKey(capabilities) ?? "",
@@ -1311,10 +1321,13 @@ export function createProviderVersionAdvisory(input: {
   };
 }
 
-const fetchNpmLatestVersion = Effect.fn("fetchNpmLatestVersion")(function* (packageName: string) {
+const fetchNpmLatestVersion = Effect.fn("fetchNpmLatestVersion")(function* (
+  packageName: string,
+  tag = "latest",
+) {
   const client = yield* HttpClient.HttpClient;
   const request = HttpClientRequest.get(
-    `https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`,
+    `https://registry.npmjs.org/${encodeURIComponent(packageName)}/${encodeURIComponent(tag)}`,
   ).pipe(HttpClientRequest.setHeader("accept", "application/json"));
   // The deadline covers the body too: headers can arrive before the JSON stalls.
   const payload = yield* client.execute(request).pipe(
@@ -1340,10 +1353,16 @@ function installerLatestVersionKey(capabilities: ProviderMaintenanceCapabilities
     : capabilities.packageName && `npm-registry\0${capabilities.packageName}`;
 }
 
+function npmVersionCacheKey(capabilities: ProviderMaintenanceCapabilities) {
+  return capabilities.npmDistTag
+    ? `${capabilities.packageName}@${capabilities.npmDistTag}`
+    : capabilities.packageName;
+}
+
 export function latestProviderVersionCacheKeys(
   capabilities: ProviderMaintenanceCapabilities,
 ): ReadonlyArray<string> {
-  return [capabilities.packageName, installerLatestVersionKey(capabilities)].filter(
+  return [npmVersionCacheKey(capabilities), installerLatestVersionKey(capabilities)].filter(
     (key) => key !== null,
   );
 }
@@ -1368,7 +1387,10 @@ export const resolveLatestProviderVersion = Effect.fn("resolveLatestProviderVers
     return null;
   }
 
-  return yield* latestVersions.cached(packageName, fetchNpmLatestVersion(packageName));
+  return yield* latestVersions.cached(
+    npmVersionCacheKey(maintenanceCapabilities) ?? packageName,
+    fetchNpmLatestVersion(packageName, maintenanceCapabilities.npmDistTag),
+  );
 });
 
 export const invalidateLatestProviderVersion = Effect.fn("invalidateLatestProviderVersion")(

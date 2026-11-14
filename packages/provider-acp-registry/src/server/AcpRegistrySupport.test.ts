@@ -270,6 +270,22 @@ describe("AcpRegistrySupport", () => {
           shell: false,
         },
       });
+      const dima = `${cacheDir}/dima`;
+      yield* fileSystem.writeFileString(
+        dima,
+        '#!/bin/sh\n[ "$1" = "--version" ] && echo "dimcode 0.1.0-alpha.23"\n',
+      );
+      yield* fileSystem.chmod(dima, 0o755);
+      expect(
+        yield* resolver.inspect(
+          decodeAcpRegistrySettings({
+            source: "local",
+            commandPath: "dima",
+            commandArgs: ["acp"],
+          }),
+          environment,
+        ),
+      ).toMatchObject({ status: "ready", version: "0.1.0-alpha.23" });
       expect(requests).toEqual([]);
       expect(yield* fileSystem.exists(`${cacheDir}/tools`)).toBe(false);
     }).pipe(

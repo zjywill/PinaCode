@@ -1,3 +1,4 @@
+import { dimCodeRegistryIconUrl } from "@t3tools/client-runtime/provider-clients";
 import type { ContextChipIconRef } from "./composerChipPresentation";
 import { CONTEXT_CHIP_ICON_SOURCES, PROVIDER_CHIP_ICONS } from "./contextChipIcons.generated";
 import { markdownFileIconSource, markdownIconAssetUri } from "./markdownFileIcons";
@@ -21,6 +22,9 @@ export function modelChipIcon(model: {
   readonly driver: string;
   readonly iconUrl?: string | undefined;
 }): (typeof PROVIDER_CHIP_ICONS)[string] {
+  if (model.driver === "acpRegistry" && model.iconUrl === dimCodeRegistryIconUrl) {
+    return PROVIDER_CHIP_ICONS.dimcode!;
+  }
   if (isRasterIconUrl(model.iconUrl)) return { source: { uri: model.iconUrl }, tintsIcon: false };
   return (
     PROVIDER_CHIP_ICONS[model.driver] ?? { source: CONTEXT_CHIP_ICON_SOURCES.bot, tintsIcon: true }

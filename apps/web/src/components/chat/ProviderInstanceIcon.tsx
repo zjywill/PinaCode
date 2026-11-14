@@ -6,6 +6,7 @@ import {
   providerInstanceInitials,
 } from "@t3tools/client-runtime/state/provider-instance-display";
 
+import { bundledAcpRegistryIcon } from "@t3tools/client-runtime/provider-clients";
 import { ProviderDriverKind } from "@t3tools/contracts";
 import {
   AnthropicIcon,
@@ -101,7 +102,6 @@ export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
   indicatorBackground?: string;
 }) {
   const Icon = PROVIDER_ICON_BY_PROVIDER[props.driverKind] ?? null;
-  const packageIcon = providerClients.get(props.driverKind)?.icon;
   const indicatorBackground = props.indicatorBackground ?? "var(--card)";
   const accentColor = normalizeProviderAccentColor(props.accentColor);
   const accentStyle = accentColor
@@ -121,6 +121,10 @@ export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
     iconUrl: props.acpRegistryIconUrl,
   });
 
+  const packageIcon = isAcpRegistry
+    ? bundledAcpRegistryIcon(acpRegistryIconUrl)
+    : providerClients.get(props.driverKind)?.icon;
+
   return (
     <span
       className={cn(
@@ -130,7 +134,7 @@ export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
       style={accentStyle}
       data-provider-accent-color={accentColor}
     >
-      {isAcpRegistry ? (
+      {isAcpRegistry && !packageIcon ? (
         <AcpRegistryAgentIcon
           className={cn("size-5 rounded-none bg-transparent", iconClassName)}
           fallbackClassName="size-full"

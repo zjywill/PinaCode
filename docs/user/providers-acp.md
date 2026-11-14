@@ -28,6 +28,13 @@ provider instance's environment overrides to use ACP v1.
 Search only shows agents that can run on the connected server. Registry agents are third-party
 code; review an agent's source and license before adding it.
 
+## DimCode Alpha
+
+Install `dimcode-alpha@alpha` on the machine hosting PinaCode and complete DimCode's setup there.
+Choose **Settings → Providers → Add provider → DimCode Alpha**. The provider runs `dima acp`
+and lists the models available to that installation. Settings shows the installed version and checks
+the alpha channel for updates. For global npm installations, choose **Update now** to upgrade that copy.
+
 ## Add a local command
 
 In **Settings → Providers → Add provider**, select **Show more**, then **Local ACP command**. Enter the executable
