@@ -9,6 +9,7 @@ import {
   type ProviderConsumeResetCreditInput,
   type ServerProviderSlashCommand,
   isProviderAvailable,
+  officialAcpRegistryIconUrlForAgentId,
   PROVIDER_DISPLAY_NAMES,
   type ServerProvider,
   type ServerProviderResetCredits,
@@ -252,7 +253,10 @@ function accountKeyResolver(reports: Iterable<AccountReport>) {
 
 const hubAccountName = (account: { readonly id: string }) => account.id.replace(/\.json$/i, "");
 
+const dimCodeIconUrl = officialAcpRegistryIconUrlForAgentId("dimcode");
+
 export interface LimitAccount {
+  readonly iconUrl?: string | undefined;
   readonly key: string;
   readonly driver: ServerProvider["driver"];
   readonly displayName: string | null;
@@ -359,6 +363,7 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
       merge(resolveKey(nativeReport(provider)) ?? `${environmentId}:${provider.instanceId}`, {
         key: `${environmentId}:${provider.instanceId}`,
         driver: provider.driver,
+        iconUrl: provider.iconUrl,
         displayName: provider.displayName?.trim() || null,
         email: provider.auth.email,
         plan: provider.auth.label,
@@ -454,6 +459,7 @@ export interface LimitPoolWindow {
 }
 
 export interface LimitPool {
+  readonly brand?: "DimCode";
   readonly driver: ServerProvider["driver"];
   readonly accounts: readonly LimitAccount[];
   readonly windows: readonly LimitPoolWindow[];
@@ -510,13 +516,18 @@ export function collectLimitPools(
   accounts: readonly LimitAccount[],
   now: number,
 ): readonly LimitPool[] {
-  const byDriver = new Map<ServerProvider["driver"], LimitAccount[]>();
+  const groups = new Map<string, LimitAccount[]>();
   for (const account of accounts) {
-    const list = byDriver.get(account.driver);
-    if (list) list.push(account);
-    else byDriver.set(account.driver, [account]);
+    const key =
+      account.driver === "acpRegistry" && account.iconUrl === dimCodeIconUrl
+        ? "acpRegistry:dimcode"
+        : account.driver;
+    const group = groups.get(key);
+    if (group) group.push(account);
+    else groups.set(key, [account]);
   }
-  return [...byDriver].map(([driver, members]) => {
+  return [...groups].map(([key, members]) => {
+    const driver = members[0]!.driver;
     const orderWindow = members
       .flatMap((account) => account.limits.windows)
       .sort((left, right) => WINDOW_KIND_ORDER[left.kind] - WINDOW_KIND_ORDER[right.kind])[0];
@@ -535,7 +546,12 @@ export function collectLimitPools(
         accountSortName(left).localeCompare(accountSortName(right)) ||
         left.key.localeCompare(right.key),
     );
-    return { driver, accounts: sorted, windows: poolWindows(sorted, now) };
+    return {
+      driver,
+      ...(key === "acpRegistry:dimcode" ? { brand: "DimCode" as const } : {}),
+      accounts: sorted,
+      windows: poolWindows(sorted, now),
+    };
   });
 }
 
@@ -692,7 +708,7 @@ export function limitsNotice(limits: ServerProviderUsageLimits): string | null {
   if (limits.unavailable?.reason === "probeFailed") {
     return limits.unavailable.message ?? "Could not read limits.";
   }
-  return limits.windows.length === 0 ? "No limits reported." : null;
+  return limits.windows.length === 0 && !limits.summary ? "No limits reported." : null;
 }
 
 export function remainingPercent(window: ServerProviderUsageWindow): number {

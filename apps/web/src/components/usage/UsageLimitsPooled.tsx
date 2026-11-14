@@ -81,6 +81,7 @@ function AccountAvatar({
     return (
       <ProviderInstanceIcon
         driverKind={account.driver}
+        acpRegistryIconUrl={account.iconUrl}
         displayName={
           account.displayName ??
           providerClients.get(account.driver)?.label ??
@@ -587,13 +588,14 @@ function PoolWindowCard({
 
 function PoolSection({ pool, now }: { readonly pool: LimitPool; readonly now: number }) {
   const color = barColor(pool.driver);
-  const label = providerClients.get(pool.driver)?.label ?? String(pool.driver);
+  const label = pool.brand ?? providerClients.get(pool.driver)?.label ?? String(pool.driver);
   const windows = displayLimitWindows(pool);
   return (
     <section className="flex flex-col gap-3">
       <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
         <ProviderInstanceIcon
           driverKind={pool.driver}
+          acpRegistryIconUrl={pool.brand ? pool.accounts[0]?.iconUrl : undefined}
           displayName={label}
           indicatorBackground="var(--background)"
           className="size-5"
@@ -601,6 +603,14 @@ function PoolSection({ pool, now }: { readonly pool: LimitPool; readonly now: nu
         />
         {label}
       </h2>
+      {pool.accounts.map((account) =>
+        account.limits.summary ? (
+          <p key={account.key} className="text-sm text-muted-foreground">
+            {account.displayName ? `${account.displayName} · ` : ""}
+            {account.limits.summary}
+          </p>
+        ) : null,
+      )}
       {windows.map((window) => {
         const details =
           pool.driver === "cursor" ? cursorUsageWindowDetails(window.id, pool) : undefined;
@@ -640,7 +650,7 @@ export function UsageLimitsPooled({
       ) : null}
       <SegmentPopoverContext value={segmentPopover}>
         {pools.map((pool) => (
-          <Fragment key={pool.driver}>
+          <Fragment key={pool.brand ?? pool.driver}>
             <PoolSection pool={pool} now={now} />
           </Fragment>
         ))}

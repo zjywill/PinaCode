@@ -1,5 +1,6 @@
 import {
   EnvironmentId,
+  officialAcpRegistryIconUrlForAgentId,
   ProviderDriverKind,
   ProviderInstanceId,
   type ServerProvider,
@@ -35,7 +36,7 @@ function managedChatGpt(instanceId: string, displayName: string): ServerProvider
   };
 }
 
-describe("UsageLimitsPooled ChatGPT usage card", () => {
+describe("UsageLimitsPooled", () => {
   it("names the managed connections it covers", async () => {
     const presentations = new Map([
       [
@@ -46,6 +47,12 @@ describe("UsageLimitsPooled ChatGPT usage card", () => {
             providers: [
               managedChatGpt("chatgpt_work", "ChatGPT Work"),
               managedChatGpt("chatgpt_personal", "ChatGPT Personal"),
+              {
+                ...managedChatGpt("dim", "DimCode Alpha"),
+                driver: ProviderDriverKind.make("acpRegistry"),
+                iconUrl: officialAcpRegistryIconUrlForAgentId("dimcode")!,
+                usageLimits: { checkedAt, windows: [], summary: "Pro · Unlimited credits" },
+              },
             ],
           },
         },
@@ -55,6 +62,10 @@ describe("UsageLimitsPooled ChatGPT usage card", () => {
       <UsageLimitsPooled presentations={presentations} now={Date.parse(checkedAt)} />,
     );
 
+    await expect
+      .element(screen.getByRole("heading", { name: "DimCode", exact: true }))
+      .toBeVisible();
+    await expect.element(screen.getByText("DimCode Alpha · Pro · Unlimited credits")).toBeVisible();
     await expect
       .element(screen.getByText("ChatGPT Work on Desk, ChatGPT Personal on Desk"))
       .toBeVisible();

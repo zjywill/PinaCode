@@ -49,6 +49,7 @@ export const ServerProviderUsageLimits = Schema.Struct({
   windows: ForwardCompatibleArray(ServerProviderUsageWindow),
   /** A $0 monthly spend cap has no percentage, so it cannot be a window. */
   zeroSpendCap: Schema.optional(Schema.Boolean),
+  summary: Schema.optional(TrimmedNonEmptyString),
   credentialFingerprint: Schema.optional(TrimmedNonEmptyString),
   resetCredits: Schema.optional(ServerProviderResetCredits),
   externalUsage: Schema.optional(

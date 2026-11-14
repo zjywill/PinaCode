@@ -8,6 +8,7 @@ import {
   type ServerProvider,
   type ServerProviderModel,
 } from "@t3tools/contracts";
+import { readDimUsageLimits } from "./dimUsageLimits.ts";
 import { AcpRegistrySettings } from "../settings.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { createModelCapabilities } from "@t3tools/shared/model";
@@ -602,6 +603,7 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
     );
     const dimCode = isDimCodeAlphaCommand(config);
     const services = yield* Effect.context<
+      | Digest.Digest
       | FileSystem.FileSystem
       | Path.Path
       | ChildProcessSpawner.ChildProcessSpawner
@@ -781,7 +783,20 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
       streamSettings: snapshotSettings.streamSettings,
       haveSettingsChanged: haveProviderSnapshotSettingsChanged,
       initialSnapshot: () => checkProvider,
-      checkProvider,
+      checkProvider: dimCode
+        ? checkProvider.pipe(
+            Effect.filterOrElse(
+              (provider) => !provider.enabled || !provider.installed,
+              (provider) =>
+                readDimUsageLimits(config.commandArgs, processEnvironment, host.paths.cwd).pipe(
+                  Effect.provideContext(services),
+                  Effect.map((usageLimits) =>
+                    usageLimits ? { ...provider, usageLimits } : provider,
+                  ),
+                ),
+            ),
+          )
+        : checkProvider,
       enrichSnapshot: Effect.fn("enrichSnapshot")(function ({
         settings,
         snapshot,
