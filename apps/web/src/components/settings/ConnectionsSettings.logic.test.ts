@@ -1,10 +1,14 @@
 import { type DesktopWslState, EnvironmentId } from "@t3tools/contracts";
+import { createAdvertisedEndpoint } from "@t3tools/shared/advertisedEndpoint";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   applyWslEnableSelection,
   isServerNetworkAccessible,
   resolveAccessEnvironmentId,
   resolveTailscaleServeBaseUrl,
+  desktopPairingEndpoints,
+  endpointDefaultPreferenceKey,
+  selectPairingEndpoint,
   selectQrEndpointOption,
   togglePairingScopeSelection,
 } from "./ConnectionsSettings.logic";
@@ -214,4 +218,43 @@ describe("isServerNetworkAccessible", () => {
   ] as const)("$authPolicy with $directEndpoints.length endpoints", (row) => {
     expect(isServerNetworkAccessible(row)).toBe(row.expected);
   });
+});
+
+it("pairs through the preferred reachable address independently of LAN sharing", () => {
+  const make = (
+    id: string,
+    reachability: "loopback" | "lan" | "private-network" | "public",
+    status: "available" | "unknown" | "unavailable" = "available",
+  ) =>
+    createAdvertisedEndpoint({
+      id,
+      label: id,
+      reachability,
+      status,
+      httpBaseUrl: "https://example.test",
+      isDefault: reachability === "lan",
+      source: "desktop-addon",
+      provider: { id: "test", label: "Test", kind: "private-network", isAddon: true },
+    });
+  const lan = make("desktop-lan:host", "lan");
+  const serve = make("tailscale-magicdns:host", "private-network");
+  const node = make("embedded-tailnet", "private-network");
+  const manual = make("manual:host", "public", "unknown");
+  const routes = [
+    make("loopback", "loopback"),
+    lan,
+    make("tailscale-ip:host", "private-network"),
+    serve,
+    node,
+    manual,
+  ];
+  expect(desktopPairingEndpoints(routes, false)).toEqual([serve, node, manual]);
+  expect(
+    selectPairingEndpoint(
+      desktopPairingEndpoints(routes, true),
+      endpointDefaultPreferenceKey(serve),
+    ),
+  ).toEqual(serve);
+  expect(selectPairingEndpoint(desktopPairingEndpoints(routes, true))).toEqual(lan);
+  expect(desktopPairingEndpoints([{ ...serve, status: "unavailable" }], false)).toEqual([]);
 });

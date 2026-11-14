@@ -67,8 +67,8 @@ export function missingTailscaleEndpointDescription(
   state: Pick<DesktopServerExposureState, "mode" | "tailscaleServeEnabled"> | null,
 ): string {
   return state && state.mode !== "network-accessible" && !state.tailscaleServeEnabled
-    ? "Turn on Network access to detect Tailscale."
-    : "Start Tailscale to set up HTTPS access through MagicDNS.";
+    ? "Enable local network access to detect this computer’s Tailscale client."
+    : "Sign in to the system Tailscale client to configure its HTTPS address.";
 }
 
 export function resolveTailscaleServeBaseUrl(
@@ -349,6 +349,17 @@ export function toDesktopClientSessionRecord(
         ? null
         : DateTime.formatIso(clientSession.lastConnectedAt),
   };
+}
+
+export function desktopPairingEndpoints(
+  endpoints: readonly AdvertisedEndpoint[],
+  lanEnabled: boolean,
+) {
+  return endpoints.filter(
+    (endpoint) =>
+      isQrShareableEndpoint(endpoint) &&
+      (lanEnabled || (endpoint.reachability !== "lan" && !endpoint.id.startsWith("tailscale-ip:"))),
+  );
 }
 
 export function selectPairingEndpoint(

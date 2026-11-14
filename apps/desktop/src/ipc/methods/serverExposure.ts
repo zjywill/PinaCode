@@ -41,6 +41,16 @@ export const setServerExposureMode = DesktopIpc.makeIpcMethod({
   }),
 });
 
+export const setEmbeddedTailnetEnabled = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.SET_EMBEDDED_TAILNET_ENABLED_CHANNEL,
+  payload: Schema.Boolean,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.serverExposure.setEmbeddedTailnetEnabled")(function* (enabled) {
+    const exposure = yield* DesktopServerExposure.DesktopServerExposure;
+    yield* exposure.setEmbeddedTailnetEnabled(enabled);
+  }),
+});
+
 export const setTailscaleServeEnabled = DesktopIpc.makeIpcMethod({
   channel: IpcChannels.SET_TAILSCALE_SERVE_ENABLED_CHANNEL,
   payload: SetTailscaleServeEnabledInput,

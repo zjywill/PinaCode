@@ -216,6 +216,9 @@ describe("DesktopServerExposure", () => {
         const backendConfig = yield* serverExposure.backendConfig;
         assert.equal(backendConfig.bindHost, "127.0.0.1");
         assert.isFalse(backendConfig.tailscaleServeEnabled);
+        const denied = yield* Effect.flip(serverExposure.setEmbeddedTailnetEnabled(true));
+        assert.equal(denied.message, "Remote access is disabled by policy.");
+        assert.equal((yield* serverExposure.getState).embeddedTailnet?.phase, "off");
         // Choosing them again while the policy applies does not widen the backend either.
         yield* serverExposure.setMode("network-accessible");
         yield* serverExposure.setTailscaleServeEnabled({ enabled: true });

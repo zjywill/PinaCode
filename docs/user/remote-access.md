@@ -9,8 +9,8 @@ PinaCode connects using a pairing link. Run `pinacode up --lan` on the host, the
 
 Use direct pairing when the other device can reach the host's network address.
 
-On a desktop host, open **Settings → Sharing & access**, enable **Network access**,
-then create a pairing link using an address the other device can reach. Changing
+On a desktop host, open **Settings → Sharing & access**, enable **Local network access**,
+then select a **Pairing address** the other device can reach and create a link under **Authorized clients**. Changing
 network access restarts the desktop app. You can turn it off in the same place.
 
 For a command-line host, choose the local network in `t3 up`, or run:
@@ -65,7 +65,7 @@ machine's current LAN and Tailscale addresses and adds them as routes, so
 pairing once through T3 Connect is enough to use the LAN at home. When the
 machine's LAN address changes, for example after it joins another Wi-Fi network,
 the learned route follows it. The machine must allow network access for its LAN
-address to be learned: **Network access** in the desktop app, or the
+address to be learned: **Local network access** in the desktop app, or the
 [local network](./background-service.md#local-network-access) choice in `t3 up`.
 You can reorder a learned route, but not remove it; it
 goes away with the route it was learned through, or when the machine stops
@@ -108,10 +108,22 @@ on that machine. Existing threads stay where they started. If resource checks ar
 unavailable or all eligible machines are full, choose a machine manually to continue.
 Mobile keeps its manual environment selection.
 
+### Join Tailscale from PinaCode Desktop
+
+On your Mac, open **Settings → Sharing & access → Connection methods** and choose **Sign in to
+Tailscale**. Approve the PinaCode device in your browser. The desktop app
+reconnects this device when it restarts. Use its address when creating a pairing
+link for another device signed in to the same Tailscale account.
+
+On iPhone or iPad, connect to the same tailnet, then scan the Mac’s pairing QR code or paste its pairing link into **Add environment**. The Mac hosts the session.
+
+With MagicDNS and HTTPS enabled in your tailnet, PinaCode provides an HTTPS
+address. Otherwise it shows a private Tailscale IP address for clients that
+support HTTP. Choose **Sign out** to disconnect the node and clear its local identity.
+
 ### Tailscale HTTPS
 
-Join both devices to the same tailnet. In the desktop app, enable **Tailscale
-HTTPS** in **Settings → Sharing & access**. Turn it off there to remove that route.
+Join both devices to the same tailnet. In the desktop app, enable **System Tailscale Serve** in **Settings → Sharing & access**. Turn it off there to remove that route.
 
 To start a command-line server with Tailscale HTTPS:
 

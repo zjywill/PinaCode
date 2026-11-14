@@ -2,7 +2,7 @@ import { SessionPermissions } from "./SessionPermissions";
 import { useSearch } from "@tanstack/react-router";
 import { ChevronRightIcon, EllipsisIcon } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   AuthAccessReadScope,
   AuthAccessWriteScope,
@@ -69,7 +69,7 @@ import {
 } from "../ui/alert-dialog";
 import { Spinner } from "../ui/spinner";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
-import { Menu, MenuPopup, MenuTrigger } from "../ui/menu";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -120,17 +120,13 @@ import {
   sortDesktopClientSessions,
   toDesktopPairingLinkRecord,
   toDesktopClientSessionRecord,
+  desktopPairingEndpoints,
   selectPairingEndpoint,
   isServerNetworkAccessible,
   isTailscaleHttpsEndpoint,
   endpointDefaultPreferenceKey,
 } from "./ConnectionsSettings.logic";
-import {
-  AdvertisedEndpointListRow,
-  AuthorizedClientsHeaderAction,
-  NetworkAccessDescription,
-  PairingClientsList,
-} from "./AuthorizedClientsSettings";
+import { AuthorizedClientsHeaderAction, PairingClientsList } from "./AuthorizedClientsSettings";
 import { ITEM_ROW_CLASSNAME } from "./itemRows";
 import { EmptyRemoteEnvironments, SavedBackendListRow } from "./SavedEnvironmentRows";
 import { AddEnvironmentDialog } from "./AddEnvironmentDialog";
@@ -374,7 +370,6 @@ function ConnectionsSettingsContent({
   const primaryServerUpdateState = useAtomValue(
     serverEnvironment.updateStateAtom(primaryEnvironmentId),
   );
-  const [isAdvertisedEndpointListExpanded, setIsAdvertisedEndpointListExpanded] = useState(false);
   const defaultAdvertisedEndpointKey = useUiStateStore(
     (state) => state.defaultAdvertisedEndpointKey,
   );
@@ -411,6 +406,43 @@ function ConnectionsSettingsContent({
   const desktopWslError = desktopWslMutationError ?? desktopWsl.error;
   const isLoadingWslState = desktopWsl.isPending && desktopWsl.data === null;
   const desktopServerExposureState = desktopNetworkAccess.data?.serverExposureState ?? null;
+  const embeddedNode = desktopServerExposureState?.embeddedTailnet;
+  const [changingNode, setChangingNode] = useState(false);
+  const openNodeLogin = useRef(false);
+  const waitingForNode = embeddedNode?.phase === "starting" || embeddedNode?.phase === "login";
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Refresh while the external Tailscale sign-in is pending.
+  useEffect(() => {
+    if (!waitingForNode) return;
+    const timer = window.setInterval(refreshDesktopNetworkAccessState, 1500);
+    return () => window.clearInterval(timer);
+  }, [waitingForNode]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Launch the system browser when tsnet supplies the requested authorization URL.
+  useEffect(() => {
+    if (!openNodeLogin.current || embeddedNode?.phase !== "login" || !desktopBridge) return;
+    openNodeLogin.current = false;
+    void desktopBridge
+      .openExternal(embeddedNode.value)
+      .catch((error: unknown) => setDesktopServerExposureMutationError(String(error)));
+  }, [desktopBridge, embeddedNode]);
+  const changeEmbeddedNode = async (enabled: boolean) => {
+    if (
+      !desktopBridge ||
+      !primaryEnvironmentId ||
+      !readEnvironmentScope(primaryEnvironmentId, AuthEnvironmentMaintainScope)
+    )
+      return;
+    setChangingNode(true);
+    setDesktopServerExposureMutationError(null);
+    openNodeLogin.current = enabled;
+    try {
+      await desktopBridge.setEmbeddedTailnetEnabled(enabled);
+    } catch (error) {
+      openNodeLogin.current = false;
+      setDesktopServerExposureMutationError(String(error));
+    }
+    setChangingNode(false);
+    refreshDesktopNetworkAccessState();
+  };
   const desktopAdvertisedEndpoints =
     desktopNetworkAccess.data?.advertisedEndpoints ?? EMPTY_ADVERTISED_ENDPOINTS;
   const desktopServerExposureError =
@@ -565,7 +597,7 @@ function ConnectionsSettingsContent({
     setIsUpdatingTailscaleServe(false);
   };
 
-  const handleStartTailscaleServeDisable = (_endpoint: AdvertisedEndpoint) => {
+  const handleStartTailscaleServeDisable = () => {
     setDisableTailscaleServeDialogOpen(true);
   };
 
@@ -752,22 +784,14 @@ function ConnectionsSettingsContent({
     }
   };
   const tailscaleHttpsEndpoint = desktopAdvertisedEndpoints.find(isTailscaleHttpsEndpoint) ?? null;
-  const visibleDesktopNetworkAdvertisedEndpoints = isLocalBackendNetworkAccessible
-    ? desktopAdvertisedEndpoints.filter((endpoint) => !isTailscaleHttpsEndpoint(endpoint))
-    : [];
-  const visibleDesktopAdvertisedEndpoints = tailscaleHttpsEndpoint
-    ? [...visibleDesktopNetworkAdvertisedEndpoints, tailscaleHttpsEndpoint]
-    : visibleDesktopNetworkAdvertisedEndpoints;
-  const defaultDesktopNetworkAdvertisedEndpoint = selectPairingEndpoint(
-    visibleDesktopNetworkAdvertisedEndpoints,
+  const visibleDesktopAdvertisedEndpoints = desktopPairingEndpoints(
+    desktopAdvertisedEndpoints,
+    isLocalBackendNetworkAccessible,
+  );
+  const defaultDesktopAdvertisedEndpoint = selectPairingEndpoint(
+    visibleDesktopAdvertisedEndpoints,
     defaultAdvertisedEndpointKey,
   );
-  const defaultDesktopAdvertisedEndpoint =
-    defaultDesktopNetworkAdvertisedEndpoint ??
-    selectPairingEndpoint(
-      tailscaleHttpsEndpoint ? [tailscaleHttpsEndpoint] : [],
-      defaultAdvertisedEndpointKey,
-    );
   const defaultDesktopAdvertisedEndpointKey = defaultDesktopAdvertisedEndpoint
     ? endpointDefaultPreferenceKey(defaultDesktopAdvertisedEndpoint)
     : null;
@@ -782,26 +806,35 @@ function ConnectionsSettingsContent({
       onCheckedChange={(checked) => {
         setPendingDesktopServerExposureMode(checked ? "network-accessible" : "local-only");
       }}
-      aria-label="Enable network access"
+      aria-label="Enable local network access"
     />
   );
-  const renderEndpointRows = () =>
-    isAdvertisedEndpointListExpanded
-      ? visibleDesktopNetworkAdvertisedEndpoints.map((endpoint) => {
-          const endpointKey = endpointDefaultPreferenceKey(endpoint);
-          return (
-            <AdvertisedEndpointListRow
-              key={endpoint.id}
-              endpoint={endpoint}
-              isDefault={endpointKey === defaultDesktopAdvertisedEndpointKey}
-              onSetDefault={handleSetDefaultAdvertisedEndpoint}
-              onSetupTailscaleServe={handleStartTailscaleServeSetup}
-              onDisableTailscaleServe={handleStartTailscaleServeDisable}
-              isUpdatingTailscaleServe={isUpdatingTailscaleServe}
-            />
-          );
-        })
-      : null;
+  const renderPairingAddresses = () =>
+    defaultDesktopAdvertisedEndpoint ? (
+      <SettingsRow
+        title="Pairing address"
+        description={defaultDesktopAdvertisedEndpoint.httpBaseUrl}
+        control={
+          visibleDesktopAdvertisedEndpoints.length > 1 ? (
+            <Menu>
+              <MenuTrigger render={<Button variant="outline" size="sm" />}>
+                Change address
+              </MenuTrigger>
+              <MenuPopup align="end">
+                {visibleDesktopAdvertisedEndpoints.map((endpoint) => (
+                  <MenuItem
+                    key={endpoint.id}
+                    onClick={() => handleSetDefaultAdvertisedEndpoint(endpoint)}
+                  >
+                    {endpoint.label} · {endpoint.httpBaseUrl}
+                  </MenuItem>
+                ))}
+              </MenuPopup>
+            </Menu>
+          ) : undefined
+        }
+      />
+    ) : null;
   const applyWslSettingChange = async (apply: () => Promise<DesktopWslState>) => {
     if (
       !desktopBridge ||
@@ -1048,29 +1081,32 @@ function ConnectionsSettingsContent({
     <SettingsRow
       title={searchableSetting("tailscale-https").title}
       description={
-        tailscaleHttpsEndpoint
-          ? tailscaleHttpsEndpoint.status === "available"
-            ? tailscaleHttpsEndpoint.httpBaseUrl
-            : "Use Tailscale Serve to expose this backend through a MagicDNS HTTPS URL."
-          : missingTailscaleEndpointDescription(desktopServerExposureState)
+        desktopServerExposureState?.tailscaleServeEnabled &&
+        tailscaleHttpsEndpoint?.status !== "available"
+          ? "System Tailscale Serve is enabled, but its HTTPS address is unreachable."
+          : tailscaleHttpsEndpoint
+            ? tailscaleHttpsEndpoint.status === "available"
+              ? tailscaleHttpsEndpoint.httpBaseUrl
+              : "Use Tailscale Serve to expose this backend through a MagicDNS HTTPS URL."
+            : missingTailscaleEndpointDescription(desktopServerExposureState)
       }
       control={
-        tailscaleHttpsEndpoint ? (
+        tailscaleHttpsEndpoint || desktopServerExposureState?.tailscaleServeEnabled ? (
           <Switch
-            checked={tailscaleHttpsEndpoint.status === "available"}
+            checked={desktopServerExposureState?.tailscaleServeEnabled === true}
             disabled={isUpdatingTailscaleServe}
             onCheckedChange={(checked) => {
               if (checked) {
-                handleStartTailscaleServeSetup(tailscaleHttpsEndpoint);
+                if (tailscaleHttpsEndpoint) handleStartTailscaleServeSetup(tailscaleHttpsEndpoint);
                 return;
               }
-              handleStartTailscaleServeDisable(tailscaleHttpsEndpoint);
+              handleStartTailscaleServeDisable();
             }}
             aria-label="Enable Tailscale HTTPS"
           />
         ) : null
       }
-      managed={tailscaleHttpsEndpoint?.status === "available" ? undefined : remoteClientsDenial}
+      managed={desktopServerExposureState?.tailscaleServeEnabled ? undefined : remoteClientsDenial}
     />
   );
   const newestPairingLink = visibleDesktopPairingLinks.find(
@@ -1111,25 +1147,11 @@ function ConnectionsSettingsContent({
     <SettingsRow
       title={searchableSetting("network-access").title}
       description={
-        isLocalBackendNetworkAccessible ? (
-          <NetworkAccessDescription
-            endpoint={defaultDesktopNetworkAdvertisedEndpoint}
-            hiddenEndpointCount={Math.max(visibleDesktopNetworkAdvertisedEndpoints.length - 1, 0)}
-            expanded={isAdvertisedEndpointListExpanded}
-            onToggleExpanded={() => setIsAdvertisedEndpointListExpanded((expanded) => !expanded)}
-            fallback={
-              desktopServerExposureState?.endpointUrl
-                ? `Reachable at ${desktopServerExposureState.endpointUrl}`
-                : desktopServerExposureState?.advertisedHost
-                  ? `Exposed on all interfaces. Pairing links use ${desktopServerExposureState.advertisedHost}.`
-                  : "Exposed on all interfaces."
-            }
-          />
-        ) : desktopServerExposureState ? (
-          "Limited to this machine."
-        ) : (
-          "Loading…"
-        )
+        !desktopServerExposureState
+          ? "Loading…"
+          : isLocalBackendNetworkAccessible
+            ? `Devices on your local network can connect at ${desktopServerExposureState.endpointUrl ?? desktopServerExposureState.advertisedHost ?? "the host address"}.`
+            : "Allow devices on the same network to connect directly."
       }
       status={
         desktopServerExposureError ? (
@@ -1162,7 +1184,7 @@ function ConnectionsSettingsContent({
                   <Switch
                     checked={isLocalBackendNetworkAccessible}
                     disabled
-                    aria-label="Enable network access"
+                    aria-label="Enable local network access"
                   />
                 </span>
               }
@@ -1270,16 +1292,7 @@ function ConnectionsSettingsContent({
                 }
               />
             ) : null}
-            {canManageLocalBackend && desktopBridge ? (
-              <>
-                {renderNetworkAccessRow()}
-                {renderEndpointRows()}
-                {renderTailscaleRow()}
-                {renderWslRow()}
-              </>
-            ) : canManageLocalBackend ? (
-              renderDisabledNetworkAccessRow()
-            ) : null}
+            {canManageLocalBackend && desktopBridge ? renderWslRow() : null}
             {accessEnvironment ? (
               <details className="group px-3 sm:px-4">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-md text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
@@ -1296,6 +1309,63 @@ function ConnectionsSettingsContent({
               </details>
             ) : null}
           </SettingsSection>
+
+          {canManageLocalBackend ? (
+            <SettingsSection id="sharing-methods" title="Connection methods">
+              {desktopBridge ? (
+                <>
+                  {renderNetworkAccessRow()}
+
+                  {embeddedNode ? (
+                    <SettingsRow
+                      title={searchableSetting("embedded-tailnet").title}
+                      description={
+                        embeddedNode.phase === "connected" && embeddedNode.account
+                          ? `Signed in as ${embeddedNode.account} · ${embeddedNode.value}`
+                          : embeddedNode.phase === "connected" || embeddedNode.phase === "error"
+                            ? embeddedNode.value
+                            : waitingForNode
+                              ? "Waiting for Tailscale sign-in…"
+                              : "Share this Mac on your tailnet using your Tailscale account."
+                      }
+                      managed={remoteClientsDenial}
+                      control={
+                        <div className="flex gap-2">
+                          {embeddedNode.phase === "login" ? (
+                            <Button
+                              variant="outline"
+                              onClick={() => void desktopBridge.openExternal(embeddedNode.value)}
+                            >
+                              Open sign-in
+                            </Button>
+                          ) : null}
+                          <Button
+                            variant="outline"
+                            disabled={changingNode}
+                            onClick={() =>
+                              void changeEmbeddedNode(
+                                !(waitingForNode || embeddedNode.phase === "connected"),
+                              )
+                            }
+                          >
+                            {waitingForNode
+                              ? "Cancel"
+                              : embeddedNode.phase === "connected"
+                                ? "Sign out"
+                                : "Sign in to Tailscale"}
+                          </Button>
+                        </div>
+                      }
+                    />
+                  ) : null}
+                  {renderTailscaleRow()}
+                  {renderPairingAddresses()}
+                </>
+              ) : (
+                renderDisabledNetworkAccessRow()
+              )}
+            </SettingsSection>
+          ) : null}
 
           {canReadAccess || canWriteAccess ? (
             <FoldedSettingsSection
@@ -1372,8 +1442,8 @@ function ConnectionsSettingsContent({
               <AlertDialogHeader>
                 <AlertDialogTitle>
                   {pendingDesktopServerExposureMode === "network-accessible"
-                    ? "Enable network access?"
-                    : "Disable network access?"}
+                    ? "Enable local network access?"
+                    : "Disable local network access?"}
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   {pendingDesktopServerExposureMode === "network-accessible"

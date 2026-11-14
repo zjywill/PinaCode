@@ -22,6 +22,8 @@ import * as Semaphore from "effect/Semaphore";
 import * as HttpClient from "effect/http/HttpClient";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
+import { EmbeddedTailnet } from "./EmbeddedTailnet.ts";
+import { DesktopEnvironment } from "../app/DesktopEnvironment.ts";
 import * as DesktopManagedPolicy from "../app/DesktopManagedPolicy.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopConfig from "../app/DesktopConfig.ts";
@@ -258,6 +260,11 @@ export const DesktopServerExposureError = Schema.Union([
 ]);
 export type DesktopServerExposureError = typeof DesktopServerExposureError.Type;
 
+class EmbeddedTailnetError extends Schema.TaggedError<EmbeddedTailnetError>()(
+  "EmbeddedTailnetError",
+  { message: Schema.String },
+) {}
+
 export interface DesktopServerExposureBackendConfig {
   readonly port: number;
   readonly bindHost: string;
@@ -282,6 +289,9 @@ export class DesktopServerExposure extends Context.Service<
     readonly setMode: (
       mode: DesktopServerExposureMode,
     ) => Effect.Effect<DesktopServerExposureChange, DesktopServerExposureSetModeError>;
+    readonly setEmbeddedTailnetEnabled: (
+      enabled: boolean,
+    ) => Effect.Effect<void, EmbeddedTailnetError>;
     readonly setTailscaleServeEnabled: (input: {
       readonly enabled: boolean;
       readonly port?: number;
@@ -465,6 +475,23 @@ export const make = Effect.gen(function* () {
   const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const httpClient = yield* HttpClient.HttpClient;
   const desktopSettings = yield* DesktopAppSettings.DesktopAppSettings;
+  const environment = yield* DesktopEnvironment;
+  const supportsEmbeddedTailnet = environment.platform === "darwin";
+  const node = new EmbeddedTailnet(
+    environment.isPackaged
+      ? environment.path.join(
+          environment.resourcesPath,
+          "tailnet",
+          environment.processArch,
+          "pinacode-tailnet",
+        )
+      : "go",
+    environment.path.join(environment.stateDir, "embedded-tailnet"),
+    environment.isPackaged
+      ? undefined
+      : environment.path.join(environment.rootDir, "native/tailnet"),
+  );
+  yield* Effect.addFinalizer(() => Effect.promise(() => node.close()));
   const stateRef = yield* Ref.make(initialRuntimeState());
   // Serialize read-persist-write changes so stale runtime state cannot overwrite another update.
   const changePermit = yield* Semaphore.make(1);
@@ -504,7 +531,10 @@ export const make = Effect.gen(function* () {
 
   const getState = readNetworkInterfaces.pipe(
     Effect.flatMap(readCurrentState),
-    Effect.map(toContractState),
+    Effect.map((state) => ({
+      ...toContractState(state),
+      ...(supportsEmbeddedTailnet ? { embeddedTailnet: node.state } : {}),
+    })),
   );
   const backendConfig = Ref.get(stateRef).pipe(Effect.map(toBackendConfig));
 
@@ -520,6 +550,7 @@ export const make = Effect.gen(function* () {
         networkInterfaces: currentNetworkInterfaces,
         advertisedHostOverride: config.desktopLanHostOverride,
       });
+      if (supportsEmbeddedTailnet && remoteAllowed) node.restore(port);
       yield* Ref.set(stateRef, resolved.state);
       return toContractState(resolved.state);
     },
@@ -604,11 +635,34 @@ export const make = Effect.gen(function* () {
   const getAdvertisedEndpoints = Effect.gen(function* () {
     const currentNetworkInterfaces = yield* readNetworkInterfaces;
     const state = yield* readCurrentState(currentNetworkInterfaces);
-    const coreEndpoints = resolveDesktopCoreAdvertisedEndpoints({
-      port: state.port,
-      exposure: toResolvedExposure(state),
-      customHttpsEndpointUrls: config.desktopHttpsEndpointUrls,
-    });
+    const coreEndpoints = [
+      ...resolveDesktopCoreAdvertisedEndpoints({
+        port: state.port,
+        exposure: toResolvedExposure(state),
+        customHttpsEndpointUrls: config.desktopHttpsEndpointUrls,
+      }),
+    ];
+    if (node.state.phase === "connected") {
+      coreEndpoints.push(
+        createAdvertisedEndpoint({
+          provider: {
+            id: "embedded-tailnet",
+            label: "Tailscale",
+            kind: "private-network",
+            isAddon: true,
+          },
+          id: "embedded-tailnet",
+          label: "PinaCode Tailscale node",
+          source: "desktop-addon",
+          reachability: "private-network",
+          status: "available",
+          httpBaseUrl: node.state.value,
+          hostedHttpsCompatibility: node.state.value.startsWith("https:")
+            ? "compatible"
+            : "mixed-content-blocked",
+        }),
+      );
+    }
 
     // Spawning Mac App Store Tailscale can prompt for TCC access even when exposure is disabled.
     if (state.mode !== "network-accessible" && !state.tailscaleServeEnabled) {
@@ -633,6 +687,29 @@ export const make = Effect.gen(function* () {
 
   return DesktopServerExposure.of({
     getState,
+    setEmbeddedTailnetEnabled: Effect.fn("desktop.serverExposure.setEmbeddedTailnetEnabled")(
+      function* (enabled: boolean) {
+        if (!supportsEmbeddedTailnet)
+          return yield* new EmbeddedTailnetError({
+            message: "Only a Mac can host a PinaCode Tailscale node.",
+          });
+        const { port } = yield* Ref.get(stateRef);
+        if (port < 1)
+          return yield* new EmbeddedTailnetError({ message: "The local backend is not ready." });
+        if (enabled && !remoteAllowed)
+          return yield* new EmbeddedTailnetError({
+            message: "Remote access is disabled by policy.",
+          });
+        yield* Effect.tryPromise({
+          try: async () => {
+            if (enabled) node.start(port);
+            else await node.signOut(port);
+          },
+          catch: (error) => new EmbeddedTailnetError({ message: String(error) }),
+        });
+      },
+      changePermit.withPermit,
+    ),
     backendConfig,
     configureFromSettings,
     setMode,
