@@ -67,7 +67,6 @@ import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-import * as AgentAwarenessRelay from "../relay/AgentAwarenessRelay.ts";
 import { makeRelayEnvironmentClient } from "../relay/relayEnvironmentClient.ts";
 import { loopbackUrlHostForAddress } from "../startupAccess.ts";
 import {
@@ -523,7 +522,6 @@ const make = Effect.gen(function* () {
   const cliTokenManager = yield* CliTokenManager.CloudCliTokenManager;
   const httpClient = yield* HttpClient.HttpClient;
   const httpServer = yield* HttpServer.HttpServer;
-  const awarenessRelay = yield* AgentAwarenessRelay.AgentAwarenessRelay;
   const random = yield* SecureRandom.SecureRandom;
   const signature = yield* Signature.Signature;
   const signingKey = yield* EnvironmentSigningKey;
@@ -797,7 +795,6 @@ const make = Effect.gen(function* () {
       );
       yield* secrets.remove(CLOUD_LINK_REVOKED);
       yield* secrets.set(CLOUD_MINT_PUBLIC_KEY, stringToBytes(payload.cloudMintPublicKey));
-      yield* awarenessRelay.requestCatchUp();
       if (endpointRuntimeJson !== null) {
         yield* secrets.set(CLOUD_ENDPOINT_RUNTIME_CONFIG, stringToBytes(endpointRuntimeJson));
       }
@@ -856,16 +853,15 @@ const make = Effect.gen(function* () {
           }),
         ),
       );
-      const mode = yield* readCliDesiredLinkMode.pipe(withSecrets);
-      const managedTunnelsEnabled = mode !== "publish_only";
+
       const relayUrl = yield* requireRelayUrl;
       const challenge = yield* relayClientRequest({
         url: `${relayUrl}/v1/client/environment-link-challenges`,
         token: token.accessToken,
         payload: {
-          notificationsEnabled: true,
-          liveActivitiesEnabled: true,
-          managedTunnelsEnabled,
+          notificationsEnabled: false,
+          liveActivitiesEnabled: false,
+          managedTunnelsEnabled: true,
         },
         schema: RelayEnvironmentLinkChallengeResponse,
       });
@@ -876,7 +872,7 @@ const make = Effect.gen(function* () {
           endpoint: {
             httpBaseUrl: parsedOrigin.httpBaseUrl,
             wsBaseUrl: parsedOrigin.wsBaseUrl,
-            providerKind: managedTunnelsEnabled ? "cloudflare_tunnel" : "manual",
+            providerKind: "cloudflare_tunnel",
           },
           origin: parsedOrigin.origin,
         },
@@ -887,14 +883,14 @@ const make = Effect.gen(function* () {
         token: token.accessToken,
         payload: {
           proof,
-          notificationsEnabled: true,
-          liveActivitiesEnabled: true,
-          managedTunnelsEnabled,
+          notificationsEnabled: false,
+          liveActivitiesEnabled: false,
+          managedTunnelsEnabled: true,
         },
         schema: RelayEnvironmentLinkResponse,
         timeout: MANAGED_ENDPOINT_PROVISION_REQUEST_TIMEOUT,
       });
-      yield* setCliDesiredCloudLink(true, mode).pipe(withSecrets);
+      yield* setCliDesiredCloudLink(true, "managed").pipe(withSecrets);
       yield* applyCloudRelayConfig(
         {
           relayUrl,
@@ -909,7 +905,7 @@ const make = Effect.gen(function* () {
           confirmedOrigin: parsedOrigin.origin,
         },
       );
-      return mode;
+      return "managed" as const;
     },
     Effect.catchIf(ServerSecretStore.isSecretStoreError, internalError("persist-desired-link")),
   );
@@ -919,7 +915,10 @@ const make = Effect.gen(function* () {
   )(function* (localOrigin: string) {
     return yield* endpointRuntime.withLinkStateLock(
       Effect.gen(function* () {
-        if (!(yield* readCliDesiredCloudLink.pipe(withSecrets))) {
+        if (
+          !(yield* readCliDesiredCloudLink.pipe(withSecrets)) ||
+          (yield* readCliDesiredLinkMode.pipe(withSecrets)) === "publish_only"
+        ) {
           return null;
         }
         return yield* reconcileDesiredCloudLinkWith(localOrigin);
@@ -1274,7 +1273,6 @@ const make = Effect.gen(function* () {
       relayUrl,
       relayIssuer,
       endpointRuntimeConfig,
-      publishAgentActivity,
       holdWebhooks,
       revoked,
       latestReachability,
@@ -1284,7 +1282,6 @@ const make = Effect.gen(function* () {
         secrets.get(RELAY_URL_SECRET),
         secrets.get(RELAY_ISSUER_SECRET),
         secrets.get(CLOUD_ENDPOINT_RUNTIME_CONFIG),
-        secrets.get(PUBLISH_AGENT_ACTIVITY_SECRET),
         secrets.get(HOLD_WEBHOOKS_WHILE_OFFLINE_SECRET),
         secrets.get(CLOUD_LINK_REVOKED),
         reachability.latest,
@@ -1309,9 +1306,7 @@ const make = Effect.gen(function* () {
       relayUrl: Option.isSome(relayUrl) ? bytesToString(relayUrl.value) : null,
       relayIssuer: Option.isSome(relayIssuer) ? bytesToString(relayIssuer.value) : null,
       managedTunnelActive: Option.isSome(endpointRuntimeConfig),
-      publishAgentActivity: Option.isSome(publishAgentActivity)
-        ? bytesToString(publishAgentActivity.value) === "true"
-        : false,
+      publishAgentActivity: false,
       holdWebhooksWhileOffline:
         Option.isSome(holdWebhooks) && bytesToString(holdWebhooks.value) === "true",
       ...(Option.isSome(currentReachability) ? { reachability: currentReachability.value } : {}),
@@ -1383,9 +1378,7 @@ const make = Effect.gen(function* () {
       // Read rollback targets before changing anything; failed reads must abort.
       const readCurrent = (name: string) =>
         secrets.get(name).pipe(Effect.catch(internalError("read-preferences")));
-      const previousActivity = yield* readCurrent(PUBLISH_AGENT_ACTIVITY_SECRET);
       const previousHold = yield* readCurrent(HOLD_WEBHOOKS_WHILE_OFFLINE_SECRET);
-      yield* savePreference(PUBLISH_AGENT_ACTIVITY_SECRET, input.publishAgentActivity);
       if (input.holdWebhooksWhileOffline !== undefined) {
         const next = input.holdWebhooksWhileOffline;
         const previous = Option.match(previousHold, {
@@ -1402,15 +1395,8 @@ const make = Effect.gen(function* () {
               ),
             ),
           ),
-          Effect.tapError(() =>
-            Option.match(previousActivity, {
-              onNone: () => secrets.remove(PUBLISH_AGENT_ACTIVITY_SECRET),
-              onSome: (bytes) => secrets.set(PUBLISH_AGENT_ACTIVITY_SECRET, bytes),
-            }).pipe(Effect.catch(rollbackFailed)),
-          ),
         );
       }
-      yield* awarenessRelay.requestCatchUp();
     },
     // Finish or roll back even if the client disconnects mid-update.
     Effect.uninterruptible,

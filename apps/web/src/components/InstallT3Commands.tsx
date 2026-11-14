@@ -12,7 +12,7 @@ export function InstallT3Commands({
   return (
     <div className={cn("space-y-2", className)}>
       <p className="text-xs text-muted-foreground">
-        Install the CLI from PinaCode desktop Settings, then run:
+        Install the CLI from Pina Code desktop Settings, then run:
       </p>
       <CommandBlock command={command} />
     </div>

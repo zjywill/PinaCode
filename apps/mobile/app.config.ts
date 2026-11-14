@@ -39,26 +39,24 @@ const assets = {
   androidAdaptiveBackgroundColor: "#000000",
   androidAdaptiveBackgroundImage: undefined,
   androidSplashIcon: icon,
-  androidNotificationIcon: "./assets/android-notification-icon.png",
-  androidNotificationColor: "#ffffff",
 };
 const VARIANT_CONFIG = {
   development: {
-    appName: "PinaCode Dev",
+    appName: "Pina Code Dev",
     scheme: "pinacode-dev",
     iosBundleIdentifier: "app.pinacode.client.dev",
     androidPackage: "app.pinacode.client.dev",
     assets,
   },
   preview: {
-    appName: "PinaCode Preview",
+    appName: "Pina Code Preview",
     scheme: "pinacode-preview",
     iosBundleIdentifier: "app.pinacode.client.preview",
     androidPackage: "app.pinacode.client.preview",
     assets,
   },
   production: {
-    appName: "PinaCode",
+    appName: "Pina Code",
     scheme: "pinacode",
     iosBundleIdentifier: "app.pinacode.client",
     androidPackage: "app.pinacode.client",
@@ -95,15 +93,12 @@ const widgetsPlugin: NonNullable<ExpoConfig["plugins"]>[number] = [
   {
     bundleIdentifier: `${iosBundleIdentifier}.widgets`,
     groupIdentifier: `group.${iosBundleIdentifier}`,
-    enablePushNotifications: true,
-    // Frequent updates need the iOS entitlement to avoid early throttling.
-    frequentUpdates: true,
     enableAndroid: true,
     widgets: [
       {
         name: "SubscriptionUsage",
         displayName: "Subscription usage",
-        description: "Subscription quotas from your connected T3 Code environments.",
+        description: "Subscription quotas from your connected Pina Code environments.",
         ios: {
           configuration: {
             title: "Subscription usage",
@@ -148,18 +143,6 @@ const widgetsPlugin: NonNullable<ExpoConfig["plugins"]>[number] = [
           resizeMode: "both",
           // The embedded layout renders before first launch; publishing replaces it with stored props.
           initialLayout: "./src/widgets/SubscriptionUsage.android.tsx",
-        },
-      },
-      {
-        name: "AgentActivity",
-        displayName: "Agent Activity",
-        description: "Shows the current state of active T3 Code agents.",
-        android: null,
-        ios: {
-          supportedFamilies: ["systemSmall", "systemMedium", "accessoryRectangular"],
-          // Embeds the layout so the gallery preview and a new widget render
-          // before the app has run once; the app replaces it on publish.
-          initialLayout: "./src/widgets/AgentActivityWidget.tsx",
         },
       },
     ],
@@ -213,7 +196,7 @@ const config: ExpoConfig = {
   },
   ios: {
     icon: variant.assets.iosIcon,
-    buildNumber: "2",
+    buildNumber: "3",
     supportsTablet: true,
     requireFullScreen: process.env.T3_SHOWCASE_CAPTURE_BUILD === "1",
     bundleIdentifier: iosBundleIdentifier,
@@ -233,8 +216,8 @@ const config: ExpoConfig = {
         NSAllowsArbitraryLoads: true,
       },
       NSLocalNetworkUsageDescription:
-        "Allow T3 Code to connect to T3 Code servers on your local network or tailnet.",
-      NSPhotoLibraryAddUsageDescription: "Allow T3 Code to save images to your photo library.",
+        "Allow Pina Code to connect to Pina Code servers on your local network or tailnet.",
+      NSPhotoLibraryAddUsageDescription: "Allow Pina Code to save images to your photo library.",
       // System picture in picture needs background audio to start and survive outside the app.
       UIBackgroundModes: ["audio"],
       ITSAppUsesNonExemptEncryption: false,
@@ -273,6 +256,7 @@ const config: ExpoConfig = {
     favicon: variant.assets.appIcon,
   },
   plugins: [
+    ["./plugins/withIosCapabilities.cjs", { personalTeam: isIosPersonalTeamBuild }],
     "expo-asset",
     [
       "expo-font",
@@ -303,14 +287,7 @@ const config: ExpoConfig = {
     ...(isIosPersonalTeamBuild
       ? [sharingPlugin]
       : ["./plugins/withShareExtensionDisplayName.cjs", sharingPlugin]),
-    [
-      "expo-notifications",
-      {
-        icon: variant.assets.androidNotificationIcon,
-        color: variant.assets.androidNotificationColor,
-        mode: APP_VARIANT === "development" ? "development" : "production",
-      },
-    ],
+    ["expo-notifications", { enableRemoteNotifications: false }],
     "expo-web-browser",
     [
       "expo-quick-actions",
@@ -329,7 +306,7 @@ const config: ExpoConfig = {
     [
       "expo-audio",
       {
-        microphonePermission: "Allow T3 Code to use your microphone for voice input.",
+        microphonePermission: "Allow Pina Code to use your microphone for voice input.",
         recordAudioAndroid: true,
         enableBackgroundPlayback: false,
         enableBackgroundRecording: false,
@@ -338,7 +315,7 @@ const config: ExpoConfig = {
     [
       "expo-camera",
       {
-        cameraPermission: "Allow T3 Code to access your camera so you can scan pairing QR codes.",
+        cameraPermission: "Allow Pina Code to access your camera so you can scan pairing QR codes.",
         microphonePermission: false,
         barcodeScannerEnabled: true,
         recordAudioAndroid: false,
@@ -349,7 +326,7 @@ const config: ExpoConfig = {
       {
         photosPermission: false,
         // `false` makes this plugin add RECORD_AUDIO to blockedPermissions, breaking Android dictation.
-        microphonePermission: "Allow T3 Code to use your microphone for voice input.",
+        microphonePermission: "Allow Pina Code to use your microphone for voice input.",
       },
     ],
     [
@@ -406,7 +383,6 @@ const config: ExpoConfig = {
     // MainActivity mods run in reverse order; extend the tablet-orientation override.
     "./plugins/withAndroidWindowDisplayMetrics.cjs",
     "./plugins/withAndroidTabletOrientation.cjs",
-    ...(isIosPersonalTeamBuild ? ["./plugins/withoutIosPersonalTeamCapabilities.cjs"] : []),
   ],
   extra: {
     appVariant: APP_VARIANT,

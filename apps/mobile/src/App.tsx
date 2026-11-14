@@ -33,10 +33,6 @@ import {
   startIncomingShareInbox,
 } from "./features/sharing/IncomingShareProvider";
 import {
-  installAgentNotificationNavigation,
-  setAgentNotificationPathname,
-} from "./features/agent-awareness/notificationNavigation";
-import {
   installAppShortcuts,
   recordAppShortcutNavigationState,
 } from "./features/shortcuts/appShortcutsRuntime";
@@ -45,7 +41,7 @@ import {
   installAppearanceRuntime,
   useAppearancePreferences,
 } from "./features/settings/appearance/AppearancePreferencesProvider";
-import { RootStack, rootPathnameFromState, workspaceLocationFromState } from "./Stack";
+import { RootStack, rootPathnameFromState } from "./Stack";
 import { appAtomRegistry } from "./state/atom-registry";
 import { subscribeComposerDraftModelReconciliation } from "./state/use-composer-drafts";
 import { environmentThreadShells, threadEnvironment } from "./state/threads";
@@ -178,7 +174,6 @@ function handleNavigationStateChange(state: NavigationState | undefined): void {
   if (!state) return;
   // A launch that opens another route has no Home rows for the splash to wait for.
   if (state.routes[state.index]?.name !== "Home") settleLaunchSplashHomeRows();
-  setAgentNotificationPathname(workspaceLocationFromState(state).pathname);
   recordAppShortcutNavigationState(state);
   pruneNewTaskFlowStates(state);
   pruneNewTaskBranchCheckouts(state);
@@ -207,7 +202,6 @@ const appServiceDisposers = [
   installThreadOutboxDelivery(),
   installComposerAttachmentUploads(),
   startIncomingShareInbox(),
-  installAgentNotificationNavigation(linkToAppPath),
   installAppShortcuts(linkToAppPath),
   installAppUpdateChecks(),
   installShowcaseCapture(rootPathnameFromState),

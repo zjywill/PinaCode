@@ -85,7 +85,7 @@ export class DesktopEnvironment extends Context.Service<
   }
 >()("@t3tools/desktop/app/DesktopEnvironment") {}
 
-const APP_BASE_NAME = "PinaCode";
+const APP_BASE_NAME = "Pina Code";
 
 function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;

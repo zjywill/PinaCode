@@ -38,7 +38,6 @@ import {
   type ServiceUpdateRecord,
 } from "./serviceProtocol.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-import * as AgentAwarenessRelay from "../relay/AgentAwarenessRelay.ts";
 import { CLOUD_CLI_DESIRED_LINK_SECRET } from "./CliState.ts";
 import * as CliTokenManager from "./CliTokenManager.ts";
 import {
@@ -76,13 +75,6 @@ const storeFailure = (tag: "AlreadyExists" | "PermissionDenied") =>
   });
 
 const unusedSecretStoreOperation = () => Effect.die("unused secret-store operation");
-
-const idleAwarenessRelay = AgentAwarenessRelay.AgentAwarenessRelay.of({
-  publishThread: () => Effect.void,
-  drain: Effect.void,
-  requestCatchUp: () => Effect.void,
-  start: () => Effect.void,
-});
 
 const idleHttpServer = HttpServer.HttpServer.of({
   address: NetAddress.inetAddressFromIpStringUnsafe("127.0.0.1", 3773),
@@ -199,7 +191,6 @@ describe("releaseManagedTunnelOnShutdown", () => {
           address: harness.address ?? idleHttpServer.address,
         }),
         Effect.provideService(ServerSecretStore.ServerSecretStore, harness.store),
-        Effect.provideService(AgentAwarenessRelay.AgentAwarenessRelay, idleAwarenessRelay),
         Effect.provideService(
           ServerEnvironment.ServerEnvironment,
           ServerEnvironment.ServerEnvironment.of({
@@ -369,6 +360,8 @@ describe("releaseManagedTunnelOnShutdown", () => {
 
       values.delete(CLOUD_CLI_DESIRED_LINK_SECRET);
 
+      expect(yield* link.reconcileDesiredLinkIfStillDesired("http://127.0.0.1:3773")).toBeNull();
+      values.set(CLOUD_CLI_DESIRED_LINK_SECRET, new TextEncoder().encode("publish_only"));
       expect(yield* link.reconcileDesiredLinkIfStillDesired("http://127.0.0.1:3773")).toBeNull();
       expect(requests).toEqual([]);
       expect(applyConfigCalls).toEqual([]);

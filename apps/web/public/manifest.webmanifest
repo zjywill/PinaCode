@@ -1,7 +1,7 @@
 {
   "id": "/pinacode",
-  "name": "PinaCode",
-  "short_name": "PinaCode",
+  "name": "Pina Code",
+  "short_name": "Pina Code",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -34,7 +34,7 @@ function databaseErrorMessage(value: unknown): string | undefined {
     cause = cause.cause;
   }
 
-  return "The T3 Code server could not complete this database request. Retry once; if it still fails, check the server logs for the database error.";
+  return "The Pina Code server could not complete this database request. Retry once; if it still fails, check the server logs for the database error.";
 }
 
 export function userFacingDatabaseErrorMessage(cause: unknown): string | undefined {

@@ -23,7 +23,7 @@ export function codexAuthCallbackPage(
     : "Return to T3 Code and try signing in again.";
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark"><title>${escapeHtml(title)} · T3 Code</title>
+<meta name="color-scheme" content="light dark"><title>${escapeHtml(title)} · Pina Code</title>
 ${success && destination ? `<meta http-equiv="refresh" content="1;url=${escapeHtml(destination)}">` : ""}
 <style>
 :root{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#18181b;background:#fafafa;color-scheme:light dark}

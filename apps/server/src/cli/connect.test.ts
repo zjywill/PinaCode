@@ -190,7 +190,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer))
           linkMode: "publish_only",
         });
 
-        assert.include(printed, "Exposure: publish-only");
+        assert.include(printed, "Exposure: disabled");
         assert.notInclude(printed, "Other devices can reach this machine");
       }),
     );

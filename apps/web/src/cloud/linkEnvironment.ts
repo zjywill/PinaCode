@@ -64,7 +64,7 @@ const ensureRelayClientAvailable = Effect.fn("linkEnvironment.ensureRelayClientA
     if (status.status === "available") return;
     if (status.status === "unsupported") {
       return yield* new CloudEnvironmentLinkError({
-        message: `T3 Code cannot install the relay client automatically on ${status.platform}-${status.arch}.`,
+        message: `Pina Code cannot install the relay client automatically on ${status.platform}-${status.arch}.`,
       });
     }
 
@@ -100,7 +100,7 @@ const ensureRelayClientAvailable = Effect.fn("linkEnvironment.ensureRelayClientA
       return yield* new CloudEnvironmentLinkError({
         message:
           installedStatus.status === "unsupported"
-            ? `T3 Code cannot install the relay client automatically on ${installedStatus.platform}-${installedStatus.arch}.`
+            ? `Pina Code cannot install the relay client automatically on ${installedStatus.platform}-${installedStatus.arch}.`
             : "The relay client is still unavailable after installation.",
       });
     }
@@ -375,8 +375,8 @@ export const linkEnvironmentToCloud: (input: {
     .createEnvironmentLinkChallenge({
       clerkToken: input.clerkToken,
       payload: {
-        notificationsEnabled: true,
-        liveActivitiesEnabled: true,
+        notificationsEnabled: false,
+        liveActivitiesEnabled: false,
         managedTunnelsEnabled,
       },
     })
@@ -410,8 +410,8 @@ export const linkEnvironmentToCloud: (input: {
       clerkToken: input.clerkToken,
       payload: {
         proof,
-        notificationsEnabled: true,
-        liveActivitiesEnabled: true,
+        notificationsEnabled: false,
+        liveActivitiesEnabled: false,
         managedTunnelsEnabled,
       },
     })

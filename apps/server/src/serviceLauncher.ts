@@ -916,7 +916,7 @@ export class Launcher {
       const lock = await tryAcquireSqliteLock(lockPath);
       if (lock !== undefined) return lock;
       if (attempt >= LOCK_ATTEMPTS) {
-        throw new Error("Another T3 Code service launcher still runs for this T3 home.");
+        throw new Error("Another Pina Code service launcher still runs for this T3 home.");
       }
       await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
     }
@@ -1424,7 +1424,7 @@ export interface LauncherOptions {
 export async function main(options: LauncherOptions = {}): Promise<void> {
   const baseDir = options.baseDir ?? process.env.PINACODE_HOME;
   if (baseDir === undefined || baseDir.trim() === "") {
-    throw new Error("PINACODE_HOME is required by the T3 Code service launcher.");
+    throw new Error("PINACODE_HOME is required by the Pina Code service launcher.");
   }
   const output =
     options.logFile === undefined ? undefined : NodeFS.openSync(options.logFile, "a", 0o600);

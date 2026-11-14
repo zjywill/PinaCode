@@ -299,7 +299,7 @@ export const make = Effect.gen(function* () {
       // PATH would split the folder at the `;`, leaving two wrong entries behind.
       if (binDirectory.includes(";")) {
         return yield* fail(
-          `PinaCode cannot put ${binDirectory} on PATH because it has a ";". Run ${launcher} directly.`,
+          `Pina Code cannot put ${binDirectory} on PATH because it has a ";". Run ${launcher} directly.`,
         );
       }
       const entries = pathEntries(yield* readUserPath, ";");
@@ -401,11 +401,11 @@ export const make = Effect.gen(function* () {
     }
     const setup = startupLine(installed.value);
     if (setup === undefined)
-      return yield* fail("PinaCode cannot add pinacode to this shell's PATH.");
+      return yield* fail("Pina Code cannot add pinacode to this shell's PATH.");
     const shadowedBy = yield* foreignFirstOnPath;
     if (Option.isSome(shadowedBy)) {
       return yield* fail(
-        `Another pinacode at ${shadowedBy.value} runs first; PinaCode leaves it in place.`,
+        `Another pinacode at ${shadowedBy.value} runs first; Pina Code leaves it in place.`,
       );
     }
     if (!(yield* folderOnPath(installed.value)) && !(yield* hasLine(setup))) {
@@ -432,7 +432,7 @@ export const make = Effect.gen(function* () {
       if (existing !== undefined) {
         const target = yield* fs.readLink(existing).pipe(Effect.option);
         if (Option.getOrUndefined(target) !== launcher) {
-          return yield* logInfo("left another PinaCode app's pinacode command in place", {
+          return yield* logInfo("left another Pina Code app's pinacode command in place", {
             existing,
           });
         }

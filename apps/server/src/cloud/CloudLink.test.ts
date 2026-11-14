@@ -19,7 +19,6 @@ import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-import * as AgentAwarenessRelay from "../relay/AgentAwarenessRelay.ts";
 import * as CliTokenManager from "./CliTokenManager.ts";
 import * as CloudLink from "./CloudLink.ts";
 import * as ConnectReachability from "./ConnectReachability.ts";
@@ -45,9 +44,7 @@ const cloudMintKeys = NodeCrypto.generateKeyPairSync("ed25519", {
 const withService = <A, E>(
   options: {
     readonly failHoldWrite?: boolean;
-    readonly failActivityWrite?: boolean;
     readonly relayFails?: boolean;
-    readonly failActivityRead?: boolean;
     readonly failHoldRead?: boolean;
     readonly holdFirstRelayCall?: {
       readonly started: () => void;
@@ -95,8 +92,7 @@ const withService = <A, E>(
       ServerSettings.ServerSettingsService.layerTest(),
       Layer.mock(ServerSecretStore.ServerSecretStore)({
         get: (name) =>
-          (options.failActivityRead && name === PUBLISH_AGENT_ACTIVITY_SECRET) ||
-          (options.failHoldRead && name === HOLD_WEBHOOKS_WHILE_OFFLINE_SECRET)
+          options.failHoldRead && name === HOLD_WEBHOOKS_WHILE_OFFLINE_SECRET
             ? Effect.fail(
                 new ServerSecretStore.SecretStoreReadError({
                   resource: name,
@@ -105,8 +101,7 @@ const withService = <A, E>(
               )
             : Effect.succeed(Option.fromNullishOr(stored.get(name))),
         set: (name, value) =>
-          (options.failHoldWrite && name === HOLD_WEBHOOKS_WHILE_OFFLINE_SECRET) ||
-          (options.failActivityWrite && name === PUBLISH_AGENT_ACTIVITY_SECRET)
+          options.failHoldWrite && name === HOLD_WEBHOOKS_WHILE_OFFLINE_SECRET
             ? Effect.fail(
                 new ServerSecretStore.SecretStorePersistError({
                   resource: name,
@@ -119,7 +114,6 @@ const withService = <A, E>(
       Layer.mock(ServerEnvironment.ServerEnvironment)({
         getEnvironmentId: Effect.succeed(EnvironmentId.make("environment-1")),
       }),
-      Layer.mock(AgentAwarenessRelay.AgentAwarenessRelay)({ requestCatchUp: () => Effect.void }),
       Layer.mock(ManagedEndpointRuntime.CloudManagedEndpointRuntime)({}),
       ManagedPolicy.layerTest(),
       Layer.mock(ConnectReachability.ConnectReachability)({
@@ -202,25 +196,6 @@ it.effect("puts the relay back when the local save fails", () =>
   ),
 );
 
-it.effect("leaves the relay untouched when the activity setting can't be saved", () =>
-  withService({ failActivityWrite: true }, ({ preferences, stored, relayCalls }) =>
-    Effect.gen(function* () {
-      const error = yield* preferences
-        .update({ publishAgentActivity: true, holdWebhooksWhileOffline: true })
-        .pipe(Effect.flip);
-      assert.deepInclude(error, {
-        _tag: "CloudLinkInternalError",
-        operation: "persist-preferences",
-      });
-      assert.deepEqual(relayCalls, []);
-      assert.equal(
-        new TextDecoder().decode(stored.get(HOLD_WEBHOOKS_WHILE_OFFLINE_SECRET)),
-        "false",
-      );
-    }),
-  ),
-);
-
 it.effect("keeps both settings unchanged when the relay refuses the hold change", () =>
   withService({ relayFails: true }, ({ preferences, stored }) =>
     Effect.gen(function* () {
@@ -255,7 +230,7 @@ it.effect("two overlapping updates are applied one after the other", () => {
         .update({ publishAgentActivity: false, holdWebhooksWhileOffline: false })
         .pipe(Effect.forkChild);
       yield* Effect.yieldNow;
-      assert.equal(new TextDecoder().decode(stored.get(PUBLISH_AGENT_ACTIVITY_SECRET)), "true");
+      assert.equal(new TextDecoder().decode(stored.get(PUBLISH_AGENT_ACTIVITY_SECRET)), "false");
       release();
       yield* Fiber.join(first);
       yield* Fiber.join(second);
@@ -287,7 +262,7 @@ it.effect("an update the client walks away from still finishes", () => {
       yield* Effect.yieldNow;
       release();
       yield* Fiber.join(interrupted);
-      assert.equal(new TextDecoder().decode(stored.get(PUBLISH_AGENT_ACTIVITY_SECRET)), "true");
+      assert.equal(new TextDecoder().decode(stored.get(PUBLISH_AGENT_ACTIVITY_SECRET)), "false");
       assert.equal(
         new TextDecoder().decode(stored.get(HOLD_WEBHOOKS_WHILE_OFFLINE_SECRET)),
         "true",
@@ -339,7 +314,6 @@ it.effect("unlinks on startup and refuses to link when the policy turns Connect 
         remove: (name) => Effect.sync(() => void stored.delete(name)),
       }),
       Layer.mock(ServerEnvironment.ServerEnvironment)({}),
-      Layer.mock(AgentAwarenessRelay.AgentAwarenessRelay)({}),
       Layer.mock(ManagedEndpointRuntime.CloudManagedEndpointRuntime)({
         withLinkStateLock: (effect) => effect,
         applyConfig: (config) =>

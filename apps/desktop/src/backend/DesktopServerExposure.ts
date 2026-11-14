@@ -652,7 +652,7 @@ export const make = Effect.gen(function* () {
             isAddon: true,
           },
           id: "embedded-tailnet",
-          label: "PinaCode Tailscale node",
+          label: "Pina Code Tailscale node",
           source: "desktop-addon",
           reachability: "private-network",
           status: "available",
@@ -691,7 +691,7 @@ export const make = Effect.gen(function* () {
       function* (enabled: boolean) {
         if (!supportsEmbeddedTailnet)
           return yield* new EmbeddedTailnetError({
-            message: "Only a Mac can host a PinaCode Tailscale node.",
+            message: "Only a Mac can host a Pina Code Tailscale node.",
           });
         const { port } = yield* Ref.get(stateRef);
         if (port < 1)
