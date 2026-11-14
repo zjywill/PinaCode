@@ -1,114 +1,46 @@
+<p align="center">
+  <img src="./assets/pinacode/icon-192.png" width="80" height="80" alt="PinaCode 图标" />
+</p>
+
 # PinaCode
 
-PinaCode is a fork of T3 Code that runs alongside the original app. Its desktop CLI is `pinacode`, its default server port is `4773`, and it keeps its data in `~/.pinacode` (override with `PINACODE_HOME`). Use local or directly paired environments without a T3 account. Provider sign-in and environment authorization still apply.
+PinaCode 是 [T3 Code](https://github.com/pingdotgg/t3code) 的独立分支。你可以在同一个界面里使用 Codex、Claude Code 等已登录的编程助手，在电脑上开始工作，再从手机接着操作。
 
-The links below describe the upstream T3 Code project.
+PinaCode 可以和 T3 Code 同时安装：命令是 `pinacode`，默认服务端口是 `4773`，数据保存在 `~/.pinacode`（可通过 `PINACODE_HOME` 修改）。使用本地环境或直接配对的环境无需 T3 账号；编程助手仍需各自登录。
 
-<p align="center">
-  <a href="https://t3.codes">
-    <img src="./assets/prod/t3-black-web-icon-192x192.png" width="80" height="80" alt="T3 Code logo" />
-  </a>
-</p>
+## 从源码运行
 
-<h1 align="center">T3 Code</h1>
+先按[开发环境指南](./docs/operations/development.md#first-checkout)准备 Node.js 和 Vite+，然后运行：
 
-<p align="center">The open-source control plane for coding agents.</p>
-
-<p align="center">
-  <a href="https://t3.codes/download"><strong>Download</strong></a> ·
-  <a href="https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824">iOS</a> ·
-  <a href="https://play.google.com/store/apps/details?id=com.t3tools.t3code">Android</a> ·
-  <a href="https://app.t3.codes">Web</a> ·
-  <a href="./docs/README.md">Docs</a> ·
-  <a href="https://discord.gg/jn4EGJjrvv">Discord</a>
-</p>
-
-<p align="center">
-  <a href="https://t3.codes">
-    <img src="./.github/readme/hero.webp" width="100%" alt="T3 Code on desktop with a finished Claude thread, next to the phone app asking to approve a command from Codex" />
-  </a>
-</p>
-
-T3 Code runs the coding agents on your machine and gives them one fast interface. Start a thread at your desk, then approve the next step from your phone.
-
-It works with Claude Code, Codex, Cursor, OpenCode, Grok Build, Antigravity, Kiro, Pi, Muse Code, fx, and any [ACP](./docs/user/providers-acp.md) agent. If an agent is set up on your computer, T3 Code can control it.
-
-## What you get
-
-- **Your subscriptions.** T3 Code does not resell tokens. It drives the agents you are already signed in to.
-- **Every agent in one place.** Change models in the middle of a thread. Let Claude hand a task to Codex.
-- **Desktop, web, and phone.** One server, and every client shows the same threads. There are apps for iOS and Android.
-- **Remote ready.** Run agents on any machine. Connect over your local network, Tailscale, or [T3 Connect](./docs/user/remote-access.md).
-- **Git built in.** Each thread can work in its own worktree. Review the diff, then commit, push, and open a pull request with one button.
-- **Fast.** Performance is a feature here. We measure it, and we treat a dropped frame as a bug.
-- **Open.** MIT licensed. If you don't like something, fork it.
-
-## Install
-
-### Desktop app
-
-[Download T3 Code](https://t3.codes/download) for macOS, Windows, or Linux. You can also use a package manager:
-
-| Platform       | Command                                                              |
-| -------------- | -------------------------------------------------------------------- |
-| macOS          | `brew install --cask t3-code`                                        |
-| Windows        | `winget install T3Tools.T3Code` or `scoop install extras/t3code`     |
-| Arch Linux     | `yay -S t3code-bin`                                                  |
-| Nix            | `nix profile add github:NixOS/nixpkgs/nixos-unstable#t3code`         |
-| Debian, Ubuntu | `.deb` from [Releases](https://github.com/pingdotgg/t3code/releases) |
-
-### Command line
-
-This installs the `t3` command. Run `t3` to start the server and open the web app.
-
-```bash
-curl -fsSL https://t3.codes/install.sh | sh
+```sh
+git clone https://github.com/zjywill/PinaCode.git
+cd PinaCode
+vp i
+vp run dev
 ```
 
-On Windows, in PowerShell:
+打开终端输出的地址即可使用网页版。开发桌面版请运行 `vp run dev:desktop`。
 
-```powershell
-irm https://t3.codes/install.ps1 | iex
+## 同步 T3 Code 更新
+
+`origin` 指向 PinaCode，`upstream` 指向原项目。新克隆的仓库只需添加一次上游：
+
+```sh
+git remote add upstream https://github.com/pingdotgg/t3code.git
 ```
 
-To try it once without an install, run `npx t3@latest`.
+之后在工作区干净时运行：
 
-### Phone
+```sh
+git switch main
+git fetch upstream
+git merge upstream/main
+```
 
-Get the app from the [App Store](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824) or [Google Play](https://play.google.com/store/apps/details?id=com.t3tools.t3code). Then follow [remote access](./docs/user/remote-access.md) to connect it to your computer.
+如果有冲突，先解决冲突并完成合并。检查 PinaCode 的改动仍然正常后，运行 `git push origin main` 发布同步结果。
 
-### Sign in to an agent
+## 文档与许可
 
-T3 Code needs one agent that is installed and signed in. For example, install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`, or install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`.
+[使用文档](./docs/README.md)涵盖[编程助手配置](./docs/user/install.md#providers)、[远程连接](./docs/user/remote-access.md)和[源码管理](./docs/user/source-control.md)。文档中的 T3 Code 官方下载链接提供的是上游版本。
 
-[Provider setup](./docs/user/install.md#providers) has the steps for each agent. [Install T3 Code](./docs/user/install.md) covers nightly builds, AppImage, WSL, and NixOS.
-
-## "Wait, what are you selling me?"
-
-Nothing. We built T3 Code because we wanted the best possible development experience with agents. We were inspired by existing solutions like the Codex desktop app, Conductor, Claude Desktop and Cursor Glass, but none met our bar.
-
-We wanted something performant, remote-ready, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the tool that you want.
-
-## Documentation
-
-- [Install and first run](./docs/user/install.md)
-- [Remote access from a phone or another machine](./docs/user/remote-access.md)
-- [Permission modes](./docs/user/permission-modes.md)
-- [Source control](./docs/user/source-control.md)
-- [Connect outside agents over MCP](./docs/user/outside-agents.md)
-- [FAQ](./docs/user/faq.md)
-
-[All docs](./docs/README.md) has the full list.
-
-## Contributing
-
-We have limited review capacity. Small, focused fixes are the most likely to be merged. Features need an approved discussion first.
-
-- Read [CONTRIBUTING.md](./CONTRIBUTING.md) before you report a bug or open a pull request.
-- Put feature requests in [Ideas](https://github.com/pingdotgg/t3code/discussions/categories/ideas).
-- Build from source with the [development runbook](./docs/operations/development.md#first-checkout). The [architecture overview](./docs/internals/overview.md) explains how it works.
-- Get help in [Discord](https://discord.gg/jn4EGJjrvv).
-
-## License
-
-[MIT](./LICENSE)
+PinaCode 保留原项目的 [MIT 许可证](./LICENSE)。感谢 T3 Code 维护者和贡献者。
