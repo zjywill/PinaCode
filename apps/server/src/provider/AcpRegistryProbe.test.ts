@@ -450,10 +450,12 @@ describe("ACP Registry probe", () => {
 
         const result = yield* probeAcpRegistryConfiguration({
           instanceId,
+          model: "composer-2",
           settings: decodeSettings({ agentId: "mock-agent" }),
           cwd: process.cwd(),
           environment: process.env,
         }).pipe(Effect.provideService(AcpRegistrySupport.AcpRegistryCatalog, catalog));
+        expect(result.probe.currentModelId).toBe("composer-2");
         expect(result.probe.ready).toBe(true);
         expect(result.probe.sessionManagement.canDelete).toBe(true);
 

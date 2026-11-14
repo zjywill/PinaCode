@@ -1641,6 +1641,7 @@ export function createServerEnvironmentAtoms<R, E>(
             input.fresh ?? false,
             input.refreshModels ?? false,
             input.modelCatalogOnly ?? false,
+            input.probeModelOptions ?? null,
           ]),
       },
     }),

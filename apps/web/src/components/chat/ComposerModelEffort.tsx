@@ -48,7 +48,9 @@ function splitSpeed(
     speedSelect,
     fastToggle,
     ultracodeToggle,
-    columnSelects: selects.filter((descriptor) => descriptor !== speedSelect),
+    columnSelects: selects.filter(
+      (descriptor) => descriptor !== speedSelect && !descriptor.sessionPermission,
+    ),
     columnToggles: toggles.filter(
       (descriptor) => descriptor !== fastToggle && descriptor !== ultracodeToggle,
     ),
@@ -251,15 +253,17 @@ function EffortLevels(props: { traits: TraitsSelectionInput }) {
   if (traits.modelIsUnavailable) {
     return (
       <>
-        {traits.descriptors.map((descriptor) => {
-          const value = traits.currentLabel(descriptor);
-          return value ? (
-            <div key={descriptor.id}>
-              <div className={COLUMN_LABEL}>{descriptor.label}</div>
-              <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">{value}</div>
-            </div>
-          ) : null;
-        })}
+        {traits.descriptors
+          .filter((descriptor) => descriptor.type !== "select" || !descriptor.sessionPermission)
+          .map((descriptor) => {
+            const value = traits.currentLabel(descriptor);
+            return value ? (
+              <div key={descriptor.id}>
+                <div className={COLUMN_LABEL}>{descriptor.label}</div>
+                <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">{value}</div>
+              </div>
+            ) : null;
+          })}
       </>
     );
   }
@@ -396,7 +400,10 @@ function OptionMenuRow(props: {
             data-effort-row
             tabIndex={props.tabStop ? 0 : -1}
             aria-label={`${descriptor.label}: ${current}`}
-            className={cn(OPTION_ROW, "data-popup-open:bg-foreground/[0.09]")}
+            className={cn(
+              descriptor.sessionPermission ? FOOTER_SEGMENT : OPTION_ROW,
+              "data-popup-open:bg-foreground/[0.09]",
+            )}
             onKeyDown={(event) => {
               if (event.key !== "ArrowRight") return;
               event.preventDefault();
@@ -406,7 +413,13 @@ function OptionMenuRow(props: {
           />
         }
       >
-        <OptionRowText label={descriptor.label} value={current} />
+        {descriptor.sessionPermission ? (
+          <span>
+            {descriptor.label} · {current}
+          </span>
+        ) : (
+          <OptionRowText label={descriptor.label} value={current} />
+        )}
         <ChevronRightIcon
           aria-hidden="true"
           className="-me-1 size-3.5 shrink-0 text-muted-foreground"
@@ -414,7 +427,7 @@ function OptionMenuRow(props: {
       </MenuTrigger>
       <MenuPopup
         ref={popupRef}
-        side="right"
+        side={descriptor.sessionPermission ? "top" : "right"}
         align="start"
         sideOffset={6}
         // A full-width column on phones leaves no room beside it, so fall below or above.
@@ -656,7 +669,13 @@ function PermissionsMenu(props: {
   );
 }
 
-/** The model picker's footer: speed stays one click away, permissions sit one menu deeper. */
+function SessionPermissionControl(props: { traits: TraitsSelectionInput }) {
+  const traits = useTraitsSelection(props.traits);
+  const descriptor = traits.selectDescriptors.find((option) => option.sessionPermission);
+  if (!descriptor || traits.modelIsUnavailable) return null;
+  return <OptionMenuRow descriptor={descriptor} traits={traits} tabStop />;
+}
+
 export function ComposerPickerFooter(props: {
   traits: TraitsSelectionInput | null;
   runtimeMode: RuntimeMode;
@@ -667,6 +686,7 @@ export function ComposerPickerFooter(props: {
     <div className="flex flex-wrap items-center gap-2 border-t border-border/70 bg-muted/40 px-3 py-2">
       {props.traits ? <SpeedControl traits={props.traits} /> : null}
       {props.traits ? <UltracodeControl traits={props.traits} /> : null}
+      {props.traits ? <SessionPermissionControl traits={props.traits} /> : null}
       <PermissionsMenu
         runtimeMode={props.runtimeMode}
         options={props.runtimeModeOptions}

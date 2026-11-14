@@ -319,6 +319,7 @@ export function acpRegistryProbeFailure(
 }
 
 export interface AcpRegistryConfigurationProbeInput {
+  readonly model?: string;
   readonly instanceId: ProviderInstanceId;
   readonly settings: AcpRegistrySettings;
   readonly cwd: string;
@@ -458,6 +459,34 @@ export const probeAcpRegistryConfiguration = Effect.fn("AcpRegistryProbe.probeCo
           .deleteSession(started.sessionId)
           .pipe(Effect.timeoutOption(PROBE_SESSION_DELETE_TIMEOUT), Effect.ignore),
       );
+      if (input.model !== undefined) {
+        const option = findModelConfigOption(yield* runtime.getConfigOptions);
+        if (
+          !option ||
+          !flattenSelectChoices(option.options).some((choice) => choice.value === input.model)
+        ) {
+          return yield* new AcpRegistryOperationError({
+            reason: "probe_failed",
+            message: "The requested model is unavailable.",
+          });
+        }
+        yield* runtime.setConfigOption(option.id, input.model);
+        const configOptions = yield* runtime.getConfigOptions;
+        if (findModelConfigOption(configOptions)?.currentValue !== input.model) {
+          return yield* new AcpRegistryOperationError({
+            reason: "probe_failed",
+            message: "The agent did not select the requested model.",
+          });
+        }
+        return {
+          resolved,
+          started: {
+            ...started,
+            sessionSetupResult: { ...started.sessionSetupResult, configOptions },
+          },
+          commands: yield* Ref.get(commandsRef),
+        };
+      }
       yield* Deferred.await(commandsAdvertised).pipe(
         Effect.timeoutOption(COMMAND_ADVERTISEMENT_GRACE),
       );

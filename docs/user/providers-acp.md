@@ -35,6 +35,9 @@ Choose **Settings → Providers → Add provider → DimCode Alpha**. The provid
 and lists the models available to that installation. Settings shows the installed version and checks
 the alpha channel for updates. For global npm installations, choose **Update now** to upgrade that copy.
 
+Select a Dim model to load its reasoning levels before sending a message.
+**Dim access** changes Dim’s native session permissions independently of the thread’s runtime permissions.
+
 ## Add a local command
 
 In **Settings → Providers → Add provider**, select **Show more**, then **Local ACP command**. Enter the executable

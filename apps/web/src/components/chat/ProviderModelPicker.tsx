@@ -167,6 +167,25 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
     (activeEntry?.driverKind === "opencode" || activeEntry?.driverKind === "antigravity"
       ? undefined
       : selectedInstanceOptions[0]);
+  const probeModelOptions = (instanceId: ProviderInstanceId, model: string) => {
+    if (
+      !props.environmentId ||
+      !props.instanceEntries.find((entry) => entry.instanceId === instanceId)?.snapshot
+        ?.supportsModelOptionsProbe
+    )
+      return;
+    void refreshProviders({
+      environmentId: props.environmentId,
+      input: { instanceId, probeModelOptions: model },
+    });
+  };
+  const probeOnOpen = useEffectEvent(() => {
+    if (selectedModel) probeModelOptions(activeInstanceId, selectedModel.slug);
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opening the picker can restore a draft model without a selection event
+  useEffect(() => {
+    if (isMenuOpen && activeEntry?.snapshot?.supportsModelOptionsProbe) probeOnOpen();
+  }, [isMenuOpen, activeEntry?.snapshot?.supportsModelOptionsProbe]);
   const triggerTitle = selectedModel
     ? getTriggerDisplayModelName(selectedModel, activeEntry?.driverKind)
     : props.model === ANTIGRAVITY_DEFAULT_MODEL
@@ -217,6 +236,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
 
   const handleInstanceModelChange = (instanceId: ProviderInstanceId, model: string) => {
     if (props.disabled) return;
+    probeModelOptions(instanceId, model);
     props.onInstanceModelChange(instanceId, model);
     if (!docked) {
       setIsMenuOpen(false);

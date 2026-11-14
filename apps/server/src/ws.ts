@@ -2428,6 +2428,22 @@ export const layerWsRpc = (
         [WS_METHODS.serverRefreshProviders]:
           /* Request instrumentation already owns the span; keep this helper in that context. */
           Effect.fnUntraced(function* (input) {
+            if (input.probeModelOptions !== undefined && input.instanceId !== undefined) {
+              const instance = yield* providerInstances.getInstance(input.instanceId);
+              if (instance?.enabled && instance.probeModelOptions) {
+                yield* instance.probeModelOptions(input.probeModelOptions).pipe(
+                  Effect.mapError(
+                    (error) =>
+                      new ProviderSetupError({
+                        instanceId: instance.instanceId,
+                        operation: "probe-model-options",
+                        detail: error.detail,
+                      }),
+                  ),
+                );
+              }
+              return { providers: [] };
+            }
             if (input.modelCatalogOnly === true) {
               yield* providerRegistry.refreshModelCatalog;
               return { providers: [] };

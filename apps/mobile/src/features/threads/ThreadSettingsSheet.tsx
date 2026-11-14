@@ -494,17 +494,37 @@ function ThreadSettingsSessionProvider(
   const isDisplayed = (option: ModelOption) =>
     pendingModel ? option.key === pendingModel.key : isApplied(option);
 
+  const catalogModel = props.providerGroups
+    .flatMap((group) => group.models)
+    .find((option) => isDisplayed(option));
+  const selected = pendingModel?.selection ?? props.selectedModel;
+  const canProbeOptions =
+    config?.providers.find((provider) => provider.instanceId === selected?.instanceId)
+      ?.supportsModelOptionsProbe === true;
+  const refreshOptions = useAtomCommand(serverEnvironment.refreshProviders, {
+    reportFailure: false,
+  });
+  const probeSelectedModel = useEffectEvent(() => {
+    if (props.environmentId && selected && canProbeOptions) {
+      void refreshOptions({
+        environmentId: props.environmentId,
+        input: { instanceId: selected.instanceId, probeModelOptions: selected.model },
+      });
+    }
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- request options for the displayed draft model before the first turn
+  useEffect(() => {
+    if (props.environmentId && selected?.instanceId && selected?.model && canProbeOptions)
+      probeSelectedModel();
+  }, [props.environmentId, selected?.instanceId, selected?.model, canProbeOptions]);
   const displayedDescriptors = pendingModel
     ? resolveProviderOptionDescriptors({
-        capabilities: pendingModel.capabilities,
+        capabilities: catalogModel?.capabilities ?? pendingModel.capabilities,
         selections: pendingModel.selection.options,
       })
     : props.optionDescriptors;
   const promptTraits = getPromptControlledTraits(displayedDescriptors, displayedPrompt);
-  const displayedModel =
-    pendingModel ??
-    props.providerGroups.flatMap((group) => group.models).find((option) => isApplied(option)) ??
-    null;
+  const displayedModel = pendingModel ?? catalogModel ?? null;
   const runtimeModeChoices = withManagedRuntimeModeLimits(
     runtimeModeChoicesForSupportedModes(displayedModel?.supportedRuntimeModes),
     [config?.managedPolicy],
@@ -540,7 +560,7 @@ function ThreadSettingsSessionProvider(
     const change =
       descriptor?.type === "select" && typeof value === "string"
         ? getTraitSelectChange(
-            { ...promptTraits, descriptors: displayedDescriptors },
+            { ...promptTraits, descriptors: displayedDescriptors, modelOptions: selected?.options },
             descriptor,
             displayedPrompt,
             value,
@@ -861,6 +881,12 @@ function ThreadSettingsOptionsItem(props: {
         ?.providers.find((provider) => provider.instanceId === session.providerInstanceId) ?? null)
     : null;
 
+  const modelOptions = session.displayedDescriptors.filter(
+    (option) => option.type !== "select" || !option.sessionPermission,
+  );
+  const permission = session.displayedDescriptors.find(
+    (option) => option.type === "select" && option.sessionPermission,
+  );
   return (
     <View style={{ paddingBottom: insets.bottom + props.bottomInset + 12 }}>
       <ChatGptSharingStatus provider={selectedProvider} />
@@ -869,7 +895,7 @@ function ThreadSettingsOptionsItem(props: {
         className="mx-4 overflow-hidden rounded-2xl bg-grouped-card"
         layout={THREAD_SETTINGS_OPTIONS_LAYOUT_TRANSITION}
       >
-        {session.displayedDescriptors.map((descriptor) => {
+        {modelOptions.map((descriptor) => {
           if (descriptor.type === "select") {
             return (
               <Animated.View
@@ -925,6 +951,25 @@ function ThreadSettingsOptionsItem(props: {
         </Animated.View>
       </Animated.View>
 
+      {permission ? (
+        <>
+          <Text className="px-5 pb-2 pt-7 text-sm font-t3-medium text-foreground-muted">
+            Session permissions
+          </Text>
+          <View className="mx-4 overflow-hidden rounded-2xl bg-grouped-card">
+            <DisclosureRow
+              isLast
+              label={permission.label}
+              value={getProviderOptionCurrentLabel(
+                permission,
+                session.displayedModelSelection,
+                session.reportedModelSelection,
+              )}
+              onPress={() => props.onOpenSubmenu({ kind: "descriptor", id: permission.id })}
+            />
+          </View>
+        </>
+      ) : null}
       <Text className="px-5 pb-2 pt-7 text-sm font-t3-medium text-foreground-muted">Catalog</Text>
       <View className="mx-4 overflow-hidden rounded-2xl bg-grouped-card">
         <SwitchRow

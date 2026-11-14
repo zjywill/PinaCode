@@ -505,10 +505,18 @@ import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 const send = (message) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", ...message }) + "\\n");
 createInterface({ input: process.stdin }).on("line", (line) => {
-  const { id, method } = JSON.parse(line);
+  const { id, method, params } = JSON.parse(line);
   if (id === undefined) return;
   if (method === "initialize") {
     send({ id, result: { protocolVersion: 1, agentCapabilities: {}, authMethods: [] } });
+  } else if (process.argv[3] === "dim" && (method === "session/new" || method === "session/set_config_option")) {
+    const model = params.value ?? "model-a";
+    const options = (ids) => ids.map((value) => ({ value, name: value }));
+    send({ id, result: { sessionId: "probe-session", configOptions: [
+      {id:"mode",name:"Permission mode",category:"mode",type:"select",currentValue:"read-only",options:options(["read-only","full-access"])},
+      {id:"model",name:"Model",category:"model",type:"select",currentValue:model,options:options(["model-a","model-b"])},
+      ...(model === "model-b" ? [{id:"effort",name:"Reasoning effort",category:"thought_level",type:"select",currentValue:"high",options:options(["high","max"])}] : []),
+    ] } });
   } else if (method === "session/new") {
     const modelIds = JSON.parse(readFileSync(process.argv[2], "utf8"));
     send({
@@ -555,6 +563,57 @@ const driverLayer = TestProviderHost.layer({ runBackgroundWork: false }).pipe(
 );
 
 it.layer(driverLayer, { excludeTestServices: true })("AcpRegistryDriver", (it) => {
+  it.effect("discovers Dim effort for a draft without switching the default model", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const directory = yield* fileSystem.makeTempDirectoryScoped();
+      const path = yield* Path.Path;
+      const agent = path.join(directory, "agent.mjs");
+      yield* fileSystem.writeFileString(agent, fakeAgentSource);
+      const models = path.join(directory, "models.json");
+      yield* fileSystem.writeFileString(models, JSON.stringify(["model-a", "model-b"]));
+      const instance = yield* AcpRegistryDriver.create({
+        ...identity,
+        enabled: true,
+        environment: [],
+        config: decodeSettings({ source: "local", commandPath: "dima", commandArgs: ["acp"] }),
+      }).pipe(
+        Effect.provideService(AcpRegistrySupport.AcpRegistryCatalog, {
+          ...catalogWithInspection({
+            status: "ready",
+            agentId: "dimcode",
+            version: "1.0",
+            distribution: "local",
+          }),
+          resolve: () =>
+            Effect.succeed({
+              distribution: "local" as const,
+              spawn: { command: process.execPath, args: [agent, models, "dim"] },
+            }),
+        }),
+      );
+      const ready = yield* instance.snapshot.streamChanges.pipe(
+        Stream.filter((provider) => provider.models.some((model) => model.slug === "model-b")),
+        Stream.runHead,
+        Effect.forkScoped({ startImmediately: true }),
+      );
+      yield* instance.snapshot.refresh;
+      yield* Fiber.join(ready);
+      yield* instance.probeModelOptions!("model-b");
+      const snapshot = yield* instance.snapshot.getSnapshot;
+      expect(snapshot.models.map((model) => [model.slug, model.isDefault ?? false])).toEqual([
+        ["model-a", true],
+        ["model-b", false],
+      ]);
+      expect(snapshot.models[1]?.capabilities?.optionDescriptors).toMatchObject([
+        { id: "mode", sessionPermission: true },
+        { id: "effort", role: "reasoning", options: [{ id: "high" }, { id: "max" }] },
+      ]);
+      yield* fileSystem.remove(agent);
+      yield* instance.probeModelOptions!("model-b");
+    }),
+  );
+
   it.effect("offers a first install of the alpha package when dima is missing", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

@@ -666,6 +666,7 @@ export const WsServerRefreshProvidersRpc = Rpc.make(WS_METHODS.serverRefreshProv
      * only when it changed. The other fields are ignored and the config stream carries the result.
      */
     modelCatalogOnly: Schema.optional(Schema.Boolean),
+    probeModelOptions: Schema.optional(TrimmedNonEmptyString),
     /** Read secret references again; unlocking a vault can prompt on the host, so only explicit user refreshes ask. */
     reloadSecrets: Schema.optional(Schema.Boolean),
     /**

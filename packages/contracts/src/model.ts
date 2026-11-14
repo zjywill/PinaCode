@@ -27,6 +27,7 @@ export const SelectProviderOptionDescriptor = Schema.Struct({
   options: Schema.Array(ProviderOptionChoice),
   currentValue: Schema.optional(TrimmedNonEmptyString),
   promptInjectedValues: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
+  sessionPermission: Schema.optional(Schema.Boolean),
   /** Marks the reasoning control when its id is an agent's own, such as an ACP `thought_level`. */
   role: Schema.optional(Schema.Literal("reasoning")),
 });

@@ -1,4 +1,8 @@
-import type { ModelSelection, ProviderOptionDescriptor } from "@t3tools/contracts";
+import type {
+  ModelSelection,
+  ProviderOptionDescriptor,
+  ProviderOptionSelection,
+} from "@t3tools/contracts";
 import {
   buildProviderOptionSelectionsFromDescriptors,
   getProviderOptionCurrentLabel,
@@ -73,7 +77,10 @@ export function getPromptControlledTraits(
   allowPromptInjectedEffort = true,
 ) {
   const primarySelectDescriptor =
-    descriptors.find((descriptor) => descriptor.type === "select") ?? null;
+    descriptors.find(
+      (descriptor): descriptor is Extract<ProviderOptionDescriptor, { type: "select" }> =>
+        descriptor.type === "select" && !descriptor.sessionPermission,
+    ) ?? null;
   const ultrathinkPromptControlled =
     allowPromptInjectedEffort &&
     (primarySelectDescriptor?.promptInjectedValues?.length ?? 0) > 0 &&
@@ -86,6 +93,7 @@ export function getPromptControlledTraits(
 export function getTraitSelectChange(
   selected: ReturnType<typeof getPromptControlledTraits> & {
     descriptors: ReadonlyArray<ProviderOptionDescriptor>;
+    modelOptions?: ReadonlyArray<ProviderOptionSelection> | null | undefined;
   },
   descriptor: Extract<ProviderOptionDescriptor, { type: "select" }>,
   prompt: string,
@@ -99,9 +107,16 @@ export function getTraitSelectChange(
       isPrimary && selected.ultrathinkPromptControlled
         ? prompt.replace(/^Ultrathink:\s*/i, "")
         : prompt,
-    modelOptions: buildProviderOptionSelectionsFromDescriptors(
-      replaceDescriptorCurrentValue(selected.descriptors, descriptor.id, value),
-    ),
+    modelOptions: selected.descriptors.some(
+      (entry) => entry.type === "select" && entry.sessionPermission,
+    )
+      ? [
+          ...(selected.modelOptions ?? []).filter((entry) => entry.id !== descriptor.id),
+          { id: descriptor.id, value },
+        ]
+      : buildProviderOptionSelectionsFromDescriptors(
+          replaceDescriptorCurrentValue(selected.descriptors, descriptor.id, value),
+        ),
   };
 }
 
@@ -123,6 +138,7 @@ export function buildTraitsTriggerDisplay(input: {
   let ultracodeLabelIndex = -1;
   const labels: Array<string> = [];
   for (const descriptor of input.descriptors) {
+    if (descriptor.type === "select" && descriptor.sessionPermission) continue;
     if (descriptor.id === "fastMode" && descriptor.type === "boolean") {
       speedLabel = descriptor.currentValue === true ? "Fast" : null;
       fastModeFallbackLabel = speedLabel ?? "Normal";

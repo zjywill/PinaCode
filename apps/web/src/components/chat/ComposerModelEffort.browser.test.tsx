@@ -6,11 +6,15 @@ import {
 } from "@t3tools/contracts";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { useState } from "react";
-import { expect, it } from "vite-plus/test";
+import { expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
 import { render } from "../../../test/render";
-import { ComposerEffortColumn, describeComposerEffort } from "./ComposerModelEffort";
+import {
+  ComposerEffortColumn,
+  ComposerPickerFooter,
+  describeComposerEffort,
+} from "./ComposerModelEffort";
 import type { TraitsSelectionInput } from "./TraitsPicker";
 
 // Shaped like Devin over ACP: its session mode comes first, and its reasoning id is its own.
@@ -121,4 +125,59 @@ it("draws an agent's reasoning as bars and keeps its mode out of the levels", as
     .element(screen.getByRole("button", { name: "Session Mode: Plan" }))
     .toBeInTheDocument();
   await expect.element(page.getByRole("menuitemradio")).not.toBeInTheDocument();
+});
+
+it("keeps Dim access in a separate control while composing the first message", async () => {
+  const onChange = vi.fn();
+  const traits = {
+    ...traitsInput([], onChange),
+    models: [
+      {
+        ...models[0]!,
+        capabilities: createModelCapabilities({
+          optionDescriptors: [
+            {
+              id: "mode",
+              label: "Dim access",
+              type: "select",
+              sessionPermission: true,
+              currentValue: "read-only",
+              options: ["read-only", "workspace-write"].map((id) => ({ id, label: id })),
+            },
+            {
+              id: "effort",
+              label: "Reasoning effort",
+              type: "select",
+              role: "reasoning",
+              currentValue: "high",
+              options: ["high", "max"].map((id) => ({ id, label: id })),
+            },
+          ],
+        }),
+      },
+    ],
+  } satisfies TraitsSelectionInput;
+  const onRuntimeModeChange = vi.fn();
+  await using screen = await render(
+    <>
+      <section aria-label="Model options">
+        <ComposerEffortColumn traits={traits} />
+      </section>
+      <ComposerPickerFooter
+        traits={traits}
+        runtimeMode="full-access"
+        runtimeModeOptions={[]}
+        onRuntimeModeChange={onRuntimeModeChange}
+      />
+    </>,
+    { router: false },
+  ); // controls use only draft state
+  const column = screen.getByRole("region", { name: "Model options" });
+  await expect.element(column.getByText("Dim access")).not.toBeInTheDocument();
+  await userEvent.click(column.getByRole("radio", { name: "max" }));
+  expect(onChange).toHaveBeenLastCalledWith([{ id: "effort", value: "max" }]);
+  await userEvent.click(screen.getByRole("button", { name: "Dim access: read-only" }));
+  await userEvent.click(page.getByRole("menuitemradio", { name: "workspace-write" }));
+  expect(onChange).toHaveBeenLastCalledWith([{ id: "mode", value: "workspace-write" }]);
+  expect(onRuntimeModeChange).not.toHaveBeenCalled();
 });

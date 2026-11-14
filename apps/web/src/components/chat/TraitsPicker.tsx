@@ -142,7 +142,8 @@ function getSelectedTraits(
     (descriptor): descriptor is Extract<ProviderOptionDescriptor, { type: "boolean" }> =>
       descriptor.type === "boolean",
   );
-  const primarySelectDescriptor = selectDescriptors[0] ?? null;
+  const primarySelectDescriptor =
+    selectDescriptors.find((descriptor) => !descriptor.sessionPermission) ?? null;
   const contextWindowDescriptor =
     selectDescriptors.find((descriptor) => descriptor.id === "contextWindow") ?? null;
   const agentDescriptor = selectDescriptors.find((descriptor) => descriptor.id === "agent") ?? null;
@@ -170,6 +171,7 @@ function getSelectedTraits(
 
   return {
     caps,
+    modelOptions,
     descriptors,
     selectDescriptors,
     booleanDescriptors,
@@ -379,8 +381,8 @@ export const ULTRATHINK_IN_BODY_NOTE =
 const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelectionInput) {
   const traits = useTraitsSelection(props);
   const {
-    descriptors,
-    selectDescriptors,
+    descriptors: allDescriptors,
+    selectDescriptors: allSelectDescriptors,
     booleanDescriptors,
     primarySelectDescriptor,
     ultrathinkInBodyText,
@@ -388,6 +390,10 @@ const TraitsMenuContent = memo(function TraitsMenuContentImpl(props: TraitsSelec
     modelIsUnavailable,
   } = traits;
 
+  const descriptors = allDescriptors.filter(
+    (option) => option.type !== "select" || !option.sessionPermission,
+  );
+  const selectDescriptors = allSelectDescriptors.filter((option) => !option.sessionPermission);
   if (!hasAnyControls) {
     return null;
   }
