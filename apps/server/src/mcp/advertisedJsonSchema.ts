@@ -75,6 +75,17 @@ const compact = (schema: Json, optional: boolean): Json => {
   for (const [key, value] of Object.entries(schema)) {
     if (key === "additionalProperties" && value === true) continue;
     if (SAFE_INTEGER_BOUNDS[key] === value) continue;
+    // Antigravity accepts only strings in tool enums. Equal bounds preserve a numeric literal.
+    if (
+      key === "enum" &&
+      Array.isArray(value) &&
+      value.length === 1 &&
+      typeof value[0] === "number"
+    ) {
+      result.minimum = value[0];
+      result.maximum = value[0];
+      continue;
+    }
     result[key] =
       key === "properties" && Predicate.isObject(value)
         ? Object.fromEntries(
