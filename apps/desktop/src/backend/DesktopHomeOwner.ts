@@ -92,15 +92,15 @@ export const readLiveHomeOwner = Effect.fn("DesktopHomeOwner.readLiveHomeOwner")
 export const homeOwnedMessage = (owner: Option.Option<HomeOwner>): string =>
   Option.match(owner, {
     onNone: () =>
-      "Another Pina Code server, such as the background service, is using this data directory, or an older background service is set up for it. Stop that server or try `t3 update`. If the older launcher cannot update, run `t3 service uninstall` and optionally reinstall with `t3 service install` from a current CLI. Use `npx t3@latest` if `t3` is missing or outdated, and pass `--base-dir` with the service's T3 home to each command. Then reopen Pina Code. You can also set a separate PINACODE_HOME and pair with the running server.",
+      "Another Pina Code server, such as the background service, is using this data directory, or an older background service is set up for it. Stop that server or try `t3 update`. If the older launcher cannot update, run `t3 service uninstall` and optionally reinstall with `t3 service install` from a current CLI. Use `npx t3@latest` if `t3` is missing or outdated, and pass `--base-dir` with the service's Pina Code home to each command. Then reopen Pina Code. You can also set a separate PINACODE_HOME and pair with the running server.",
     onSome: (owner) => {
       const kind = owner.serviceManaged
         ? "The Pina Code background service"
         : "Another Pina Code server (for example `t3 serve`, or one started over SSH)";
       const version = owner.serverVersion ? `, version ${owner.serverVersion}` : "";
       const stop = owner.serviceManaged
-        ? "Stop it with `t3 service uninstall`, passing `--base-dir` with this T3 home"
+        ? "Stop it with `t3 service uninstall`, passing `--base-dir` with this Pina Code home"
         : "If a Pina Code app on another machine started it over SSH, that app restarts it: remove or disconnect that SSH environment there, or quit that app. Then stop the server";
-      return `${kind} is using this T3 home (PID ${owner.pid}, port ${owner.port}${version}). ${stop}, and reopen Pina Code. You can also set a separate PINACODE_HOME and pair with the running server.`;
+      return `${kind} is using this Pina Code home (PID ${owner.pid}, port ${owner.port}${version}). ${stop}, and reopen Pina Code. You can also set a separate PINACODE_HOME and pair with the running server.`;
     },
   });

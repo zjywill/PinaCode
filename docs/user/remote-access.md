@@ -9,9 +9,7 @@ PinaCode connects using a pairing link. Run `pinacode up --lan` on the host, the
 
 Use direct pairing when the other device can reach the host's network address.
 
-On a desktop host, open **Settings → Sharing & access**, enable **Local network access**,
-then select a **Pairing address** the other device can reach and create a link under **Authorized clients**. Changing
-network access restarts the desktop app. You can turn it off in the same place.
+On a desktop host, open **Settings → Sharing & access**, choose a reachable **Pairing address**, and create a link under **Authorized clients**. The desktop app listens on all IPv4 interfaces when remote clients are allowed.
 
 For a command-line host, choose the local network in `t3 up`, or run:
 
@@ -64,9 +62,8 @@ While connected through T3 Connect or a paired address, T3 Code also learns the
 machine's current LAN and Tailscale addresses and adds them as routes, so
 pairing once through T3 Connect is enough to use the LAN at home. When the
 machine's LAN address changes, for example after it joins another Wi-Fi network,
-the learned route follows it. The machine must allow network access for its LAN
-address to be learned: **Local network access** in the desktop app, or the
-[local network](./background-service.md#local-network-access) choice in `t3 up`.
+the learned route follows it. A command-line host must use the
+[local network](./background-service.md#local-network-access) choice in `t3 up` for its LAN address to be learned.
 You can reorder a learned route, but not remove it; it
 goes away with the route it was learned through, or when the machine stops
 reporting that address.
@@ -108,18 +105,16 @@ on that machine. Existing threads stay where they started. If resource checks ar
 unavailable or all eligible machines are full, choose a machine manually to continue.
 Mobile keeps its manual environment selection.
 
-### Join Tailscale from PinaCode Desktop
+### Share through Kite on macOS
 
-On your Mac, open **Settings → Sharing & access → Connection methods** and choose **Sign in to
-Tailscale**. Approve the PinaCode device in your browser. The desktop app
-reconnects this device when it restarts. Use its address when creating a pairing
-link for another device signed in to the same Tailscale account.
+Enable Tailscale in Kite and connect the other device to the same tailnet.
+Use the Tailscale IPv4 address assigned to the Mac and the port shown in Pina Code’s
+**Sharing & access** settings. For example, if the port is 4773, replace the
+origin of a fresh pairing link with `http://<Tailscale IPv4 address>:4773`, keeping
+`/pair#token=…` intact. Kite forwards this port to the desktop app.
 
-On iPhone or iPad, connect to the same tailnet, then scan the Mac’s pairing QR code or paste its pairing link into **Add environment**. The Mac hosts the session.
-
-With MagicDNS and HTTPS enabled in your tailnet, PinaCode provides an HTTPS
-address. Otherwise it shows a private Tailscale IP address for clients that
-support HTTP. Choose **Sign out** to disconnect the node and clear its local identity.
+To use this address in new pairing links automatically, set `T3CODE_DESKTOP_LAN_HOST`
+to the Mac’s Tailscale IPv4 address in the desktop app’s launch environment.
 
 ### Tailscale HTTPS
 

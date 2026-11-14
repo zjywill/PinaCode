@@ -283,7 +283,7 @@ function ConnectStep({
     access === null ? (
       <p className="text-sm text-muted-foreground">
         When {app?.name ?? "the app"} opens the sign-in page, choose what it may do and approve with
-        your T3 Connect account.
+        your Pina Connect account.
       </p>
     ) : (
       <ApprovalCode

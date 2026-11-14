@@ -70,8 +70,8 @@ export function RelayClientInstallDialog() {
           </DialogTitle>
           <DialogDescription>
             {isInstalling
-              ? "Pina Code is preparing this environment for secure access through T3 Connect."
-              : "Pina Code needs the relay client to make this environment available through T3 Connect."}
+              ? "Pina Code is preparing this environment for secure access through Pina Connect."
+              : "Pina Code needs the relay client to make this environment available through Pina Connect."}
           </DialogDescription>
         </DialogHeader>
         <DialogPanel scrollFade={false}>

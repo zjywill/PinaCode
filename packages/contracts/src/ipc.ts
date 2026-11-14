@@ -500,15 +500,7 @@ export const DesktopServerExposureModeSchema = Schema.Literals([
   "network-accessible",
 ]);
 
-export const DesktopTailnetStateSchema = Schema.Struct({
-  phase: Schema.Literals(["off", "starting", "login", "connected", "signed-out", "error"]),
-  value: Schema.String,
-  account: Schema.optionalKey(Schema.String),
-});
-export type DesktopTailnetState = typeof DesktopTailnetStateSchema.Type;
-
 export interface DesktopServerExposureState {
-  embeddedTailnet?: DesktopTailnetState;
   mode: DesktopServerExposureMode;
   endpointUrl: string | null;
   advertisedHost: string | null;
@@ -517,7 +509,6 @@ export interface DesktopServerExposureState {
 }
 
 export const DesktopServerExposureStateSchema = Schema.Struct({
-  embeddedTailnet: Schema.optionalKey(DesktopTailnetStateSchema),
   mode: DesktopServerExposureModeSchema,
   endpointUrl: Schema.NullOr(Schema.String),
   advertisedHost: Schema.NullOr(Schema.String),
@@ -1125,8 +1116,6 @@ export interface DesktopBridge {
   onSshPasswordPromptSettled: (listener: (requestId: string) => void) => () => void;
   resolveSshPasswordPrompt: (requestId: string, password: string | null) => Promise<void>;
   getServerExposureState: () => Promise<DesktopServerExposureState>;
-  setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
-  setEmbeddedTailnetEnabled: (enabled: boolean) => Promise<void>;
   setTailscaleServeEnabled: (input: {
     readonly enabled: boolean;
     readonly port?: number;

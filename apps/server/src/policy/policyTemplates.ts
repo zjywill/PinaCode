@@ -76,7 +76,7 @@ const policies = (): ReadonlyArray<Policy> => [
   {
     id: "Clients",
     title: "Allowed clients",
-    help: "What may connect to Pina Code on this machine.\n\nWithout Remote, Pina Code only listens on this machine, does not create pairing links, signs out devices that paired earlier, and turns T3 Connect off. Check at least one client.\n\nDisabled or Not Configured: no restriction.",
+    help: "What may connect to Pina Code on this machine.\n\nWithout Remote, Pina Code only listens on this machine, does not create pairing links, signs out devices that paired earlier, and turns Pina Connect off. Check at least one client.\n\nDisabled or Not Configured: no restriction.",
     elements: [
       {
         kind: "checkbox",
@@ -103,8 +103,8 @@ const policies = (): ReadonlyArray<Policy> => [
   },
   {
     id: "Connect",
-    title: "Allow T3 Connect",
-    help: "Disabled turns T3 Connect off and unlinks this machine. Other remote access still follows Allowed clients.\n\nEnabled or Not Configured leaves T3 Connect available.",
+    title: "Allow Pina Connect",
+    help: "Disabled turns Pina Connect off and unlinks this machine. Other remote access still follows Allowed clients.\n\nEnabled or Not Configured leaves Pina Connect available.",
     toggle: "Connect",
   },
   {

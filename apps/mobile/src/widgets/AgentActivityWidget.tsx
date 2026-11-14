@@ -108,13 +108,9 @@ export function AgentActivityWidget(
     ...(deepLink ? [widgetURL(deepLink)] : []),
   ];
 
-  // The template image ignores frame/foregroundStyle applied to itself; size
-  // and tint it through a container the resizable image fills.
   const renderLogo = (height: number) => (
-    <HStack
-      modifiers={[frame({ width: height * 1.5, height }), foregroundStyle(primaryForeground)]}
-    >
-      <Image assetName="T3Mark" modifiers={[resizable()]} />
+    <HStack modifiers={[frame({ width: height, height })]}>
+      <Image assetName="PinaMark" modifiers={[resizable()]} />
     </HStack>
   );
 

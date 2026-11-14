@@ -110,7 +110,6 @@ it.effect.each([false, true])(
             isPackaged: true,
             stateDir: "/isolated/userdata",
             configuredBackendPort: Option.some(3773),
-            defaultDesktopSettings: { serverExposureMode: "local-only" },
           } as unknown as DesktopEnvironment.DesktopEnvironment["Service"]),
           Effect.provideService(DesktopPreReadyPlatform.DesktopPreReadyElectronOptions, {
             linux: null,
@@ -126,7 +125,6 @@ it.effect.each([false, true])(
             load: Effect.void,
             get: Effect.succeed({
               localEnvironmentEnabled: true,
-              serverExposureMode: "local-only",
             }),
           } as unknown as DesktopAppSettings.DesktopAppSettings["Service"]),
           Effect.provideService(DesktopLifecycle.DesktopLifecycle, {

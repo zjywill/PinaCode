@@ -504,7 +504,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Guest links",
     to: "/settings/labs",
     scope: "environment",
-    searchTerms: ["beta share guest invite link teammate watch t3 connect tunnel"],
+    searchTerms: ["beta share guest invite link teammate watch pina connect tunnel"],
   },
   {
     id: "linked-environments-beta",
@@ -1248,16 +1248,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     localBackendManagementOnly: true,
   },
   {
-    id: "embedded-tailnet",
-    title: "Pina Code Tailscale node",
-    macOnly: true,
-    to: "/settings/access",
-    targetId: "sharing-methods",
-    searchTerms: ["sign in tailnet remote device pairing"],
-    desktopOnly: true,
-    localBackendManagementOnly: true,
-  },
-  {
     id: "tailscale-https",
     title: "System Tailscale Serve",
     to: "/settings/access",
@@ -1298,7 +1288,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "remote-environments",
     title: "Environments",
     to: "/settings/connections",
-    searchTerms: ["add pair backend host code ssh config agent tunnel saved t3 connect"],
+    searchTerms: ["add pair backend host code ssh config agent tunnel saved pina connect"],
   },
   {
     id: "load-balancing",

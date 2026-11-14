@@ -1,4 +1,6 @@
 import { NATIVE_WORKSPACE_COLUMNS_SUPPORTED } from "../native/NativeWorkspaceColumns";
+import { Image } from "expo-image";
+import { T3_CODE_BRAND_MARK_SOURCE } from "./brandAssets";
 import Constants from "expo-constants";
 import { useState } from "react";
 import { Platform, View } from "react-native";
@@ -48,6 +50,13 @@ export function CompactBrandTitle(
         props.fit && { flexShrink: 0 },
       ]}
     >
+      {Platform.OS === "ios" ? (
+        <Image
+          source={T3_CODE_BRAND_MARK_SOURCE}
+          accessible={false}
+          style={{ width: 22, height: 22 }}
+        />
+      ) : null}
       <Text
         allowFontScaling={props.allowFontScaling}
         maxFontSizeMultiplier={BRAND_MAX_FONT_SCALE}

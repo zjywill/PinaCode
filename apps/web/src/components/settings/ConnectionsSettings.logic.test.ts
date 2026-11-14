@@ -238,17 +238,15 @@ it("pairs through the preferred reachable address independently of LAN sharing",
     });
   const lan = make("desktop-lan:host", "lan");
   const serve = make("tailscale-magicdns:host", "private-network");
-  const node = make("embedded-tailnet", "private-network");
   const manual = make("manual:host", "public", "unknown");
   const routes = [
     make("loopback", "loopback"),
     lan,
     make("tailscale-ip:host", "private-network"),
     serve,
-    node,
     manual,
   ];
-  expect(desktopPairingEndpoints(routes, false)).toEqual([serve, node, manual]);
+  expect(desktopPairingEndpoints(routes, false)).toEqual([serve, manual]);
   expect(
     selectPairingEndpoint(
       desktopPairingEndpoints(routes, true),

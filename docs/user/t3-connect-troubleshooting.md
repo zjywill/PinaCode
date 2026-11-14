@@ -99,6 +99,10 @@ Fix:
    Tailscale address. See
    [Reach one machine several ways](./remote-access.md#reach-one-machine-several-ways).
 
+## Sign-in, account, or link problems
+
+Check that the client and the host are signed in to the same Pina Connect account. If the host was removed from the account, link it again from the host before retrying the connection.
+
 ## The clock is off
 
 T3 Connect signs requests with short-lived proofs. When the clock on this

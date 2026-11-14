@@ -1,8 +1,4 @@
-import {
-  AdvertisedEndpoint,
-  DesktopServerExposureModeSchema,
-  DesktopServerExposureStateSchema,
-} from "@t3tools/contracts";
+import { AdvertisedEndpoint, DesktopServerExposureStateSchema } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -23,31 +19,6 @@ export const getServerExposureState = DesktopIpc.makeIpcMethod({
   handler: Effect.fn("desktop.ipc.serverExposure.getState")(function* () {
     const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
     return yield* serverExposure.getState;
-  }),
-});
-
-export const setServerExposureMode = DesktopIpc.makeIpcMethod({
-  channel: IpcChannels.SET_SERVER_EXPOSURE_MODE_CHANNEL,
-  payload: DesktopServerExposureModeSchema,
-  result: DesktopServerExposureStateSchema,
-  handler: Effect.fn("desktop.ipc.serverExposure.setMode")(function* (mode) {
-    const lifecycle = yield* DesktopLifecycle.DesktopLifecycle;
-    const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
-    const change = yield* serverExposure.setMode(mode);
-    if (change.requiresRelaunch) {
-      yield* lifecycle.relaunch(`serverExposureMode=${mode}`);
-    }
-    return change.state;
-  }),
-});
-
-export const setEmbeddedTailnetEnabled = DesktopIpc.makeIpcMethod({
-  channel: IpcChannels.SET_EMBEDDED_TAILNET_ENABLED_CHANNEL,
-  payload: Schema.Boolean,
-  result: Schema.Void,
-  handler: Effect.fn("desktop.ipc.serverExposure.setEmbeddedTailnetEnabled")(function* (enabled) {
-    const exposure = yield* DesktopServerExposure.DesktopServerExposure;
-    yield* exposure.setEmbeddedTailnetEnabled(enabled);
   }),
 });
 

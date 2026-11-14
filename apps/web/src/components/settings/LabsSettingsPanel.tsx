@@ -91,7 +91,7 @@ function GuestLinksRow() {
       managed={settings.guestSharingEnabled ? undefined : connectDenial}
       description={
         <>
-          Guests can watch a thread and send messages you approve. Requires an existing T3 Connect
+          Guests can watch a thread and send messages you approve. Requires an existing Pina Connect
           tunnel. Manage access in{" "}
           <Link to="/settings/access" className="underline underline-offset-2">
             Sharing & access
@@ -226,7 +226,7 @@ function FastWorktreeCheckoutRow() {
       serverScoped
       {...searchableSetting("worktree-fast-checkout")}
       settingKeys={["fastWorktreeCheckout"]}
-      description="On a Mac, clone new worktrees from a checkout cached in the T3 home folder instead of writing every file. Uses Git’s normal checkout when it can’t. Turning it off deletes the cache."
+      description="On a Mac, clone new worktrees from a checkout cached in the Pina Code home folder instead of writing every file. Uses Git’s normal checkout when it can’t. Turning it off deletes the cache."
       control={
         <ScopedSwitch
           settingKeys={["fastWorktreeCheckout"]}

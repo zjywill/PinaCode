@@ -19,9 +19,9 @@ export function agentActivityWidgetTimeline(source: AgentActivityWidgetSource, n
       title: "Pina Code",
       subtitle:
         source.kind === "signed-out"
-          ? "Sign in to T3 Connect to see agents"
+          ? "Sign in to Pina Connect to see agents"
           : source.kind === "unavailable"
-            ? "Couldn't reach T3 Connect"
+            ? "Couldn't reach Pina Connect"
             : source.kind === "loading"
               ? "Loading agents…"
               : "No active agents",

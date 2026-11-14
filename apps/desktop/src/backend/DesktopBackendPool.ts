@@ -235,7 +235,7 @@ export const layer = Layer.effect(
         DesktopHomeOwner.readLiveHomeOwner().pipe(
           Effect.flatMap((owner) =>
             electronDialog.showErrorBox(
-              "This T3 home is unavailable",
+              "This Pina Code home is unavailable",
               DesktopHomeOwner.homeOwnedMessage(owner),
             ),
           ),

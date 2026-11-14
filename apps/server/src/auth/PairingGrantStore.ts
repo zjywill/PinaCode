@@ -95,7 +95,7 @@ export class BootstrapCredentialConnectApprovalPendingError extends Schema.Tagge
   },
 ) {
   override get message(): string {
-    return "This T3 Connect device is waiting for approval.";
+    return "This Pina Connect device is waiting for approval.";
   }
 }
 

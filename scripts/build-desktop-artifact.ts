@@ -971,7 +971,6 @@ export const DESKTOP_ELECTRON_LANGUAGES = ["en-US"] as const;
 export const DESKTOP_FILE_EXCLUSIONS = [
   // Cursor walks from argv[1] to platform assets; helpers and native addons need real paths outside ASAR.
   "!**/node_modules/@cursor/sdk-*/**/*",
-  "!apps/desktop/prod-resources/tailnet/**/*",
   "!apps/desktop/prod-resources/cursor-sdk",
   "!apps/desktop/prod-resources/cursor-sdk/**/*",
   // The installed Claude CLI is supplied explicitly; exclude optional bundled executables, retaining SDK JavaScript.
@@ -2741,9 +2740,6 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       : { asarUnpack: ["**/node_modules/@transcribe-cpp/**/*.{dylib,so,so.*}"] }),
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
-      ...(platform === "mac"
-        ? [{ from: "apps/desktop/prod-resources/tailnet", to: "tailnet" }]
-        : []),
       ...(platform === "linux" ? LINUX_CAPTURE_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_BROWSER_SECRET_EXTRA_RESOURCES : []),
       ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
@@ -3801,30 +3797,6 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
   // electron-builder is filtering out stageResourcesDir directory in the AppImage for production
   const stageProdResourcesDir = path.join(stageAppDir, "apps/desktop/prod-resources");
   yield* fs.copy(stageResourcesDir, stageProdResourcesDir);
-
-  if (options.platform === "mac") {
-    for (const arch of options.arch === "universal" ? ["arm64", "x64"] : [options.arch]) {
-      const binDir = path.join(stageProdResourcesDir, "tailnet", arch);
-      yield* fs.makeDirectory(binDir, { recursive: true });
-      const binary = path.join(binDir, "pinacode-tailnet");
-      yield* runCommand(
-        ChildProcess.make(
-          "go",
-          ["build", "-mod=readonly", "-trimpath", "-ldflags=-s -w", "-o", binary, "."],
-          {
-            cwd: path.join(repoRoot, "native/tailnet"),
-            env: {
-              ...process.env,
-              CGO_ENABLED: "0",
-              GOOS: "darwin",
-              GOARCH: arch === "x64" ? "amd64" : "arm64",
-            },
-          },
-        ),
-        { label: `build embedded Tailscale node (${arch})`, verbose: options.verbose },
-      );
-    }
-  }
 
   const signingEnv = loadRepoEnv({ repoRoot });
   const configuredMacPasskeySigning =

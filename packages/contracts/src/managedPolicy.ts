@@ -206,7 +206,7 @@ export function clampManagedRuntimeMode(
 
 const CAPABILITY_LABELS = {
   remoteClients: "connecting from other devices",
-  connect: "T3 Connect",
+  connect: "Pina Connect",
   webhookTasks: "webhook tasks",
   browserCookieImport: "importing browser cookies",
 } as const;

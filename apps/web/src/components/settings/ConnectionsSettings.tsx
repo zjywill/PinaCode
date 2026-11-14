@@ -2,7 +2,7 @@ import { SessionPermissions } from "./SessionPermissions";
 import { useSearch } from "@tanstack/react-router";
 import { ChevronRightIcon, EllipsisIcon } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   AuthAccessReadScope,
   AuthAccessWriteScope,
@@ -11,7 +11,6 @@ import {
   type AuthPairingLink,
   type AuthPairingCredentialResult,
   type AdvertisedEndpoint,
-  type DesktopServerExposureState,
   type DesktopWslState,
   EnvironmentId,
   managedCapabilityDenial,
@@ -29,7 +28,6 @@ import {
   applyWslEnableSelection,
   connectDeviceName,
   isWslSettingsRowVisible,
-  missingTailscaleEndpointDescription,
   resolveLocalVersionStatusLabel,
   resolveTailscaleServeBaseUrl,
 } from "./ConnectionsSettings.logic";
@@ -340,7 +338,6 @@ function ConnectionsSettingsContent({
   };
   const [removingSavedEnvironmentId, setRemovingSavedEnvironmentId] =
     useState<EnvironmentId | null>(null);
-  const [isUpdatingDesktopServerExposure, setIsUpdatingDesktopServerExposure] = useState(false);
   const [isUpdatingTailscaleServe, setIsUpdatingTailscaleServe] = useState(false);
   const [isUpdatingWslBackend, setIsUpdatingWslBackend] = useState(false);
   const [desktopWslMutationError, setDesktopWslMutationError] = useState<string | null>(null);
@@ -357,9 +354,6 @@ function ConnectionsSettingsContent({
   const [tailscaleServePortInput, setTailscaleServePortInput] = useState(
     String(DEFAULT_TAILSCALE_SERVE_PORT),
   );
-  const [pendingDesktopServerExposureMode, setPendingDesktopServerExposureMode] = useState<
-    DesktopServerExposureState["mode"] | null
-  >(null);
   const primaryServerConfig = primaryEnvironment?.serverConfig ?? null;
   // Turning remote access off stays possible; only the way in is managed.
   const remoteClientsDenial = managedCapabilityDenial(
@@ -406,43 +400,6 @@ function ConnectionsSettingsContent({
   const desktopWslError = desktopWslMutationError ?? desktopWsl.error;
   const isLoadingWslState = desktopWsl.isPending && desktopWsl.data === null;
   const desktopServerExposureState = desktopNetworkAccess.data?.serverExposureState ?? null;
-  const embeddedNode = desktopServerExposureState?.embeddedTailnet;
-  const [changingNode, setChangingNode] = useState(false);
-  const openNodeLogin = useRef(false);
-  const waitingForNode = embeddedNode?.phase === "starting" || embeddedNode?.phase === "login";
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Refresh while the external Tailscale sign-in is pending.
-  useEffect(() => {
-    if (!waitingForNode) return;
-    const timer = window.setInterval(refreshDesktopNetworkAccessState, 1500);
-    return () => window.clearInterval(timer);
-  }, [waitingForNode]);
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Launch the system browser when tsnet supplies the requested authorization URL.
-  useEffect(() => {
-    if (!openNodeLogin.current || embeddedNode?.phase !== "login" || !desktopBridge) return;
-    openNodeLogin.current = false;
-    void desktopBridge
-      .openExternal(embeddedNode.value)
-      .catch((error: unknown) => setDesktopServerExposureMutationError(String(error)));
-  }, [desktopBridge, embeddedNode]);
-  const changeEmbeddedNode = async (enabled: boolean) => {
-    if (
-      !desktopBridge ||
-      !primaryEnvironmentId ||
-      !readEnvironmentScope(primaryEnvironmentId, AuthEnvironmentMaintainScope)
-    )
-      return;
-    setChangingNode(true);
-    setDesktopServerExposureMutationError(null);
-    openNodeLogin.current = enabled;
-    try {
-      await desktopBridge.setEmbeddedTailnetEnabled(enabled);
-    } catch (error) {
-      openNodeLogin.current = false;
-      setDesktopServerExposureMutationError(String(error));
-    }
-    setChangingNode(false);
-    refreshDesktopNetworkAccessState();
-  };
   const desktopAdvertisedEndpoints =
     desktopNetworkAccess.data?.advertisedEndpoints ?? EMPTY_ADVERTISED_ENDPOINTS;
   const desktopServerExposureError =
@@ -488,41 +445,6 @@ function ConnectionsSettingsContent({
     parsedTailscaleServePort,
     isTailscaleServePortValid,
   );
-
-  const handleDesktopServerExposureChange = async (checked: boolean) => {
-    if (
-      !desktopBridge ||
-      primaryEnvironmentId === null ||
-      !readEnvironmentScope(primaryEnvironmentId, AuthEnvironmentMaintainScope)
-    )
-      return;
-    setIsUpdatingDesktopServerExposure(true);
-    setDesktopServerExposureMutationError(null);
-    try {
-      await desktopBridge.setServerExposureMode(checked ? "network-accessible" : "local-only");
-      refreshDesktopNetworkAccessState();
-      setPendingDesktopServerExposureMode(null);
-      setIsUpdatingDesktopServerExposure(false);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to update network exposure.";
-      setPendingDesktopServerExposureMode(null);
-      setDesktopServerExposureMutationError(message);
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Could not update network access",
-          description: message,
-        }),
-      );
-      setIsUpdatingDesktopServerExposure(false);
-    }
-  };
-
-  const handleConfirmDesktopServerExposureChange = () => {
-    if (pendingDesktopServerExposureMode === null) return;
-    const checked = pendingDesktopServerExposureMode === "network-accessible";
-    void handleDesktopServerExposureChange(checked);
-  };
 
   const handleConfirmTailscaleServeSetup = async () => {
     if (
@@ -799,16 +721,6 @@ function ConnectionsSettingsContent({
     setDefaultAdvertisedEndpointKey(endpointDefaultPreferenceKey(endpoint));
   };
 
-  const renderNetworkAccessToggle = () => (
-    <Switch
-      checked={desktopServerExposureState?.mode === "network-accessible"}
-      disabled={!desktopServerExposureState || isUpdatingDesktopServerExposure}
-      onCheckedChange={(checked) => {
-        setPendingDesktopServerExposureMode(checked ? "network-accessible" : "local-only");
-      }}
-      aria-label="Enable local network access"
-    />
-  );
   const renderPairingAddresses = () =>
     defaultDesktopAdvertisedEndpoint ? (
       <SettingsRow
@@ -1088,7 +1000,7 @@ function ConnectionsSettingsContent({
             ? tailscaleHttpsEndpoint.status === "available"
               ? tailscaleHttpsEndpoint.httpBaseUrl
               : "Use Tailscale Serve to expose this backend through a MagicDNS HTTPS URL."
-            : missingTailscaleEndpointDescription(desktopServerExposureState)
+            : "Sign in to the system Tailscale client to configure its HTTPS address."
       }
       control={
         tailscaleHttpsEndpoint || desktopServerExposureState?.tailscaleServeEnabled ? (
@@ -1151,14 +1063,13 @@ function ConnectionsSettingsContent({
           ? "Loading…"
           : isLocalBackendNetworkAccessible
             ? `Devices on your local network can connect at ${desktopServerExposureState.endpointUrl ?? desktopServerExposureState.advertisedHost ?? "the host address"}.`
-            : "Allow devices on the same network to connect directly."
+            : "Remote connections are restricted by policy."
       }
       status={
         desktopServerExposureError ? (
           <span className="block text-destructive">{desktopServerExposureError}</span>
         ) : null
       }
-      control={renderNetworkAccessToggle()}
       managed={isLocalBackendNetworkAccessible ? undefined : remoteClientsDenial}
     />
   );
@@ -1173,28 +1084,6 @@ function ConnectionsSettingsContent({
             : currentAuthPolicy === "loopback-browser"
               ? "Only this machine can connect. Restart with a non-loopback host for remote pairing."
               : "Network exposure information is unavailable."
-      }
-      control={
-        !desktopBridge &&
-        (currentAuthPolicy === "remote-reachable" || currentAuthPolicy === "loopback-browser") ? (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <span className="inline-flex">
-                  <Switch
-                    checked={isLocalBackendNetworkAccessible}
-                    disabled
-                    aria-label="Enable local network access"
-                  />
-                </span>
-              }
-            />
-            <TooltipPopup side="top">
-              Network exposure changes restart the backend and must be controlled where the server
-              process is launched.
-            </TooltipPopup>
-          </Tooltip>
-        ) : undefined
       }
     />
   );
@@ -1316,49 +1205,9 @@ function ConnectionsSettingsContent({
                 <>
                   {renderNetworkAccessRow()}
 
-                  {embeddedNode ? (
-                    <SettingsRow
-                      title={searchableSetting("embedded-tailnet").title}
-                      description={
-                        embeddedNode.phase === "connected" && embeddedNode.account
-                          ? `Signed in as ${embeddedNode.account} · ${embeddedNode.value}`
-                          : embeddedNode.phase === "connected" || embeddedNode.phase === "error"
-                            ? embeddedNode.value
-                            : waitingForNode
-                              ? "Waiting for Tailscale sign-in…"
-                              : "Share this Mac on your tailnet using your Tailscale account."
-                      }
-                      managed={remoteClientsDenial}
-                      control={
-                        <div className="flex gap-2">
-                          {embeddedNode.phase === "login" ? (
-                            <Button
-                              variant="outline"
-                              onClick={() => void desktopBridge.openExternal(embeddedNode.value)}
-                            >
-                              Open sign-in
-                            </Button>
-                          ) : null}
-                          <Button
-                            variant="outline"
-                            disabled={changingNode}
-                            onClick={() =>
-                              void changeEmbeddedNode(
-                                !(waitingForNode || embeddedNode.phase === "connected"),
-                              )
-                            }
-                          >
-                            {waitingForNode
-                              ? "Cancel"
-                              : embeddedNode.phase === "connected"
-                                ? "Sign out"
-                                : "Sign in to Tailscale"}
-                          </Button>
-                        </div>
-                      }
-                    />
-                  ) : null}
-                  {renderTailscaleRow()}
+                  {tailscaleHttpsEndpoint || desktopServerExposureState?.tailscaleServeEnabled
+                    ? renderTailscaleRow()
+                    : null}
                   {renderPairingAddresses()}
                 </>
               ) : (
@@ -1431,54 +1280,6 @@ function ConnectionsSettingsContent({
             onClose={() => setPendingConnectRevoke(null)}
             requireApproval={requireConnectApproval}
           />
-          <AlertDialog
-            open={pendingDesktopServerExposureMode !== null && canManageLocalBackend}
-            onOpenChange={(open) => {
-              if (!open && !isUpdatingDesktopServerExposure)
-                setPendingDesktopServerExposureMode(null);
-            }}
-          >
-            <AlertDialogPopup>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  {pendingDesktopServerExposureMode === "network-accessible"
-                    ? "Enable local network access?"
-                    : "Disable local network access?"}
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  {pendingDesktopServerExposureMode === "network-accessible"
-                    ? "Let your other devices connect to Pina Code over the network. Pair devices to give them access. Pina Code will restart."
-                    : "Devices connected over your local network will disconnect. Existing tunnels, such as T3 Connect or Tailscale HTTPS, keep working. Pina Code will restart."}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogClose
-                  disabled={isUpdatingDesktopServerExposure}
-                  render={<Button variant="outline" disabled={isUpdatingDesktopServerExposure} />}
-                >
-                  <span className="[text-box:trim-both_cap_alphabetic]">Cancel</span>
-                </AlertDialogClose>
-                <Button
-                  variant="default"
-                  onClick={handleConfirmDesktopServerExposureChange}
-                  disabled={
-                    !canManageLocalBackend ||
-                    pendingDesktopServerExposureMode === null ||
-                    isUpdatingDesktopServerExposure
-                  }
-                >
-                  {isUpdatingDesktopServerExposure && <Spinner size="sm" />}
-                  <span className="[text-box:trim-both_cap_alphabetic]">
-                    {isUpdatingDesktopServerExposure
-                      ? "Restarting…"
-                      : pendingDesktopServerExposureMode === "network-accessible"
-                        ? "Restart and enable"
-                        : "Restart and disable"}
-                  </span>
-                </Button>
-              </AlertDialogFooter>
-            </AlertDialogPopup>
-          </AlertDialog>
           <AlertDialog
             open={isWslConfirmDialogOpen && canManageLocalBackend}
             onOpenChange={(open) => {

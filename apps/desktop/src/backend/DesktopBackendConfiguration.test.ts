@@ -48,8 +48,6 @@ const layerServerExposure = Layer.succeed(DesktopServerExposure.DesktopServerExp
     tailscaleServePort: 8443,
   }),
   configureFromSettings: () => Effect.die("unexpected configureFromSettings"),
-  setMode: () => Effect.die("unexpected setMode"),
-  setEmbeddedTailnetEnabled: () => Effect.die("unexpected setEmbeddedTailnetEnabled"),
   setTailscaleServeEnabled: () => Effect.die("unexpected setTailscaleServeEnabled"),
   getAdvertisedEndpoints: Effect.succeed([]),
 } satisfies DesktopServerExposure.DesktopServerExposure["Service"]);
