@@ -239,6 +239,13 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   pickProjectFavicon: (initialPath) =>
     ipcRenderer.invoke(IpcChannels.PICK_PROJECT_FAVICON_CHANNEL, initialPath),
   pickThemeFiles: () => ipcRenderer.invoke(IpcChannels.PICK_THEME_FILES_CHANNEL, undefined),
+  ...(clientPlatform === "darwin"
+    ? {
+        getDockIcon: () => ipcRenderer.invoke(IpcChannels.GET_DOCK_ICON_CHANNEL),
+        setDockIcon: (name: import("@t3tools/contracts").AppIconName) =>
+          ipcRenderer.invoke(IpcChannels.SET_DOCK_ICON_CHANNEL, name),
+      }
+    : {}),
   setTheme: (theme) => ipcRenderer.invoke(IpcChannels.SET_THEME_CHANNEL, theme),
   showContextMenu: (items, position, source) =>
     ipcRenderer.invoke(IpcChannels.CONTEXT_MENU_CHANNEL, {

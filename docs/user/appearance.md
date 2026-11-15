@@ -132,3 +132,7 @@ view. An optional `css` string adds [custom CSS](#custom-css).
 
 Write updates to a temporary file and rename it into place so clients never read a partial theme.
 Invalid files are not published.
+
+## App icon
+
+Open **Settings → Appearance** and select **App icon** on iPhone, iPad, or Android. On Mac, select **Dock icon** to change the icon shown while Pina Code is running. Choose **Default** to restore the original icon. Each device keeps its own choice.

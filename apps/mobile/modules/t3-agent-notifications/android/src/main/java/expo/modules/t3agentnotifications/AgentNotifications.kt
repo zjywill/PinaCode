@@ -297,7 +297,7 @@ object AgentNotifications {
       .setDeleteIntent(dismissIntent)
     presentation.applyTo(builder, context)
     val action = presentation.action
-    if (action != null && openThread != null) builder.addAction(0, action, openThread)
+    if (action != null) builder.addAction(0, action, openThread)
     if (ongoing) builder.addAction(0, "Dismiss", dismissIntent)
     manager(context).notify(ACTIVITY_TAG, ACTIVITY_ID, builder.build())
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -366,13 +366,13 @@ object AgentNotifications {
     scheme: String,
     path: String?,
     id: Int
-  ): PendingIntent? {
+  ): PendingIntent {
     val threadPath = path?.takeIf { it.startsWith("/threads/") }
     val route = threadPath?.takeUnless { it.contains('?') || it.contains('#') } ?: "/"
-    val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-      ?: return null
-    intent.setAction(Intent.ACTION_VIEW).setData(Uri.parse("$scheme:/$route"))
-      .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    // Resolve the deep link when tapped so changing the launcher alias cannot invalidate an existing notification.
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("$scheme:/$route"))
+      .setPackage(context.packageName)
+      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
     return PendingIntent.getActivity(
       context,
       id,

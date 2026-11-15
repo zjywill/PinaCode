@@ -4,6 +4,7 @@ import {
   DesktopAppBrandingSchema,
   DesktopEnvironmentBootstrapSchema,
   DesktopMediaReadSchema,
+  AppIconNameSchema,
   DesktopThemeSchema,
   EDITORS,
   EditorId,
@@ -41,6 +42,7 @@ import * as ElectronAudio from "../../electron/ElectronAudio.ts";
 import * as ElectronDialog from "../../electron/ElectronDialog.ts";
 import * as ElectronMenu from "../../electron/ElectronMenu.ts";
 import * as ElectronShell from "../../electron/ElectronShell.ts";
+import * as MacDockIcon from "../../electron/MacDockIcon.ts";
 import * as ElectronTheme from "../../electron/ElectronTheme.ts";
 import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import * as Electron from "electron";
@@ -316,6 +318,19 @@ export const pickProjectFavicon = DesktopIpc.makeIpcMethod({
     });
     return paths[0] ?? null;
   }),
+});
+
+export const getDockIcon = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.GET_DOCK_ICON_CHANNEL,
+  payload: Schema.Void,
+  result: AppIconNameSchema,
+  handler: () => MacDockIcon.current,
+});
+export const setDockIcon = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.SET_DOCK_ICON_CHANNEL,
+  payload: AppIconNameSchema,
+  result: Schema.Void,
+  handler: MacDockIcon.select,
 });
 
 export const setTheme = DesktopIpc.makeIpcMethod({

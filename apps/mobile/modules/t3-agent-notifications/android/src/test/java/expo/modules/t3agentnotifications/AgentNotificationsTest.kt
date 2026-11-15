@@ -181,7 +181,10 @@ class AgentNotificationsTest : AgentNotificationsFixture() {
     val alert = manager.activeNotifications.single()
     assertEquals("5 agents finished", alert.notification.extras.getString(Notification.EXTRA_TITLE))
     assertEquals(titles, alert.notification.extras.getString(Notification.EXTRA_BIG_TEXT))
-    assertEquals("pinacode-dev://", shadowOf(alert.notification.contentIntent).savedIntent.dataString)
+    val intent = shadowOf(alert.notification.contentIntent).savedIntent
+    assertEquals("pinacode-dev://", intent.dataString)
+    assertEquals(context.packageName, intent.`package`)
+    assertEquals(null, intent.component)
   }
 
   @Test

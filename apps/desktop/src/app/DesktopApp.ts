@@ -13,6 +13,7 @@ import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
 import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
 import { installDesktopIpcHandlers } from "../ipc/DesktopIpcHandlers.ts";
 import * as DesktopAppActivation from "./DesktopAppActivation.ts";
+import * as MacDockIcon from "../electron/MacDockIcon.ts";
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
 import * as DesktopLaunch from "./DesktopLaunch.ts";
 import * as DesktopCliCommand from "./DesktopCliCommand.ts";
@@ -382,6 +383,11 @@ const startup = Effect.gen(function* () {
     });
   }
   yield* appIdentity.configure;
+  if (environment.platform === "darwin") {
+    const icon = yield* MacDockIcon.current;
+    if (icon !== "Default")
+      yield* MacDockIcon.apply(icon).pipe(Effect.catchCause(Effect.logWarning));
+  }
   // Sets canInstallUpdates, which the backend bootstrap payload reads.
   yield* updates.configure;
   yield* DesktopRemoteUpdates.listen;

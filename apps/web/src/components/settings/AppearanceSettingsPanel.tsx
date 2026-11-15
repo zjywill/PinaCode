@@ -32,6 +32,7 @@ import {
   SettingsSection,
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
+import { DockIconSetting } from "./DockIconSetting";
 import { AdvancedSettings } from "./AdvancedSettings";
 import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
 import { TypographySection } from "./TypographySettings";
@@ -163,6 +164,12 @@ export function AppearanceSettingsPanel() {
       </SettingsSection>
 
       <SettingsSection id="appearance-interface" title="Interface">
+        {window.desktopBridge?.getDockIcon && window.desktopBridge.setDockIcon ? (
+          <DockIconSetting
+            current={window.desktopBridge.getDockIcon}
+            select={window.desktopBridge.setDockIcon}
+          />
+        ) : null}
         <SettingsRow
           {...searchableSetting("setting-appearance-contrast")}
           description="Adjust the contrast of colors and borders across the interface."

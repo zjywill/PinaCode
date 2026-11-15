@@ -2778,6 +2778,9 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     buildConfig.mac = {
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: path.join(repoRoot, "assets/pinacode/pinacode.icon"),
+      extraResources: [
+        { from: path.join(repoRoot, "assets/pinacode/alternates/dock"), to: "dock-icons" },
+      ],
       category: "public.app-category.developer-tools",
       extendInfo: {
         CFBundleDisplayName: resolveDesktopProductName(version).replace("PinaCode", "Pina Code"),

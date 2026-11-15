@@ -53,6 +53,8 @@ import {
   toLocalBackendPath,
   pickProjectFavicon,
   pickThemeFiles,
+  getDockIcon,
+  setDockIcon,
   setTheme,
   syncHtmlFullscreen,
   showContextMenu,
@@ -149,6 +151,8 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(toLocalBackendPath);
   yield* ipc.handle(pickProjectFavicon);
   yield* ipc.handle(pickThemeFiles);
+  yield* ipc.handle(getDockIcon);
+  yield* ipc.handle(setDockIcon);
   yield* ipc.handle(setTheme);
   yield* ipc.handle(showContextMenu);
   yield* ipc.handle(openExternal);

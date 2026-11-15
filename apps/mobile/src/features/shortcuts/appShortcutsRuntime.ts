@@ -129,6 +129,11 @@ export function recordAppShortcutNavigationState(state: NavigationState): void {
   appAtomRegistry.set(activeThreadRefAtom, next);
 }
 
+export async function refreshLauncherShortcuts() {
+  const recentThreads = await loadRecentThreadShortcuts();
+  await QuickActions.setItems(buildShortcutActions(recentThreads));
+}
+
 /**
  * App-lifetime quick actions. `navigate` must queue until navigation is ready:
  * a cold-start shortcut arrives as the launch action, and pushing it over the

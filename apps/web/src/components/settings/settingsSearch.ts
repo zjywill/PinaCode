@@ -318,6 +318,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "appearance",
   },
   {
+    id: "dock-icon",
+    title: "Dock icon",
+    to: "/settings/appearance",
+    desktopOnly: true,
+    macOnly: true,
+    searchTerms: ["app icon gold diamond amethyst pineapple", "应用图标 程序坞图标"],
+  },
+  {
     // Prefixed because the slider control already owns the `appearance-contrast` id.
     id: "setting-appearance-contrast",
     title: "Contrast",

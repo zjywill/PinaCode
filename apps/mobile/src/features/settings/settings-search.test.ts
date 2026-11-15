@@ -47,6 +47,7 @@ describe("filterSettingsSections", () => {
     { query: "   ", expected: visible("") },
     { query: "appear", expected: [["Interface", ["Appearance"]]] },
     { query: "KEYBOARD", expected: [["Interface", ["Keyboard"]]] },
+    { query: "应用图标", expected: [["Interface", ["Appearance"]]] },
     { query: "dark mode", expected: [["Interface", ["Appearance"]]] },
     { query: "microphone", expected: [["Interface", ["Voice"]]] },
     { query: "agent credits", expected: [["Server settings", ["Source control"]]] },

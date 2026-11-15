@@ -99,6 +99,9 @@ export const DesktopUpdateStatusSchema = Schema.Literals([
   "error",
 ]);
 export const DesktopRuntimeArchSchema = Schema.Literals(["arm64", "x64", "other"]);
+export const APP_ICON_NAMES = ["Default", "Gold", "Amethyst", "Diamond", "Pineapple"] as const;
+export const AppIconNameSchema = Schema.Literals(APP_ICON_NAMES);
+export type AppIconName = typeof AppIconNameSchema.Type;
 export const DesktopThemeSchema = Schema.Literals(["light", "dark", "system"]);
 export const DesktopUpdateChannelSchema = Schema.Literals(["latest", "nightly"]);
 export const DesktopAppStageLabelSchema = Schema.Literals(["Alpha", "Beta", "Dev", "Nightly"]);
@@ -1141,6 +1144,8 @@ export interface DesktopBridge {
   toLocalBackendPath: (backendId: string, windowsPath: string) => Promise<string | null>;
   pickProjectFavicon: (initialPath?: string) => Promise<string | null>;
   pickThemeFiles: () => Promise<readonly PickedThemeFile[] | null>;
+  getDockIcon?: () => Promise<AppIconName>;
+  setDockIcon?: (name: AppIconName) => Promise<void>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
   showContextMenu: <T extends string>(
     items: readonly ContextMenuItem<T>[],

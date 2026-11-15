@@ -14,6 +14,9 @@ const SETTINGS_SEARCH_TERMS = {
     "tailscale",
   ],
   SettingsAppearance: [
+    "app icon",
+    "应用图标",
+    "gold amethyst diamond pineapple",
     "theme",
     "dark mode",
     "light mode",
