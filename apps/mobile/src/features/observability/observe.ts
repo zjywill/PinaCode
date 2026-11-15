@@ -1,11 +1,20 @@
 import Constants from "expo-constants";
-import { Observe } from "expo-observe";
+import { Platform } from "react-native";
 
 // Importing expo-observe installs its global JS error handler; reports leave only through the relay.
 const relayUrl: unknown = Constants.expoConfig?.extra?.relay?.url;
 const appVariant: unknown = Constants.expoConfig?.extra?.appVariant;
 
-export const crashReportingAvailable = typeof relayUrl === "string" && relayUrl.trim() !== "";
+// The self-hosted Android build has no EAS project, which Expo Observe requires at native startup.
+const observe: typeof import("expo-observe").Observe | undefined =
+  Platform.OS === "android" ? undefined : require("expo-observe").Observe;
+
+export const crashReportingAvailable =
+  observe !== undefined && typeof relayUrl === "string" && relayUrl.trim() !== "";
+
+export function reportRenderError(error: unknown) {
+  observe?.reportError(error);
+}
 
 interface PromiseRejectionTracker {
   readonly enablePromiseRejectionTracker?: (options: {
@@ -15,11 +24,11 @@ interface PromiseRejectionTracker {
 }
 
 // React Native tracks unhandled rejections only in development, for LogBox; Observe has no hook.
-if (!__DEV__) {
+if (!__DEV__ && observe) {
   const hermes: PromiseRejectionTracker | undefined = Reflect.get(globalThis, "HermesInternal");
   hermes?.enablePromiseRejectionTracker?.({
     allRejections: true,
-    onUnhandled: (_id, rejection) => Observe.reportError(rejection),
+    onUnhandled: (_id, rejection) => observe.reportError(rejection),
   });
 }
 
@@ -28,13 +37,14 @@ let latestConfiguration = 0;
 // While sending is off, a dispatch pass drops what it finds, so one runs before turning it back on.
 // Best effort: Observe skips the pass while it is backing off from a failed send.
 export async function setCrashReportsEnabled(enabled: boolean) {
+  if (!observe) return;
   const configuration = ++latestConfiguration;
   const dispatchingEnabled = crashReportingAvailable && enabled;
   if (dispatchingEnabled) {
-    await Observe.dispatchEvents();
+    await observe.dispatchEvents();
     if (configuration !== latestConfiguration) return;
   }
-  Observe.configure({
+  observe.configure({
     dispatchingEnabled,
     ...(typeof appVariant === "string" ? { environment: appVariant } : {}),
   });

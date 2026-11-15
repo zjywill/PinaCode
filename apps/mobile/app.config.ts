@@ -235,6 +235,7 @@ const config: ExpoConfig = {
     },
   },
   android: {
+    versionCode: 2,
     icon: variant.assets.appIcon,
     package: variant.androidPackage,
     adaptiveIcon: {
