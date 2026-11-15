@@ -214,6 +214,59 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
       }),
   );
 
+  it.effect("names the pair command for the refused server's home", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const child = yield* liveProcess;
+      assert(child.pid !== undefined);
+      for (const source of ["flag", "PINACODE_HOME", "default"] as const) {
+        const home = yield* fs.makeTempDirectoryScoped({ prefix: "t3-cli-preflight-pair-" });
+        const baseDir = source === "default" ? path.join(home, ".pinacode") : home;
+        const stateDir = path.join(baseDir, "userdata");
+        yield* fs.makeDirectory(stateDir, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(stateDir, "server-runtime.json"),
+          yield* encodeUnknownJson({
+            version: 1,
+            pid: child.pid,
+            port: 3773,
+            origin: "http://127.0.0.1:3773",
+            startedAt: "2026-10-01T00:00:00.000Z",
+          }),
+        );
+        const error = yield* resolveServerConfig(
+          {
+            ...minimalWebFlags(baseDir),
+            baseDir: source === "flag" ? Option.some(baseDir) : Option.none(),
+            cwd: Option.some(path.join(home, "project")),
+          },
+          Option.none(),
+          { rejectRunningServer: true },
+        ).pipe(
+          Effect.provide(
+            Layer.merge(
+              NetService.layer,
+              ConfigProvider.layer(
+                ConfigProvider.fromEnv({
+                  env: source === "PINACODE_HOME" ? { PINACODE_HOME: baseDir } : {},
+                }),
+              ),
+            ),
+          ),
+          Effect.provideService(HostProcess.HomeDirectory, home),
+          Effect.provideService(HostProcess.Platform, "linux"),
+          Effect.flip,
+        );
+        // A temp dir with spaces or backslashes is single-quoted for the shell.
+        const homePattern = baseDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        expect(String(error)).toMatch(
+          new RegExp(`pair --base-dir (${homePattern}|'${homePattern}')`),
+        );
+      }
+    }),
+  );
+
   it.effect("enables a trimmed reusable auth token only for web dev mode", () =>
     Effect.gen(function* () {
       const baseDir = yield* FileSystem.FileSystem.pipe(
@@ -782,12 +835,12 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
         );
 
       expect(yield* resolvePort({ port: Option.none() })).toBe(50_123);
-      expect(selected).toEqual([3773]);
+      expect(selected).toEqual([4773]);
       expect(yield* resolvePort({ port: Option.some(8788) })).toBe(8788);
       expect(
         yield* resolvePort({ mode: Option.some("desktop" as const), port: Option.none() }),
-      ).toBe(3773);
-      expect(selected).toEqual([3773]);
+      ).toBe(4773);
+      expect(selected).toEqual([4773]);
     }),
   );
 

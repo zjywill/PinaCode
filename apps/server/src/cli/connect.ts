@@ -48,7 +48,7 @@ import {
   readPersistedServerRuntimeState,
 } from "../serverRuntimeState.ts";
 import { projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
-import { resolveCliCommand } from "./invocation.ts";
+import { resolveHostCliHint } from "./invocation.ts";
 import * as CliService from "./service.ts";
 
 const jsonFlag = Flag.Boolean("json").pipe(
@@ -99,7 +99,11 @@ function formatRelayClientStatus(executable: RelayClient.RelayClientStatus): Rea
   }
 }
 
-function formatCloudStatus(status: CloudCliStatus, options?: { readonly json?: boolean }): string {
+function formatCloudStatus(
+  status: CloudCliStatus,
+  commands: { readonly link: string; readonly serviceStatus: string },
+  options?: { readonly json?: boolean },
+): string {
   if (options?.json) {
     return JSON.stringify(status, null, 2);
   }
@@ -113,11 +117,11 @@ function formatCloudStatus(status: CloudCliStatus, options?: { readonly json?: b
         : "not provisioned";
   const publishOnly = status.desired && status.linkMode === "publish_only";
   const nextStep = !status.authenticated
-    ? "Run `t3 connect link` to authorize and enable T3 Connect."
+    ? `Run \`${commands.link}\` to authorize and enable T3 Connect.`
     : status.revoked
-      ? "Run `t3 connect link` to link this environment again."
+      ? `Run \`${commands.link}\` to link this environment again.`
       : !status.desired
-        ? "Run `t3 connect link` to enable T3 Connect."
+        ? `Run \`${commands.link}\` to enable T3 Connect.`
         : !status.linked
           ? publishOnly
             ? "Connect directly over LAN or Tailscale."
@@ -141,7 +145,7 @@ function formatCloudStatus(status: CloudCliStatus, options?: { readonly json?: b
         : status.reachability === null
           ? [
               "",
-              "No running server answered, so reachability was not checked. Check the background service with `t3 service status`.",
+              `No running server answered, so reachability was not checked. Check the background service with \`${commands.serviceStatus}\`.`,
             ]
           : status.reachability.status === "reachable"
             ? [
@@ -554,7 +558,7 @@ const connectLinkCommand = Command.make("link", {
         yield* Console.log("T3 Connect\n");
         const linked = yield* linkEnvironmentForConnect({});
         if (linked) {
-          const serveCommand = yield* resolveCliCommand("serve");
+          const serveCommand = yield* resolveHostCliHint("serve", flags.baseDir);
           yield* Console.log(
             `✓ Authorized${connectedAs(linked.identity)}\n\nNext\n  Start the server with \`${serveCommand}\` to make this machine reachable.`,
           );
@@ -606,7 +610,11 @@ const connectStatusCommand = Command.make("status", {
           linkMode,
           reachability,
         };
-        yield* Console.log(formatCloudStatus(status, { json: flags.json }));
+        const commands = {
+          link: yield* resolveHostCliHint("connect link", flags.baseDir),
+          serviceStatus: yield* resolveHostCliHint("service status", flags.baseDir),
+        };
+        yield* Console.log(formatCloudStatus(status, commands, { json: flags.json }));
       }),
       {
         quietLogs: flags.json,
