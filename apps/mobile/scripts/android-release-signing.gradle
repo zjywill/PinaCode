@@ -1,0 +1,25 @@
+def signingPath = providers.environmentVariable("PINACODE_ANDROID_SIGNING_PROPERTIES").orNull
+if (signingPath) {
+    def propertiesFile = new File(signingPath).canonicalFile
+    def signing = new Properties()
+    propertiesFile.withInputStream { signing.load(it) }
+    def configuredStore = new File(signing.getProperty("storeFile"))
+    def keyStoreFile = configuredStore
+    if (!configuredStore.isAbsolute()) {
+        keyStoreFile = new File(propertiesFile.parentFile, configuredStore.path)
+        // The shared signing repo also supports projects that keep a copy of the key under app/.
+        if (!keyStoreFile.isFile()) {
+            keyStoreFile = new File(propertiesFile.parentFile, configuredStore.name)
+        }
+    }
+    if (!keyStoreFile.isFile()) {
+        throw new GradleException("Cannot find the Android keystore referenced by the signing properties.")
+    }
+    def releaseKey = android.signingConfigs.create("pinaLocalRelease") {
+        storeFile keyStoreFile
+        storePassword signing.getProperty("storePassword")
+        keyAlias signing.getProperty("keyAlias")
+        keyPassword signing.getProperty("keyPassword")
+    }
+    android.buildTypes.release.signingConfig = releaseKey
+}

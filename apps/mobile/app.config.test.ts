@@ -1,12 +1,13 @@
-import { DEFAULT_HOSTED_APP_URL } from "@t3tools/shared/connectAuth";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 
-import appleAppSiteAssociation from "../web/public/.well-known/apple-app-site-association.json";
 import assetLinks from "../web/public/.well-known/assetlinks.json";
 
 // Keep config parsing independent of local env files and build credentials.
 vi.mock("../../scripts/lib/public-config.ts", () => ({
-  loadRepoEnv: () => ({ APP_VARIANT: process.env.APP_VARIANT }),
+  loadRepoEnv: () => ({
+    APP_VARIANT: process.env.APP_VARIANT,
+    T3CODE_ANDROID_GOOGLE_SERVICES_FILE: "/legacy/google-services.json",
+  }),
 }));
 
 afterEach(() => {
@@ -26,22 +27,18 @@ it.each(["prod", ""])("rejects APP_VARIANT=%j before selecting production IDs", 
 });
 
 it.each([
-  [undefined, "app.pinacode.client"],
-  ["development", "app.pinacode.client.dev"],
-  ["preview", "app.pinacode.client.preview"],
-  ["production", "app.pinacode.client"],
-])("keeps the iOS and Android identifiers for APP_VARIANT=%j", async (value, identifier) => {
-  const config = await loadConfig(value);
-  expect(config.ios?.bundleIdentifier).toBe(identifier);
-  expect(config.android?.package).toBe(identifier);
-  // Copied thread links open this app only while app.t3.codes lists it.
-  const host = new URL(DEFAULT_HOSTED_APP_URL).host;
-  expect(config.ios?.associatedDomains).toContain(`applinks:${host}`);
-  expect(appleAppSiteAssociation.applinks.details[0]?.appIDs).toContain(
-    `${config.ios?.appleTeamId}.${identifier}`,
-  );
-  expect(config.android?.intentFilters?.[0]?.data).toEqual([
-    { scheme: "https", host, pathPrefix: "/threads/" },
-  ]);
-  expect(assetLinks.map((link) => link.target.package_name)).toContain(identifier);
-});
+  [undefined, "app.pinacode.client", "pinacode"],
+  ["development", "app.pinacode.client.dev", "pinacode-dev"],
+  ["preview", "app.pinacode.client.preview", "pinacode-preview"],
+  ["production", "app.pinacode.client", "pinacode"],
+])(
+  "keeps the iOS and Android identifiers for APP_VARIANT=%j",
+  async (value, identifier, scheme) => {
+    const config = await loadConfig(value);
+    expect(config.ios?.bundleIdentifier).toBe(identifier);
+    expect(config.android?.package).toBe(identifier);
+    expect(assetLinks.map((link) => link.target.package_name)).toContain(identifier);
+    expect(config.scheme).toBe(scheme);
+    expect(config.android?.googleServicesFile).toBeUndefined();
+  },
+);

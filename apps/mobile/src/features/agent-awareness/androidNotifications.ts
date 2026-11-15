@@ -3,7 +3,7 @@ import { requireOptionalNativeModule } from "expo";
 import { Linking, Platform } from "react-native";
 
 interface AndroidAgentNotifications {
-  configure(deviceId: string, userId: string, scheme: string, ongoingEnabled: boolean): void;
+  configure?(deviceId: string, userId: string, scheme: string, ongoingEnabled: boolean): void;
   clear(): void;
   setThreadOnScreen?(path: string | null): void;
   openLiveUpdateSettings?(): boolean;
@@ -21,7 +21,7 @@ export function supportsAndroidAgentNotifications(): boolean {
 
 function appScheme(): string {
   const scheme = Constants.expoConfig?.scheme;
-  return (Array.isArray(scheme) ? scheme[0] : scheme) ?? "t3code";
+  return (Array.isArray(scheme) ? scheme[0] : scheme) ?? "pinacode";
 }
 
 export function configureAndroidAgentNotifications(

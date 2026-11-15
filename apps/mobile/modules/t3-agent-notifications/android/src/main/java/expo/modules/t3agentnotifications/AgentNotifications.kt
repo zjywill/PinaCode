@@ -15,18 +15,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
-import com.google.firebase.messaging.RemoteMessage
-import expo.modules.notifications.service.ExpoFirebaseMessagingService
-
-class AgentMessagingService : ExpoFirebaseMessagingService() {
-  override fun onMessageReceived(remoteMessage: RemoteMessage) {
-    if (remoteMessage.data["t3_kind"] == "agent_activity") {
-      AgentNotifications.receive(this, remoteMessage.data)
-    } else {
-      super.onMessageReceived(remoteMessage)
-    }
-  }
-}
 
 class AgentActivityDismissReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
@@ -40,7 +28,6 @@ class AgentActivityExpiryReceiver : BroadcastReceiver() {
   }
 }
 
-/** Handles data pushes natively so delivery does not depend on a running JS bridge. */
 object AgentNotifications {
   private const val STORE = "t3-agent-notifications"
   private const val ACTIVITY_CHANNEL = "agent-activity"
@@ -126,7 +113,7 @@ object AgentNotifications {
     val fresh = System.currentTimeMillis() - updatedAt in -MAX_MESSAGE_AGE_MS..MAX_MESSAGE_AGE_MS
     if (registered && fresh && NotificationManagerCompat.from(context).areNotificationsEnabled()) {
       channels(context)
-      val scheme = prefs.getString("scheme", "t3code") ?: "t3code"
+      val scheme = prefs.getString("scheme", "pinacode") ?: "pinacode"
       val alerted = showAlert(context, prefs, scheme, data)
       updateActivity(context, prefs, data, updatedAt, alerted)
     }
@@ -256,7 +243,7 @@ object AgentNotifications {
     if (prefs.getBoolean("dismissed", false) || isCovered(prefs, terminal)) {
       cancelActivity(context)
     } else {
-      val scheme = prefs.getString("scheme", "t3code") ?: "t3code"
+      val scheme = prefs.getString("scheme", "pinacode") ?: "pinacode"
       showActivity(context, scheme, data, active, remainingMs)
     }
   }
