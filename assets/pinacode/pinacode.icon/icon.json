@@ -1,17 +1,16 @@
 {
   "fill": {
-    "automatic-gradient": "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+    "linear-gradient": [
+      "display-p3:0.01573,0.00304,0.00304,1.00000",
+      "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+    ]
   },
   "groups": [
     {
       "layers": [
         {
-          "image-name": "exec-62e2a2f5-33e6-45cc-a053-e6eebedd0746.png",
-          "name": "exec-62e2a2f5-33e6-45cc-a053-e6eebedd0746",
-          "position": {
-            "scale": 1.05,
-            "translation-in-points": [0, 0]
-          }
+          "image-name": "exec-21e040af-6874-477d-af3c-ff3b5cbe9b2c.png",
+          "name": "exec-21e040af-6874-477d-af3c-ff3b5cbe9b2c"
         }
       ],
       "shadow": {

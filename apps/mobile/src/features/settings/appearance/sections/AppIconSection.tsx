@@ -8,7 +8,10 @@ import { refreshLauncherShortcuts } from "../../../shortcuts/appShortcutsRuntime
 import { SettingsSection } from "../../components/SettingsSection";
 
 const previews = {
-  Default: require("../../../../../../../assets/pinacode/alternates/preview/Default.png"),
+  Default:
+    Platform.OS === "ios"
+      ? require("../../../../../../../assets/pinacode/alternates/preview/DefaultApple.png")
+      : require("../../../../../../../assets/pinacode/alternates/preview/Default.png"),
   Gold: require("../../../../../../../assets/pinacode/alternates/preview/Gold.png"),
   Amethyst: require("../../../../../../../assets/pinacode/alternates/preview/Amethyst.png"),
   Diamond: require("../../../../../../../assets/pinacode/alternates/preview/Diamond.png"),

@@ -35,7 +35,8 @@ const assets = {
   appIcon: icon,
   iosIcon: fromRepoRoot("assets/pinacode/pinacode.icon"),
   splashIcon: icon,
-  androidAdaptiveForeground: icon,
+  androidIcon: fromRepoRoot("assets/pinacode/android/launcher.png"),
+  androidAdaptiveForeground: fromRepoRoot("assets/pinacode/android/foreground.png"),
   androidAdaptiveBackgroundColor: "#000000",
   androidAdaptiveBackgroundImage: undefined,
   androidSplashIcon: icon,
@@ -236,7 +237,7 @@ const config: ExpoConfig = {
   },
   android: {
     versionCode: 2,
-    icon: variant.assets.appIcon,
+    icon: variant.assets.androidIcon,
     package: variant.androidPackage,
     adaptiveIcon: {
       backgroundColor: variant.assets.androidAdaptiveBackgroundColor,

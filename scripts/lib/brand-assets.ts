@@ -5,7 +5,7 @@ export const BRAND_ASSET_PATHS = {
 
   productionIconComposerProject: "assets/prod/app-icon.icon",
   productionIosIconPng: "assets/pinacode/icon.png",
-  productionMacIconPng: "assets/pinacode/icon.png",
+  productionMacIconPng: "assets/pinacode/alternates/dock/Default.png",
   productionLinuxIconPng: "assets/pinacode/icon.png",
   productionWindowsIconIco: "assets/pinacode/icon.ico",
   productionWebFaviconIco: "assets/pinacode/icon.ico",
@@ -17,7 +17,7 @@ export const BRAND_ASSET_PATHS = {
 
   nightlyIconComposerProject: "assets/nightly/app-icon.icon",
   nightlyIosIconPng: "assets/pinacode/icon.png",
-  nightlyMacIconPng: "assets/pinacode/icon.png",
+  nightlyMacIconPng: "assets/pinacode/alternates/dock/Default.png",
   nightlyLinuxIconPng: "assets/pinacode/icon.png",
   nightlyWindowsIconIco: "assets/pinacode/icon.ico",
   nightlyWebFaviconIco: "assets/pinacode/icon.ico",

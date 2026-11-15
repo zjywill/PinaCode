@@ -19,7 +19,10 @@ const APP_BUNDLE_ID = isDevelopment
   : "app.pinacode.client";
 const APP_PROTOCOL_SCHEMES = isDevelopment ? ["pinacode-dev"] : ["pinacode"];
 const LAUNCHER_VERSION = 20;
-const developmentMacIconPngPath = NodePath.join(repoRoot, "assets/pinacode/icon.png");
+const developmentMacIconPngPath = NodePath.join(
+  repoRoot,
+  "assets/pinacode/alternates/dock/Default.png",
+);
 const productionMacIconPngPath = developmentMacIconPngPath;
 // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone launcher script has no Effect runtime.
 const hostPlatform = NodeOS.platform();

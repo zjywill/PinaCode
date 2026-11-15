@@ -4,7 +4,7 @@ import { APP_ICON_NAMES, type AppIconName } from "@t3tools/contracts";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SettingsRow } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
-import Default from "../../../../../assets/pinacode/alternates/preview/Default.png";
+import Default from "../../../../../assets/pinacode/alternates/preview/DefaultApple.png";
 import Gold from "../../../../../assets/pinacode/alternates/preview/Gold.png";
 import Amethyst from "../../../../../assets/pinacode/alternates/preview/Amethyst.png";
 import Diamond from "../../../../../assets/pinacode/alternates/preview/Diamond.png";
