@@ -49,7 +49,7 @@ export function ListRowLayout({
           />
         </View>
       ) : leading ? (
-        <View className="size-6 items-center justify-center">{leading}</View>
+        <View className="min-h-6 min-w-6 items-center justify-center">{leading}</View>
       ) : null}
       <View className="min-w-0 flex-1 gap-1">
         <AppText

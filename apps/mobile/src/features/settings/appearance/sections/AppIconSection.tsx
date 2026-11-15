@@ -4,6 +4,9 @@ import { Alert, Image, Platform, View } from "react-native";
 import { requireOptionalNativeModule } from "expo";
 import { APP_ICON_NAMES, type AppIconName } from "@t3tools/contracts";
 import { ListChoiceRow } from "../../../../components/ui/ListChoiceRow";
+import { ListRowLayout } from "../../../../components/ui/ListRowLayout";
+import { Menu } from "../../../../components/ui/Menu";
+import { SymbolView } from "../../../../components/ui/AppSymbol";
 import { refreshLauncherShortcuts } from "../../../shortcuts/appShortcutsRuntime";
 import { SettingsSection } from "../../components/SettingsSection";
 
@@ -63,6 +66,36 @@ export function AppIconSection() {
       Alert.alert(gt("Could not change app icon"), String(error));
     }
     setBusy(false);
+  }
+  if (Platform.OS === "ios") {
+    return (
+      <SettingsSection>
+        <Menu
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel={`${gt("App icon")}, ${labels[current]}`}
+          actions={APP_ICON_NAMES.map((name) => ({
+            id: name,
+            title: labels[name],
+            state: name === current ? "on" : "off",
+            attributes: { disabled: busy },
+          }))}
+          onPressAction={({ nativeEvent }) => {
+            const name = APP_ICON_NAMES.find((name) => name === nativeEvent.event);
+            if (name) void select(name);
+          }}
+        >
+          <ListRowLayout
+            label={gt("App icon")}
+            detail={labels[current]}
+            leading={<Image source={previews[current]} style={{ width: 32, height: 32 }} />}
+            accessory={
+              <SymbolView name="chevron.down" size={14} tintColorClassName="accent-icon" />
+            }
+          />
+        </Menu>
+      </SettingsSection>
+    );
   }
   return (
     <SettingsSection title={gt("App icon")}>
