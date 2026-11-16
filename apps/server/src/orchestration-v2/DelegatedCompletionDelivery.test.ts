@@ -10,6 +10,7 @@ import {
   CheckpointId,
   isListedThreadLineage,
   CommandId,
+  EnvironmentId,
   EventId,
   MessageId,
   type ModelSelection,
@@ -883,7 +884,20 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
           runId,
           nodeId: id,
           occurredAt: now,
-          payload: { ...task, id, result, status, title: "Inspect regression" },
+          payload: {
+            ...task,
+            id,
+            result,
+            status,
+            title: "Inspect regression",
+            remoteChild: {
+              environmentId: EnvironmentId.make("remote-review-env"),
+              threadId: ThreadId.make(`remote:${id}`),
+              label: "Review server",
+              title: "Remote review",
+              stoppedThere: false,
+            },
+          },
         })),
       });
       yield* orchestrator.dispatch({
@@ -906,6 +920,9 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
       const message = projection.messages.find((candidate) => candidate.id === messageId)!;
       assert.equal(message.text.includes(testCase.first), testCase.inlineFirst);
       assert.equal(message.text.includes(testCase.second), testCase.inlineSecond);
+      for (const id of [firstTaskId, secondTaskId]) {
+        assert.include(message.text, `t3-thread://v2/remote-review-env/remote:${id}`);
+      }
       const deferredTaskId = testCase.inlineFirst ? secondTaskId : firstTaskId;
       assert.include(
         message.text,
@@ -5625,6 +5642,10 @@ it.layer(layerContinuationWorkerTest)("independent review sessions", (it) => {
           if (event.event.type !== "run.created") return yield* Effect.die("Expected review run");
           const run = event.event.payload;
           const parent = yield* orchestrator.getThreadProjection(parentThreadId);
+          assert.include(
+            parent.messages.find((message) => message.id === run.userMessageId)?.text ?? "",
+            `t3-thread://v1/${child.threadId}`,
+          );
           const task = parent.subagents.find(
             (task) =>
               task.childThreadId === child.threadId &&
