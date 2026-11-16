@@ -185,7 +185,7 @@ const layerDesktopServerExposure = Layer.succeed(DesktopServerExposure.DesktopSe
   backendConfig: Effect.succeed({
     port: 3773,
     bindHost: "127.0.0.1",
-    httpBaseUrl: new URL("http://127.0.0.1:3773"),
+    httpBaseUrl: new URL("http://127.0.0.1:4773"),
     tailscaleServeEnabled: false,
     tailscaleServePort: 443,
   }),
@@ -617,13 +617,13 @@ describe("DesktopWindow", () => {
           fake.windowListeners.get("closed")?.();
           assert.isTrue(Option.isNone(yield* Ref.get(mainWindow)));
           if (activation === "after") {
-            yield* windows.handleBackendReady(new URL("http://127.0.0.1:3773"));
+            yield* windows.handleBackendReady(new URL("http://127.0.0.1:4773"));
             assert.equal(yield* Ref.get(createCount), 1);
           }
           fake.isDestroyed.mockReturnValue(false);
           yield* windows.activate;
           assert.equal(yield* Ref.get(createCount), 2);
-          yield* windows.handleBackendReady(new URL("http://127.0.0.1:3773"));
+          yield* windows.handleBackendReady(new URL("http://127.0.0.1:4773"));
           assert.equal(yield* Ref.get(createCount), 2);
         }).pipe(Effect.provide(layerTest({ window: fake.window, createCount, mainWindow })));
       }),
@@ -647,13 +647,13 @@ describe("DesktopWindow", () => {
           yield* windows.dispatchMenuAction("open-settings");
           assert.equal(reveal.mock.calls.length, 0);
           if (first === "backend") {
-            yield* windows.handleBackendReady(new URL("http://127.0.0.1:3773"));
+            yield* windows.handleBackendReady(new URL("http://127.0.0.1:4773"));
             assert.equal(reveal.mock.calls.length, 0);
           }
           fake.windowListeners.get("ready-to-show")?.();
           yield* Effect.promise(() => painted.promise);
           assert.equal(reveal.mock.calls.length, 1);
-          yield* windows.handleBackendReady(new URL("http://127.0.0.1:3773"));
+          yield* windows.handleBackendReady(new URL("http://127.0.0.1:4773"));
           assert.equal(yield* Ref.get(createCount), 1);
           assert.equal(reveal.mock.calls.length, 1);
           yield* windows.handleBackendNotReady;
@@ -688,7 +688,7 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
 
         const beforeInput = fakeWindow.webContentsListeners.get("before-input-event");
         if (!beforeInput) {
@@ -740,7 +740,7 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
 
         const beforeInput = fakeWindow.webContentsListeners.get("before-input-event");
         const inputEvent = fakeWindow.webContentsListeners.get("input-event");
@@ -796,7 +796,7 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
 
         yield* desktopWindow.zoomMain("out");
         yield* desktopWindow.zoomMain("out");
@@ -828,7 +828,7 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
 
         const zoomChanged = fakeWindow.webContentsListeners.get("zoom-changed");
         if (!zoomChanged) return yield* Effect.die("zoom-changed listener was not registered");
@@ -860,7 +860,7 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
 
         yield* desktopWindow.runMainContentsCommand("reload");
         yield* desktopWindow.runMainContentsCommand("forceReload");
@@ -922,7 +922,7 @@ describe("DesktopWindow", () => {
         yield* Ref.set(state.quitting, true);
 
         yield* windows.showConnectingSplash;
-        yield* windows.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* windows.handleBackendReady(new URL("http://127.0.0.1:4773"));
         yield* windows.activate;
         yield* windows.dispatchMenuAction("open-settings");
         for (const creation of [
@@ -967,7 +967,7 @@ describe("DesktopWindow", () => {
           const fiber = yield* (
             kind === "splash"
               ? windows.showConnectingSplash
-              : windows.handleBackendReady(new URL("http://127.0.0.1:3773"))
+              : windows.handleBackendReady(new URL("http://127.0.0.1:4773"))
           ).pipe(Effect.forkChild({ startImmediately: true }));
           yield* Deferred.await(creationStarted);
           yield* Ref.set(state.quitting, true);
@@ -1018,7 +1018,7 @@ describe("DesktopWindow", () => {
           const state = yield* DesktopState.DesktopState;
           const creation =
             entry === "backend ready"
-              ? windows.handleBackendReady(new URL("http://127.0.0.1:3773"))
+              ? windows.handleBackendReady(new URL("http://127.0.0.1:4773"))
               : entry === "activation"
                 ? windows.activate
                 : windows.dispatchMenuAction("open-settings");
@@ -1065,7 +1065,7 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
 
         const close = fakeWindow.windowListeners.get("close");
         if (!close) {
@@ -1114,7 +1114,7 @@ describe("DesktopWindow", () => {
 
         yield* Effect.gen(function* () {
           const desktopWindow = yield* DesktopWindow.DesktopWindow;
-          yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+          yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
 
           const move = fakeWindow.windowListeners.get("move");
           if (!move) {
@@ -1165,7 +1165,7 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
 
         const close = fakeWindow.windowListeners.get("close");
         const move = fakeWindow.windowListeners.get("move");
@@ -1202,7 +1202,7 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
 
         const resize = fakeWindow.windowListeners.get("resize");
         if (!resize) {
@@ -1222,6 +1222,38 @@ describe("DesktopWindow", () => {
         assert.deepEqual(mainWindowBoundsUpdates, [{ x: 180, y: 120, width: 1440, height: 960 }]);
       }).pipe(Effect.provide(layer));
     }),
+  );
+
+  it.effect(
+    "brings the window back after the renderer dies more often than the reload budget",
+    () =>
+      Effect.gen(function* () {
+        const fakeWindow = makeFakeBrowserWindow();
+        const createCount = yield* Ref.make(0);
+        const mainWindow = yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none());
+        const layer = layerTest({ window: fakeWindow.window, createCount, mainWindow });
+
+        yield* Effect.gen(function* () {
+          const desktopWindow = yield* DesktopWindow.DesktopWindow;
+          yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
+
+          const renderProcessGone = fakeWindow.webContentsListeners.get("render-process-gone");
+          if (!renderProcessGone) {
+            return yield* Effect.die("render-process-gone listener was not registered");
+          }
+          for (let crash = 1; crash <= 4; crash++) {
+            const loadsBefore = fakeWindow.loadURL.mock.calls.length;
+            renderProcessGone({}, { reason: "oom", exitCode: -536870904 });
+            yield* TestClock.adjust(crash < 4 ? 1_000 : 60_000);
+            yield* Effect.promise(() => Promise.resolve());
+            assert.isAbove(
+              fakeWindow.loadURL.mock.calls.length,
+              loadsBefore,
+              `window shows nothing after renderer crash ${crash}`,
+            );
+          }
+        }).pipe(Effect.provide(layer));
+      }),
   );
 
   it.effect("updates title bar overlays only on windows created with one", () =>
@@ -1289,7 +1321,7 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
 
         const move = fakeWindow.windowListeners.get("move");
         if (!move) {
@@ -1330,7 +1362,7 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
         const swipe = fakeWindow.windowListeners.get("swipe");
         assert.isDefined(swipe);
         if (!swipe) return;
@@ -1378,7 +1410,7 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
 
         const close = fakeWindow.windowListeners.get("close");
         if (!close) {
@@ -1432,7 +1464,7 @@ describe("DesktopWindow", () => {
 
         yield* Effect.gen(function* () {
           const desktopWindow = yield* DesktopWindow.DesktopWindow;
-          yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+          yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
 
           const willAttachWebview = fakeWindow.webContentsListeners.get("will-attach-webview");
           if (!willAttachWebview) {
@@ -1463,7 +1495,7 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
 
         const willNavigate = fakeWindow.webContentsListeners.get("will-navigate");
         if (!willNavigate) {
@@ -1514,7 +1546,7 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
 
         const contextMenu = fakeWindow.webContentsListeners.get("context-menu");
         if (!contextMenu) {
@@ -1562,7 +1594,7 @@ describe("DesktopWindow", () => {
           assert.equal(yield* Ref.get(scenario.createCalls), 1);
 
           const readyExit = yield* Effect.exit(
-            desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773")),
+            desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773")),
           );
           assert.equal(readyExit._tag, "Failure");
           assert.equal(yield* Ref.get(scenario.createCalls), 2);
@@ -1599,9 +1631,9 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
         fakeWindow.windowListeners.get("ready-to-show")?.();
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
         operations.length = 0;
         foreground = "Discord";
         yield* desktopWindow.dispatchSnapShotEvent({ type: "started", id: captureOne });
@@ -1631,7 +1663,7 @@ describe("DesktopWindow", () => {
 
       yield* Effect.gen(function* () {
         const desktopWindow = yield* DesktopWindow.DesktopWindow;
-        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:4773"));
         fakeWindow.isDestroyed.mockReturnValue(true);
         yield* Ref.set(mainWindow, Option.none());
         yield* desktopWindow.dispatchSnapShotEvent({ type: "ready", id: captureOne });
