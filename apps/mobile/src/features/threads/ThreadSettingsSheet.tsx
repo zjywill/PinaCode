@@ -1000,7 +1000,16 @@ function ThreadSettingsMainContent(props: {
     // An older server drops the field and probes every provider.
     const config = registry.get(environmentServerConfigsAtom).get(environmentId);
     if (config?.environment.capabilities.modelCatalogRefresh !== true) return;
-    void refreshProvidersCommand({ environmentId, input: { modelCatalogOnly: true } });
+    const provider = config.providers.find(
+      (provider) => provider.instanceId === session.displayedModelSelection?.instanceId,
+    );
+    void refreshProvidersCommand({
+      environmentId,
+      input: {
+        modelCatalogOnly: true,
+        ...(provider?.supportsModelOptionsProbe ? { instanceId: provider.instanceId } : {}),
+      },
+    });
   });
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- asks the server for newly released models when the model list opens
   useEffect(() => {

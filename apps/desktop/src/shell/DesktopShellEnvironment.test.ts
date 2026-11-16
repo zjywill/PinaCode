@@ -184,30 +184,36 @@ function runShellEnvironment(input: {
 }
 
 describe("DesktopShellEnvironment", () => {
-  it.effect("does not wait for discovery when the cache is missing", () =>
-    Effect.gen(function* () {
-      const started = yield* Deferred.make<void>();
-      const release = yield* Deferred.make<void>();
-      yield* runShellEnvironment({
-        env: { SHELL: "/test-shell", PATH: "/usr/bin" },
-        platform: "darwin",
-        handler: () => "",
-        processSpawner: ChildProcessSpawner.make(() =>
-          Deferred.succeed(started, undefined).pipe(
-            Effect.andThen(Deferred.await(release)),
-            Effect.as(makeProcess(envOutput({ PATH: "/fresh/bin" }))),
+  it.effect.each(["darwin", "linux", "win32"] as const)(
+    "prepares the first provider environment before startup without a cache on %s",
+    (platform) =>
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const env: NodeJS.ProcessEnv = { SHELL: "/test-shell", PATH: "/usr/bin" };
+        yield* runShellEnvironment({
+          env,
+          platform,
+          handler: () => "",
+          processSpawner: ChildProcessSpawner.make(() =>
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Deferred.await(release)),
+              Effect.as(makeProcess(envOutput({ PATH: "/fresh/bin" }))),
+            ),
           ),
-        ),
-        use: (service) =>
-          Effect.gen(function* () {
-            const startup = yield* service.installIntoProcess.pipe(Effect.forkChild);
-            yield* Deferred.await(started);
-            assert.isDefined(startup.pollUnsafe());
-            yield* Deferred.succeed(release, undefined);
-            return yield* service.awaitDiscovery;
-          }),
-      });
-    }),
+          use: (service) =>
+            Effect.gen(function* () {
+              const startup = yield* service.installIntoProcess.pipe(Effect.forkChild);
+              yield* Deferred.await(started);
+              assert.isUndefined(startup.pollUnsafe());
+              yield* Deferred.succeed(release, undefined);
+              yield* Fiber.join(startup);
+              const providerEnvironment = { ...env };
+              assert.include(providerEnvironment.PATH, "/fresh/bin");
+              return yield* service.awaitDiscovery;
+            }),
+        });
+      }),
   );
 
   it.effect(
@@ -306,7 +312,7 @@ describe("DesktopShellEnvironment", () => {
     "not json",
     '{"version":2,"key":"old","environment":{"PATH":"/bad/bin"}}',
     '{"version":1,"key":"other-shell","environment":{"PATH":"/bad/bin"}}',
-  ])("ignores an unusable cache and still starts before discovery: %s", (contents) =>
+  ])("waits for discovery when the cache is unusable: %s", (contents) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const stateDir = yield* fs.makeTempDirectoryScoped();
@@ -329,9 +335,11 @@ describe("DesktopShellEnvironment", () => {
           Effect.gen(function* () {
             const startup = yield* service.installIntoProcess.pipe(Effect.forkChild);
             yield* Deferred.await(started);
-            assert.isDefined(startup.pollUnsafe());
+            assert.isUndefined(startup.pollUnsafe());
             assert.equal(env.PATH, "/usr/bin");
             yield* Deferred.succeed(release, undefined);
+            yield* Fiber.join(startup);
+            assert.equal(env.PATH, "/fresh/bin:/usr/bin");
             return yield* service.awaitDiscovery;
           }),
       });
@@ -416,7 +424,7 @@ describe("DesktopShellEnvironment", () => {
         ),
         use: (service) =>
           Effect.gen(function* () {
-            yield* service.installIntoProcess;
+            yield* service.installIntoProcess.pipe(Effect.forkChild);
             yield* Deferred.await(started);
             return true;
           }),
@@ -818,6 +826,7 @@ describe("DesktopShellEnvironment", () => {
     Effect.gen(function* () {
       const env: NodeJS.ProcessEnv = { SHELL: "/bin/zsh", PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
       const output = envOutput({ PATH: "/opt/homebrew/bin:/usr/bin" });
+      const started = yield* Deferred.make<void>();
       let shellProbes = 0;
       yield* runShellEnvironment({
         env,
@@ -832,26 +841,30 @@ describe("DesktopShellEnvironment", () => {
           // A cold start: the first login shell answers, but only after 7s.
           const slow = Effect.sleep("7 seconds");
           const stdout = Stream.fromEffect(slow.pipe(Effect.as(textEncoder.encode(output))));
-          return Effect.succeed(
-            ChildProcessSpawner.makeHandle({
-              pid: ChildProcessSpawner.ProcessId(125),
-              stdout,
-              stderr: Stream.empty,
-              all: stdout,
-              exitCode: slow.pipe(Effect.as(ChildProcessSpawner.ExitCode(0))),
-              isRunning: Effect.succeed(true),
-              kill: () => Effect.void,
-              stdin: Sink.drain,
-              getInputFd: () => Sink.drain,
-              getOutputFd: () => Stream.empty,
-              unref: Effect.succeed(Effect.void),
-            }),
+          return Deferred.succeed(started, undefined).pipe(
+            Effect.as(
+              ChildProcessSpawner.makeHandle({
+                pid: ChildProcessSpawner.ProcessId(125),
+                stdout,
+                stderr: Stream.empty,
+                all: stdout,
+                exitCode: slow.pipe(Effect.as(ChildProcessSpawner.ExitCode(0))),
+                isRunning: Effect.succeed(true),
+                kill: () => Effect.void,
+                stdin: Sink.drain,
+                getInputFd: () => Sink.drain,
+                getOutputFd: () => Stream.empty,
+                unref: Effect.succeed(Effect.void),
+              }),
+            ),
           );
         }),
         use: (service) =>
           Effect.gen(function* () {
-            yield* service.installIntoProcess;
+            const startup = yield* service.installIntoProcess.pipe(Effect.forkChild);
+            yield* Deferred.await(started);
             yield* TestClock.adjust("10 minutes");
+            yield* Fiber.join(startup);
             return true;
           }),
       }).pipe(Effect.provide(Logger.layer([])));

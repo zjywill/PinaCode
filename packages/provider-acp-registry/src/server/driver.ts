@@ -1182,7 +1182,19 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
       accentColor,
       enabled,
       auth,
-      ...(dimCode ? { probeModelOptions } : {}),
+      ...(dimCode
+        ? {
+            probeModelOptions,
+            refreshModels: () =>
+              (Option.isSome(runtimeCoordinator)
+                ? runtimeCoordinator.value.clearLiveConfiguration(instanceId)
+                : Effect.void
+              ).pipe(
+                Effect.andThen(clearLearnedModels),
+                Effect.andThen(liveSnapshotSemaphore.withPermit(invalidateEnrichmentCache)),
+              ),
+          }
+        : {}),
       snapshot: {
         ...snapshot,
         ...(dimCode

@@ -638,6 +638,10 @@ describe("AcpRegistryAdapterV2", () => {
           onFailure: (error) => {
             if (input.failsConfiguration === true) return;
             assert.isDefined(input.rejectedModel);
+            assert.isDefined(
+              published,
+              "publish the live catalog even when the stored model is rejected",
+            );
             assert.equal(
               makeProviderFailure({ cause: error }).message,
               `The agent did not accept the model "${input.rejectedModel}". Choose another model for this provider, then retry.`,

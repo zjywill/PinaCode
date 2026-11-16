@@ -824,11 +824,11 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       result: { protocolVersion: 1, agentCapabilities: {}, authMethods: [], agentInfo: { name: "fake", version: "1.5.9" } },
     });
   } else if (process.argv[3] === "dim" && (method === "session/new" || method === "session/set_config_option")) {
-    const model = params.value ?? "model-a";
+    const model = params.value ?? JSON.parse(readFileSync(process.argv[2], "utf8"))[0];
     const options = (ids) => ids.map((value) => ({ value, name: value }));
     send({ id, result: { sessionId: "probe-session", configOptions: [
       {id:"mode",name:"Permission mode",category:"mode",type:"select",currentValue:"read-only",options:options(["read-only","full-access"])},
-      {id:"model",name:"Model",category:"model",type:"select",currentValue:model,options:options(["model-a","model-b"])},
+      {id:"model",name:"Model",category:"model",type:"select",currentValue:model,options:options(JSON.parse(readFileSync(process.argv[2], "utf8")))},
       ...(model === "model-b" ? [{id:"effort",name:"Reasoning effort",category:"thought_level",type:"select",currentValue:"high",options:options(["high","max"])}] : []),
     ] } });
   } else if (method === "session/new") {
@@ -920,6 +920,25 @@ it.layer(driverLayer, { excludeTestServices: true })("AcpRegistryDriver", (it) =
         ["model-b", false],
       ]);
       expect(snapshot.models[1]?.capabilities?.optionDescriptors).toMatchObject([
+        { id: "mode", sessionPermission: true },
+        { id: "effort", role: "reasoning", options: [{ id: "high" }, { id: "max" }] },
+      ]);
+      yield* fileSystem.writeFileString(models, JSON.stringify(["model-c", "model-b"]));
+      const refreshed = yield* instance.snapshot.streamChanges.pipe(
+        Stream.filter((provider) => provider.models.some((model) => model.slug === "model-c")),
+        Stream.runHead,
+        Effect.forkScoped({ startImmediately: true }),
+      );
+      yield* instance.refreshModels!();
+      yield* instance.snapshot.refresh;
+      yield* Fiber.join(refreshed);
+      expect((yield* instance.snapshot.getSnapshot).models.map((model) => model.slug)).toEqual([
+        "model-c",
+        "model-b",
+      ]);
+      expect(
+        (yield* instance.snapshot.getSnapshot).models[1]?.capabilities?.optionDescriptors,
+      ).toMatchObject([
         { id: "mode", sessionPermission: true },
         { id: "effort", role: "reasoning", options: [{ id: "high" }, { id: "max" }] },
       ]);

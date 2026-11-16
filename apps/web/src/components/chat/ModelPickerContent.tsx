@@ -342,6 +342,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   onOpenProviderSetup?: (instanceId: ProviderInstanceId) => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
+  onInstanceCatalogOpen?: (instanceId: ProviderInstanceId) => void;
   /** The owning popup moves focus here when it opens (its `initialFocus`). */
   searchInputRef: RefObject<HTMLInputElement | null>;
   /** Sits beside an effort column: fills the shared row, and stacks above it on narrow screens. */
@@ -466,6 +467,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
 
   const handleSelectInstance = (instanceId: ProviderInstanceId | "favorites") => {
     setSelectedInstanceId(instanceId);
+    if (instanceId !== "favorites") props.onInstanceCatalogOpen?.(instanceId);
     // Focusing the search on touch raises the on-screen keyboard on every provider tap.
     if (window.matchMedia("(pointer: coarse)").matches) return;
     window.requestAnimationFrame(() => {
