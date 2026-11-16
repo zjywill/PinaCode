@@ -1,37 +1,10 @@
-const DEFAULT_MARKETING_SITE_URL = "https://t3.codes";
+const REPOSITORY_DOCUMENT_URL = "https://github.com/zjywill/PinaCode/blob/main/";
 
-function resolveMarketingSiteUrl(override: string | undefined): URL {
-  try {
-    const url = new URL(override?.trim() || DEFAULT_MARKETING_SITE_URL);
-    if (url.protocol !== "https:" && url.protocol !== "http:") {
-      return new URL(DEFAULT_MARKETING_SITE_URL);
-    }
-
-    url.search = "";
-    url.hash = "";
-    url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
-    return url;
-  } catch {
-    return new URL(DEFAULT_MARKETING_SITE_URL);
-  }
-}
-
-const MARKETING_SITE_URL = resolveMarketingSiteUrl(process.env.EXPO_PUBLIC_MARKETING_SITE_URL);
-
-function marketingSiteDocumentUrl(path: string): string {
-  return new URL(path, MARKETING_SITE_URL).toString();
-}
-
-const PRIVACY_POLICY_URL = marketingSiteDocumentUrl("privacy-policy");
-const SECURITY_POLICY_URL = marketingSiteDocumentUrl("security-policy");
-const TERMS_OF_SERVICE_URL = marketingSiteDocumentUrl("terms-of-service");
-export const LEGAL_URL = marketingSiteDocumentUrl("legal");
+export const LEGAL_URL = new URL("PRIVACY.md", REPOSITORY_DOCUMENT_URL).toString();
 
 const ALLOWED_LEGAL_DOCUMENT_URLS = [
   LEGAL_URL,
-  PRIVACY_POLICY_URL,
-  TERMS_OF_SERVICE_URL,
-  SECURITY_POLICY_URL,
+  new URL("LICENSE", REPOSITORY_DOCUMENT_URL).toString(),
 ] as const;
 
 function webDocumentIdentity(value: string): string | null {

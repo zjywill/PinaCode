@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { NotificationSettings } from "./NotificationSettings";
-import { PRIVACY_POLICY_URL } from "../../legalLinks";
+import { LICENSE_URL, PRIVACY_POLICY_URL } from "../../legalLinks";
 import { CheckIcon } from "lucide-react";
 import { msg, T, useGT, useMessages } from "gt-react";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -2359,15 +2359,24 @@ export function AboutSettingsPanel() {
         />
         <SettingsRow
           {...searchableSetting("open-source-licenses")}
-          description="Notices for dependencies, assets, and optional tools used by Pina Code."
+          description="PinaCode’s license and notices for its dependencies, assets, and optional tools."
           control={
-            <Button
-              render={<Link to="/settings/open-source-licenses" />}
-              size="sm"
-              variant="outline"
-            >
-              View licenses
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                render={<a href={LICENSE_URL} target="_blank" rel="noreferrer noopener" />}
+                size="sm"
+                variant="outline"
+              >
+                View license
+              </Button>
+              <Button
+                render={<Link to="/settings/open-source-licenses" />}
+                size="sm"
+                variant="outline"
+              >
+                Dependency notices
+              </Button>
+            </div>
           }
         />
       </SettingsSection>

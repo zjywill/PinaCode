@@ -285,8 +285,8 @@ export function ServerUpdateAction({
         type: "success",
         title: updatesInstall ? "Update command copied" : "Relaunch command copied",
         description: updatesInstall
-          ? `Run \`${command}\` on ${serverLabel}, then restart t3 with your usual options.`
-          : `Stop t3 on ${serverLabel}, then relaunch with \`${command}\` using the same subcommand and options. This does not update an installed t3 command.`,
+          ? `Run \`${command}\` on ${serverLabel}, then restart pinacode with your usual options.`
+          : `Stop pinacode on ${serverLabel}, then relaunch with \`${command}\` using the same subcommand and options. This does not update an installed pinacode command.`,
       });
     },
     onError: (error) => {
