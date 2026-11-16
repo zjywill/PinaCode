@@ -31,6 +31,7 @@ import {
   sentMessageFromToolItem,
 } from "@t3tools/shared/toolOutput";
 import {
+  notificationSummary,
   contextCompactionLabel,
   workEntryIndicatesToolFailure,
 } from "@t3tools/client-runtime/work-log/presentation";
@@ -575,7 +576,7 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
           id: item.id,
           createdAt,
           runId: item.runId,
-          label: item.summary,
+          label: notificationSummary(item),
           tone: "info",
           itemType: item.type,
           structuredPayload: item,

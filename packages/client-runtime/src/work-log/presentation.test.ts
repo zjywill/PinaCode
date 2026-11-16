@@ -4,12 +4,26 @@ import { ThreadId, TurnItemId, type OrchestrationV2TurnItem } from "@t3tools/con
 import * as DateTime from "effect/DateTime";
 
 import {
+  notificationSummary,
   resolveWorkEntryToolPresentation,
   toolItemForDisplay,
   type WorkLogPresentationEntry,
   workEntryIndicatesToolFailure,
   workEntryDisplayIndicatesToolFailure,
 } from "./presentation.js";
+
+describe("notificationSummary", () => {
+  it.each([
+    ["T3 Code restarted and resumed this turn", "Pina Code restarted and resumed this turn"],
+    [
+      "T3 Code restarted and stopped background work",
+      "Pina Code restarted and stopped background work",
+    ],
+    ["A task about T3 Code", "A task about T3 Code"],
+  ])("presents the stored system summary: %s", (summary, expected) => {
+    expect(notificationSummary({ source: { kind: "system" }, summary })).toBe(expected);
+  });
+});
 
 function commandItem(
   fields: Partial<Extract<OrchestrationV2TurnItem, { type: "command_execution" }>> = {},

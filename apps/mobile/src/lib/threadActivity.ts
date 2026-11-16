@@ -21,6 +21,7 @@ import {
   commandProgramName,
 } from "@t3tools/client-runtime/work-log/command-label";
 import {
+  notificationSummary,
   contextCompactionLabel,
   liveThoughtLine,
   toolItemForDisplay,
@@ -606,7 +607,7 @@ function itemSummary(
   item: OrchestrationV2TurnItem,
   toolPresentation: T3McpToolPresentation | null = null,
 ): string {
-  if (item.type === "notification") return item.summary;
+  if (item.type === "notification") return notificationSummary(item);
   if (item.type === "system_notice") return item.message;
   if (item.type === "compaction") return contextCompactionLabel(item);
   const title =

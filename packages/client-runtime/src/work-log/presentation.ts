@@ -32,6 +32,20 @@ import {
 
 export type WorkLogToolLifecycleStatus = RuntimeItemStatus | "stopped" | "idle";
 
+export function notificationSummary(
+  item: Pick<Extract<OrchestrationV2TurnItem, { type: "notification" }>, "source" | "summary">,
+): string {
+  if (item.source.kind === "system") {
+    if (item.summary === "T3 Code restarted and resumed this turn") {
+      return "Pina Code restarted and resumed this turn";
+    }
+    if (item.summary === "T3 Code restarted and stopped background work") {
+      return "Pina Code restarted and stopped background work";
+    }
+  }
+  return item.summary;
+}
+
 export function toolItemForDisplay(item: OrchestrationV2TurnItem): OrchestrationV2TurnItem {
   switch (item.type) {
     case "command_execution":

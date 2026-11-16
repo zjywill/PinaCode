@@ -33,13 +33,7 @@ function refreshCloudLinkState(target: CloudLinkTarget | null): void {
   }
 }
 
-export function readCachedCloudLinkState(target: CloudLinkTarget) {
-  if (!readEnvironmentScope(target.environmentId, AuthRelayReadScope)) return null;
-  const result = appAtomRegistry.get(cloudLinkStateAtom(target.environmentId));
-  return result._tag === "Success" ? result.value : null;
-}
-
-export function useCloudLinkState(environmentId: EnvironmentId | null) {
+function useCloudLinkState(environmentId: EnvironmentId | null) {
   const canReadRelay = useEnvironmentScope(environmentId, AuthRelayReadScope);
   const target: CloudLinkTarget | null = environmentId === null ? null : { environmentId };
   const atom =

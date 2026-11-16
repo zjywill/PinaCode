@@ -40,31 +40,3 @@ export function t3ConnectMcpUrl(input: {
     ? `${url.origin}/mcp`
     : null;
 }
-
-/** Where T3 Connect can be turned on for an environment: from here, only by policy, or on its host. */
-export type T3ConnectTurnOn =
-  | { readonly kind: "here" }
-  | { readonly kind: "policy"; readonly reason: string }
-  | { readonly kind: "on-host" };
-
-/**
- * Settings and the MCP wizard share this, so a Turn on control shows only where linking works.
- * `linkableHere` is the environment's own answer for this session (its link state).
- */
-export function resolveT3ConnectTurnOn(input: {
-  readonly desktopApp: boolean;
-  readonly linkableHere: boolean;
-  readonly cloudConfigured: boolean;
-  readonly canReadRelay: boolean;
-  readonly canWriteRelay: boolean;
-  readonly connectDenial: string | undefined;
-}): T3ConnectTurnOn {
-  if (input.connectDenial !== undefined) return { kind: "policy", reason: input.connectDenial };
-  return input.desktopApp &&
-    input.linkableHere &&
-    input.cloudConfigured &&
-    input.canReadRelay &&
-    input.canWriteRelay
-    ? { kind: "here" }
-    : { kind: "on-host" };
-}

@@ -104,14 +104,6 @@ export function reportRelayClientInstallProgress(event: RelayClientInstallProgre
   publish({ ...state, stage: event.stage });
 }
 
-export function finishRelayClientInstall(): void {
-  resolveConfirmation?.(false);
-  resolveConfirmation = null;
-  if (state.status === "confirming" || state.status === "installing") {
-    publish({ status: "closing", view: state });
-  }
-}
-
 export function completeRelayClientInstallDialogClose(): void {
   if (state.status === "closing") {
     publish(idleState);
