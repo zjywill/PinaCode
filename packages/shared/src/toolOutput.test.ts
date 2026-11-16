@@ -25,14 +25,14 @@ describe("compactDynamicToolOutput", () => {
     }
   });
 
-  it("keeps a send_to_user message up to its limit, even in 3-byte characters", () => {
+  it("keeps a pinacode_send_to_user message up to its limit, even in 3-byte characters", () => {
     const longest = "界".repeat(SEND_TO_USER_MAX_LENGTH);
     for (const sentMessage of ["Draft:\n\n> Hi Sam,", longest]) {
       const json = JSON.stringify({ sentMessage, message: "Shown to the user." });
       expect(compactDynamicToolOutput([{ type: "text", text: json }])).toEqual({ sentMessage });
     }
     expect(compactDynamicToolOutput({ sentMessage: `${longest}界` })).toBeUndefined();
-    // OpenCode 2 Code Mode reports a script's nested send_to_user call as one `execute` item.
+    // OpenCode 2 Code Mode reports a script's nested pinacode_send_to_user call as one `execute` item.
     const output = JSON.stringify({ sentMessage: "Draft", message: "Shown to the user." });
     expect(sentMessageFromToolItem({ toolName: "execute", output })).toBe("Draft");
   });

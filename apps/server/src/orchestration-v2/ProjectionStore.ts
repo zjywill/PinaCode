@@ -1199,7 +1199,9 @@ const shellIndexLineage = (row: {
 }): OrchestrationV2ThreadShell["lineage"] => ({
   parentThreadId: row.parent_thread_id === null ? null : ThreadId.make(row.parent_thread_id),
   relationshipToParent:
-    row.relationship_to_parent === "fork" || row.relationship_to_parent === "subagent"
+    row.relationship_to_parent === "fork" ||
+    row.relationship_to_parent === "subagent" ||
+    row.relationship_to_parent === "delegation"
       ? row.relationship_to_parent
       : null,
   rootThreadId: ThreadId.make(row.root_thread_id),
@@ -4711,7 +4713,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 -- A subagent of a settled, archived or deleted parent is abandoned work.
                 AND NOT EXISTS (
                   SELECT 1 FROM orchestration_v2_projection_threads parent
-                  WHERE json_extract(t.payload_json, '$.lineage.relationshipToParent') = 'subagent'
+                  WHERE json_extract(t.payload_json, '$.lineage.relationshipToParent') IN ('subagent', 'delegation')
                     AND parent.thread_id = json_extract(t.payload_json, '$.lineage.parentThreadId')
                     AND (
                       json_extract(parent.payload_json, '$.settledOverride') = 'settled'
@@ -4816,7 +4818,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               return sql`
                 SELECT child.thread_id FROM orchestration_v2_projection_threads AS child
                 WHERE CASE WHEN json_valid(child.payload_json) THEN
-                  json_extract(child.payload_json, '$.lineage.relationshipToParent') = 'subagent'
+                  json_extract(child.payload_json, '$.lineage.relationshipToParent') IN ('subagent', 'delegation')
                   AND json_extract(child.payload_json, '$.lineage.parentThreadId') IS NOT NULL
                   AND json_extract(child.payload_json, '$.forkedFrom.type') = 'node'
                   ELSE 0 END
@@ -6379,7 +6381,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         AND item.type = 'dynamic_tool'
         AND (item.payload_json LIKE '%htmlRender%'
           OR item.payload_json LIKE ${`%${MCP_APP_OUTPUT_KEY}%`}
-          OR item.payload_json LIKE '%preview_recording_stop%')
+          OR item.payload_json LIKE '%pinacode_preview_recording_stop%')
         AND ${runOrdinalBetween("item.run_id", from, through)}
     `,
         sql<{ id: string }>`

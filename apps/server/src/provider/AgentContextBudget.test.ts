@@ -97,7 +97,7 @@ const claudeSystemAppend = () => {
     nativeThreadId: "context-budget",
     resume: false,
     cwd: null,
-    mcpServers: { "t3-code": { type: "http", url: "http://127.0.0.1/mcp" } },
+    mcpServers: { pinacode: { type: "http", url: "http://127.0.0.1/mcp" } },
   });
   return typeof systemPrompt === "object" && "append" in systemPrompt ? systemPrompt.append : "";
 };
@@ -118,17 +118,20 @@ const layerAdvertisedTools = McpHttpServer.layerTools.pipe(
 );
 
 // Claude Code loads these tools up front instead of behind ToolSearch, outside this budget.
-it.effect("only request_secret and send_to_user ask Claude Code to load them up front", () =>
-  Effect.gen(function* () {
-    const mcp = yield* McpServer.McpServer;
-    const alwaysLoad = mcp.tools
-      .filter(({ tool }) => tool._meta?.["anthropic/alwaysLoad"] !== undefined)
-      .map(({ tool }) => [tool.name, tool._meta]);
-    expect(alwaysLoad).toEqual([
-      ["request_secret", { "anthropic/alwaysLoad": true }],
-      ["send_to_user", { "anthropic/alwaysLoad": true }],
-    ]);
-  }).pipe(Effect.provide(layerAdvertisedTools)),
+it.effect(
+  "only pinacode_request_secret and pinacode_send_to_user ask Claude Code to load them up front",
+  () =>
+    Effect.gen(function* () {
+      const mcp = yield* McpServer.McpServer;
+      expect(mcp.tools.every(({ tool }) => tool.name.startsWith("pinacode_"))).toBe(true);
+      const alwaysLoad = mcp.tools
+        .filter(({ tool }) => tool._meta?.["anthropic/alwaysLoad"] !== undefined)
+        .map(({ tool }) => [tool.name, tool._meta]);
+      expect(alwaysLoad).toEqual([
+        ["pinacode_request_secret", { "anthropic/alwaysLoad": true }],
+        ["pinacode_send_to_user", { "anthropic/alwaysLoad": true }],
+      ]);
+    }).pipe(Effect.provide(layerAdvertisedTools)),
 );
 
 // CI rejects a PR that raises any value above main's agentContextBudget.json, so growth

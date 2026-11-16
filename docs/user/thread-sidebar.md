@@ -58,6 +58,20 @@ in a new thread's model picker to add or remove them. A regular click returns to
 single model. Choose a base branch and send. Each selection starts a separate thread
 and worktree while you stay in the new thread composer. This requires a Git project.
 
+## Coordinate independent agents
+
+Ask your main agent to assign each issue to an independent PinaCode session, use a
+separate worktree for each, and review their changes until all issues pass. This
+requires a Git project on the coordinator's environment. If you have not chosen a
+provider and model, the coordinator asks once for the batch; you can choose to
+inherit its settings or use other available models.
+
+Each session appears separately in your thread list. When its work finishes, the
+coordinator wakes automatically to inspect the diff and tests. Requested fixes go
+back to the same session, preserving its worktree, provider and conversation;
+completion wakes the coordinator for another review. Questions or approvals still
+need an answer. Stopping the coordinator stops its delegated work.
+
 ## Pin and reorder threads
 
 Pin a thread from its menu to keep it above your active work.

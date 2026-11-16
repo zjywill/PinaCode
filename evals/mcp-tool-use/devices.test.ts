@@ -79,27 +79,36 @@ it.effect("answers device calls with T3's handlers over the case's world", () =>
   Effect.gen(function* () {
     const { devices, deviceHosts } = deviceCase({}).setup.world ?? {};
     const tools = yield* makeDeviceTools({ devices: devices ?? [], deviceHosts }, base.environment);
-    const listed = json((yield* tools.call("device_list", {})).text);
+    const listed = json((yield* tools.call("pinacode_device_list", {})).text);
     assert.deepEqual(listed.devices, world.devices);
     assert.deepEqual(
       listed.hosts.map((host: { label: string }) => host.label),
       ["This machine", "build-mac"],
     );
-    const opened = json((yield* tools.call("device_open", { hostId: MAC, deviceId: IPHONE })).text);
+    const opened = json(
+      (yield* tools.call("pinacode_device_open", { hostId: MAC, deviceId: IPHONE })).text,
+    );
     const { command } = opened.agentDevice;
     assert.match(command, /^\/home\/user\/\.t3\/userdata\/device\/.+\/agent-device$/);
     assert.include(opened.quickStart, command);
     assert.deepEqual(tools.launchers, [command]);
     // The image never reaches the model; T3's text result has the rest.
-    assert.deepEqual(json((yield* tools.call("device_screenshot", {})).text).screenshot, {
+    assert.deepEqual(json((yield* tools.call("pinacode_device_screenshot", {})).text).screenshot, {
       mimeType: "image/png",
       width: 1206,
       height: 2622,
     });
-    const failed = yield* tools.call("device_screenshot", {}, deviceFailure(screenshotFailure));
+    const failed = yield* tools.call(
+      "pinacode_device_screenshot",
+      {},
+      deviceFailure(screenshotFailure),
+    );
     assert.isTrue(failed.isError);
     assert.include(failed.text, "screenshot failed");
-    const elsewhere = yield* tools.call("device_open", { hostId: "local", deviceId: IPHONE });
+    const elsewhere = yield* tools.call("pinacode_device_open", {
+      hostId: "local",
+      deviceId: IPHONE,
+    });
     assert.isTrue(elsewhere.isError);
     assert.include(elsewhere.text, IPHONE);
   }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
@@ -110,10 +119,10 @@ it.effect("lists the boot state T3 left a device in", () =>
     const { devices, deviceHosts } = deviceCase({}).setup.world ?? {};
     const stopped = (devices ?? []).map((device) => ({ ...device, booted: false }));
     const tools = yield* makeDeviceTools({ devices: stopped, deviceHosts }, base.environment);
-    const before = json((yield* tools.call("device_list", {})).text);
+    const before = json((yield* tools.call("pinacode_device_list", {})).text);
     assert.isFalse(before.devices.find((d: { id: string }) => d.id === IPHONE).booted);
-    yield* tools.call("device_open", { hostId: MAC, deviceId: IPHONE });
-    const after = json((yield* tools.call("device_list", {})).text);
+    yield* tools.call("pinacode_device_open", { hostId: MAC, deviceId: IPHONE });
+    const after = json((yield* tools.call("pinacode_device_list", {})).text);
     assert.isTrue(after.devices.find((d: { id: string }) => d.id === IPHONE).booted);
   }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );
@@ -132,12 +141,16 @@ it.effect("rebuilds prior device results with T3, whose sessions reach the measu
         {
           role: "assistant",
           toolCalls: [
-            { tool: "device_list", input: {}, result: "default" },
-            { tool: "device_open", input: { hostId: MAC, deviceId: IPHONE }, result: "default" },
+            { tool: "pinacode_device_list", input: {}, result: "default" },
+            {
+              tool: "pinacode_device_open",
+              input: { hostId: MAC, deviceId: IPHONE },
+              result: "default",
+            },
           ],
         },
       ],
-      mocks: { device_screenshot: screenshotFailure },
+      mocks: { pinacode_device_screenshot: screenshotFailure },
     });
     const sample = makeSample(testCase, base);
     assert.throws(() => buildMessages(sample), /run withDevices/);
@@ -147,9 +160,9 @@ it.effect("rebuilds prior device results with T3, whose sessions reach the measu
     assert.include(shown, launcher);
     assert.notInclude(shown, `"content":"default"`);
     const tools = sample.devices!;
-    assert.isFalse((yield* tools.call("device_screenshot", {})).isError);
-    const mock = deviceFailure(testCase.setup.mocks?.device_screenshot);
-    assert.isTrue((yield* tools.call("device_screenshot", {}, mock)).isError);
+    assert.isFalse((yield* tools.call("pinacode_device_screenshot", {})).isError);
+    const mock = deviceFailure(testCase.setup.mocks?.pinacode_device_screenshot);
+    assert.isTrue((yield* tools.call("pinacode_device_screenshot", {}, mock)).isError);
   }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );
 
@@ -191,10 +204,16 @@ it.effect("tells the shell simulator the launchers T3 returned and agent-device'
     const call = { tool: "Bash", input: { command: "ls /tmp" } };
     const told = (request: ReturnType<typeof shellRequest>) => JSON.stringify(request.messages);
     assert.notInclude(told(shellRequest(sample, call, "claude-haiku-5-5")), "launchers T3's");
-    const opened = yield* sample.devices!.call("device_open", { hostId: MAC, deviceId: IPHONE });
+    const opened = yield* sample.devices!.call("pinacode_device_open", {
+      hostId: MAC,
+      deviceId: IPHONE,
+    });
     const { command } = json(opened.text).agentDevice;
     const request = shellRequest(sample, call, "claude-haiku-5-5");
-    assert.include(told(request), `agent-device launchers T3's device_open returned: ${command}`);
+    assert.include(
+      told(request),
+      `agent-device launchers T3's pinacode_device_open returned: ${command}`,
+    );
     // agent-device's own syntax: a positional recording path, and `record stop` with no flag.
     assert.include(request.system, AGENT_DEVICE_SHELL);
     assert.include(
@@ -224,7 +243,7 @@ it("prints agent-device's own help for a lone help command on a returned launche
   assert.equal(asked(`${launcher} help open ${target}`), help("open"));
   assert.equal(asked(`${launcher} --help 2>&1`), help(""));
   assert.equal(asked(`${launcher} help settings --session=t3-1`), help("settings"));
-  // A password reaches fill from stdin, so request_secret's file never enters argv.
+  // A password reaches fill from stdin, so pinacode_request_secret's file never enters argv.
   assert.equal(asked(`${launcher} fill --help ${target}`), help("fill"));
   assert.include(help("fill"), "fill <x y|@ref|selector> --text-stdin");
   // Anything else stays with the simulator: other topics, pipes, aliases, other commands.
@@ -260,9 +279,11 @@ it.effect("answers the returned launcher as agent-device does before and after o
   Effect.gen(function* () {
     const { devices = [], deviceHosts } = deviceCase({}).setup.world ?? {};
     const tools = yield* makeDeviceTools({ devices, deviceHosts }, base.environment);
-    const opened = json((yield* tools.call("device_open", { hostId: MAC, deviceId: IPHONE })).text);
+    const opened = json(
+      (yield* tools.call("pinacode_device_open", { hostId: MAC, deviceId: IPHONE })).text,
+    );
     const { command, targetArgs, session: bound } = opened.agentDevice;
-    // This ref's launcher: a bound one names its session; the shared one takes device_open's flags.
+    // This ref's launcher: a bound one names its session; the shared one takes pinacode_device_open's flags.
     const session: string = bound ?? targetArgs[targetArgs.indexOf("--session") + 1];
     const line = (args: string) =>
       bound === undefined ? `${command} ${args} ${targetArgs.join(" ")}` : `${command} ${args}`;
@@ -469,7 +490,11 @@ it.effect("starts sessions the world says prior turns opened, and rejects unknow
         {
           role: "assistant",
           toolCalls: [
-            { tool: "device_open", input: { hostId: MAC, deviceId: IPHONE }, result: "default" },
+            {
+              tool: "pinacode_device_open",
+              input: { hostId: MAC, deviceId: IPHONE },
+              result: "default",
+            },
           ],
         },
       ],
@@ -498,7 +523,10 @@ it.effect(
     Effect.gen(function* () {
       const sample = makeSample(deviceCase({}), base);
       yield* withDevices(sample);
-      const opened = yield* sample.devices!.call("device_open", { hostId: MAC, deviceId: IPHONE });
+      const opened = yield* sample.devices!.call("pinacode_device_open", {
+        hostId: MAC,
+        deviceId: IPHONE,
+      });
       const { command, targetArgs, session } = json(opened.text).agentDevice;
       const flags = session === undefined ? ` ${targetArgs.join(" ")}` : "";
       const told = () =>
@@ -518,7 +546,7 @@ it.effect(
         base,
       );
       yield* withDevices(outage);
-      yield* outage.devices!.call("device_open", { hostId: MAC, deviceId: IPHONE });
+      yield* outage.devices!.call("pinacode_device_open", { hostId: MAC, deviceId: IPHONE });
       assert.include(cannedOutput(outage, `${command} screenshot /tmp/a.png${flags}`), "down");
       sample.shell.push({
         tool: "Bash",
@@ -607,14 +635,14 @@ const deviceTools = (extra: object) =>
 
 it.effect("lists a host whose discovery fails as T3 does: failed, with none of its devices", () =>
   Effect.gen(function* () {
-    // F1's saved device_list: the hub answered, but its device list timed out.
+    // F1's saved pinacode_device_list: the hub answered, but its device list timed out.
     const failure = new DeviceOperationError({
       operation: "list",
       reason: "request_failed",
       cause: null,
     });
     const tools = yield* deviceTools({ deviceDiscoveryFailures: { [MAC]: failure } });
-    const listed = json((yield* tools.call("device_list", {})).text);
+    const listed = json((yield* tools.call("pinacode_device_list", {})).text);
     assert.deepEqual(listed.hostStatuses[MAC], {
       status: "failed",
       detail:
@@ -625,11 +653,12 @@ it.effect("lists a host whose discovery fails as T3 does: failed, with none of i
       listed.devices.map((device: { id: string }) => device.id),
       [SPARE_PHONE],
     );
-    const opened = yield* tools.call("device_open", { hostId: MAC, deviceId: IPHONE });
+    const opened = yield* tools.call("pinacode_device_open", { hostId: MAC, deviceId: IPHONE });
     assert.isTrue(opened.isError);
     assert.include(opened.text, IPHONE);
     assert.isFalse(
-      (yield* tools.call("device_open", { hostId: SPARE_MAC, deviceId: SPARE_PHONE })).isError,
+      (yield* tools.call("pinacode_device_open", { hostId: SPARE_MAC, deviceId: SPARE_PHONE }))
+        .isError,
     );
     // A failed host with no devices of its own still needs its label.
     const unlabeled = yield* Effect.exit(
@@ -643,10 +672,10 @@ it.effect("denies every device tool with T3's own error when agent device access
   Effect.gen(function* () {
     const tools = yield* deviceTools({ deviceAgentAccess: false });
     for (const [name, input] of [
-      ["device_list", {}],
-      ["device_open", { hostId: MAC, deviceId: IPHONE }],
-      ["device_screenshot", {}],
-      ["device_close", {}],
+      ["pinacode_device_list", {}],
+      ["pinacode_device_open", { hostId: MAC, deviceId: IPHONE }],
+      ["pinacode_device_screenshot", {}],
+      ["pinacode_device_close", {}],
     ] as const) {
       const result = yield* tools.call(name, input);
       assert.isTrue(result.isError, name);
@@ -656,7 +685,8 @@ it.effect("denies every device tool with T3's own error when agent device access
         "Agent device access is turned off for this environment.",
       );
       assert.isTrue(
-        denied || (name === "device_screenshot" && result.text === "Device screenshot failed."),
+        denied ||
+          (name === "pinacode_device_screenshot" && result.text === "Device screenshot failed."),
         `${name}: ${result.text}`,
       );
     }
@@ -668,8 +698,8 @@ it.effect("denies every device tool with T3's own error when agent device access
 it.effect("reports an unreadable capture as T3 does: a successful 0×0 screenshot", () =>
   Effect.gen(function* () {
     const tools = yield* deviceTools({ deviceInvalidCapture: true });
-    yield* tools.call("device_open", { hostId: MAC, deviceId: IPHONE });
-    const shot = yield* tools.call("device_screenshot", {});
+    yield* tools.call("pinacode_device_open", { hostId: MAC, deviceId: IPHONE });
+    const shot = yield* tools.call("pinacode_device_screenshot", {});
     assert.isFalse(shot.isError);
     assert.deepEqual(json(shot.text).screenshot, { mimeType: "image/png", width: 0, height: 0 });
     const sample = makeSample(
@@ -690,9 +720,11 @@ it.effect("refuses an open on a device another thread's agent-device session hol
     assert.deepEqual(tools.owners, [
       { deviceId: IPHONE, threadId: "acme-design-review", session: owner },
     ]);
-    // T3 has no cross-thread gate: device_open succeeds, and device_list shows only this thread.
-    const opened = json((yield* tools.call("device_open", { hostId: MAC, deviceId: IPHONE })).text);
-    assert.deepEqual(json((yield* tools.call("device_list", {})).text).open, [
+    // T3 has no cross-thread gate: pinacode_device_open succeeds, and pinacode_device_list shows only this thread.
+    const opened = json(
+      (yield* tools.call("pinacode_device_open", { hostId: MAC, deviceId: IPHONE })).text,
+    );
+    assert.deepEqual(json((yield* tools.call("pinacode_device_list", {})).text).open, [
       { hostId: MAC, deviceId: IPHONE },
     ]);
     const { command, targetArgs, session: bound } = opened.agentDevice;
@@ -754,7 +786,8 @@ it.effect("leaves a free device free when another thread holds a different one",
   Effect.gen(function* () {
     const tools = yield* deviceTools({ deviceOwners: { [IPHONE]: "acme-design-review" } });
     const opened = json(
-      (yield* tools.call("device_open", { hostId: SPARE_MAC, deviceId: SPARE_PHONE })).text,
+      (yield* tools.call("pinacode_device_open", { hostId: SPARE_MAC, deviceId: SPARE_PHONE }))
+        .text,
     );
     const { command, targetArgs, session } = opened.agentDevice;
     const flags = session === undefined ? ` ${targetArgs.join(" ")}` : "";
@@ -765,7 +798,9 @@ it.effect("leaves a free device free when another thread holds a different one",
     );
     // The local host always exists and holds none of the world's devices.
     assert.isFalse(
-      (yield* tools.call("device_list", {})).text.includes(`"hostId":"${LOCAL_DEVICE_HOST_ID}"`),
+      (yield* tools.call("pinacode_device_list", {})).text.includes(
+        `"hostId":"${LOCAL_DEVICE_HOST_ID}"`,
+      ),
     );
   }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );
@@ -795,7 +830,7 @@ it.effect(
       const tools = sample.devices!;
       const open = (hostId: string, deviceId: string) =>
         Effect.map(
-          tools.call("device_open", { hostId, deviceId }),
+          tools.call("pinacode_device_open", { hostId, deviceId }),
           (result): Opened => json(result.text).agentDevice,
         );
       const held = yield* open(MAC, IPHONE);
@@ -822,7 +857,7 @@ it.effect(
       const free = told(spareOpen);
       assert.include(
         free,
-        `agent-device launchers T3's device_open returned: ${
+        `agent-device launchers T3's pinacode_device_open returned: ${
           held.session === undefined
             ? `${held.command} (shared: each command's --udid or --serial and --session name its device and session)`
             : `${held.command} (drives Acme iPhone, ${IPHONE}, on build-mac, in session ${held.session}); ${spare.command} (drives Acme Spare iPhone, ${SPARE_PHONE}, on spare-mac, in session ${spare.session})`
@@ -876,7 +911,8 @@ it.effect(
       const alone = makeSample(deviceCase({}), base);
       yield* withDevices(alone);
       const own: Opened = json(
-        (yield* alone.devices!.call("device_open", { hostId: MAC, deviceId: IPHONE })).text,
+        (yield* alone.devices!.call("pinacode_device_open", { hostId: MAC, deviceId: IPHONE }))
+          .text,
       ).agentDevice;
       const request = shellRequest(
         alone,

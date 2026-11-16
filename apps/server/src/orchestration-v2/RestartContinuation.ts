@@ -110,7 +110,8 @@ export const restartStopRequested = Effect.fn("RestartContinuation.restartStopRe
     const taskId =
       source.delegatedTaskId ?? (forkedFrom?.type === "node" ? forkedFrom.nodeId : undefined);
     if (
-      lineage.relationshipToParent !== "subagent" ||
+      (lineage.relationshipToParent !== "subagent" &&
+        lineage.relationshipToParent !== "delegation") ||
       lineage.parentThreadId === null ||
       taskId === undefined
     )

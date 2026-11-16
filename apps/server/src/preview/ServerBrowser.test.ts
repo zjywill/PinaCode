@@ -628,44 +628,46 @@ it.effect("tells the desktop once per thread when its agent turns start and end"
   }).pipe(Effect.scoped, Effect.provide(layer)),
 );
 
-it.effect("preview_open reports its navigation timeout instead of the request budget", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const { broker, tabId } = yield* ready;
-      const manager = yield* Manager.PreviewManager;
-      initialNavigation = async () => {
-        throw Object.assign(new Error("page.goto: Timeout 15000ms exceeded."), {
-          name: "TimeoutError",
+it.effect(
+  "pinacode_preview_open reports its navigation timeout instead of the request budget",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { broker, tabId } = yield* ready;
+        const manager = yield* Manager.PreviewManager;
+        initialNavigation = async () => {
+          throw Object.assign(new Error("page.goto: Timeout 15000ms exceeded."), {
+            name: "TimeoutError",
+          });
+        };
+
+        const error = yield* broker
+          .invoke<PreviewAutomationStatus>({
+            scope,
+            operation: "open",
+            input: {
+              url: "http://localhost:1337/",
+              reuseExistingTab: false,
+              show: false,
+            },
+          })
+          .pipe(Effect.flip);
+
+        expect(error).toMatchObject({
+          _tag: "PreviewAutomationTimeoutError",
+          timeoutMs: 15_000,
         });
-      };
-
-      const error = yield* broker
-        .invoke<PreviewAutomationStatus>({
-          scope,
-          operation: "open",
-          input: {
-            url: "http://localhost:1337/",
-            reuseExistingTab: false,
-            show: false,
-          },
-        })
-        .pipe(Effect.flip);
-
-      expect(error).toMatchObject({
-        _tag: "PreviewAutomationTimeoutError",
-        timeoutMs: 15_000,
-      });
-      expect(error.message).toBe("Preview automation open timed out after 15000ms.");
-      // The failed open returned no tabId, so its tab must not linger and block later opens.
-      const { sessions } = yield* manager.list({ threadId: scope.thread.threadId });
-      expect(sessions.map((session) => session.tabId)).toEqual([tabId]);
-      expect(contexts[1]!.page.close).toHaveBeenCalled();
-    }),
-  ).pipe(Effect.provide(layer)),
+        expect(error.message).toBe("Preview automation open timed out after 15000ms.");
+        // The failed open returned no tabId, so its tab must not linger and block later opens.
+        const { sessions } = yield* manager.list({ threadId: scope.thread.threadId });
+        expect(sessions.map((session) => session.tabId)).toEqual([tabId]);
+        expect(contexts[1]!.page.close).toHaveBeenCalled();
+      }),
+    ).pipe(Effect.provide(layer)),
 );
 
 it.effect(
-  "an initial download stays available after preview_open reports the navigation error",
+  "an initial download stays available after pinacode_preview_open reports the navigation error",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -3276,7 +3278,7 @@ it.effect(
     ).pipe(Effect.provide(layer)),
 );
 
-it.effect("preview_open reports a tab it shows as visible once the client attaches", () =>
+it.effect("pinacode_preview_open reports a tab it shows as visible once the client attaches", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const browser = yield* ServerBrowser.ServerBrowser;
@@ -3329,7 +3331,7 @@ it.effect("a session's own tab stays its default while other sessions' tabs are 
 );
 
 it.effect(
-  "preview_open picks a reported profile by id or name and defaults to the reported one",
+  "pinacode_preview_open picks a reported profile by id or name and defaults to the reported one",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -3999,35 +4001,37 @@ it.effect("reports why a page failed to load while the tab shows the error page"
   ).pipe(Effect.provide(layer)),
 );
 
-it.effect("preview_open rejects a desktop navigation that failed before automation attached", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const { broker, tabId } = yield* ready;
-      const manager = yield* Manager.PreviewManager;
-      const channel = yield* DesktopChannel.DesktopBrowserChannel;
-      desktopRendersNext = true;
-      desktopPageUrl = "chrome-error://chromewebdata/";
-      const failure = {
-        ...certificateError,
-        url: "https://user:secret@device.local/?token=private#fragment",
-      };
-      using _failure = vi.spyOn(channel, "loadFailure").mockReturnValue(failure);
-      const error = yield* broker
-        .invoke<PreviewAutomationStatus>({
-          scope,
-          operation: "open",
-          input: { url: failure.url, reuseExistingTab: false, open: false },
-        })
-        .pipe(Effect.flip);
-      expect(error).toMatchObject({
-        _tag: "PreviewAutomationExecutionError",
-        reason: `Navigation to ${certificateError.url} failed: ${certificateError.description}`,
-      });
-      expect(JSON.stringify(error)).not.toMatch(/secret|private|fragment/);
-      const { sessions } = yield* manager.list({ threadId: scope.thread.threadId });
-      expect(sessions.map((session) => session.tabId)).toEqual([tabId]);
-    }),
-  ).pipe(Effect.provide(layer)),
+it.effect(
+  "pinacode_preview_open rejects a desktop navigation that failed before automation attached",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { broker, tabId } = yield* ready;
+        const manager = yield* Manager.PreviewManager;
+        const channel = yield* DesktopChannel.DesktopBrowserChannel;
+        desktopRendersNext = true;
+        desktopPageUrl = "chrome-error://chromewebdata/";
+        const failure = {
+          ...certificateError,
+          url: "https://user:secret@device.local/?token=private#fragment",
+        };
+        using _failure = vi.spyOn(channel, "loadFailure").mockReturnValue(failure);
+        const error = yield* broker
+          .invoke<PreviewAutomationStatus>({
+            scope,
+            operation: "open",
+            input: { url: failure.url, reuseExistingTab: false, open: false },
+          })
+          .pipe(Effect.flip);
+        expect(error).toMatchObject({
+          _tag: "PreviewAutomationExecutionError",
+          reason: `Navigation to ${certificateError.url} failed: ${certificateError.description}`,
+        });
+        expect(JSON.stringify(error)).not.toMatch(/secret|private|fragment/);
+        const { sessions } = yield* manager.list({ threadId: scope.thread.threadId });
+        expect(sessions.map((session) => session.tabId)).toEqual([tabId]);
+      }),
+    ).pipe(Effect.provide(layer)),
 );
 
 it.effect("reports a desktop tab's load failure from before the server connected", () =>

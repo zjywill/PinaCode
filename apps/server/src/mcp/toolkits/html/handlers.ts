@@ -49,7 +49,7 @@ const pageSource = Effect.fn("HtmlToolkit.pageSource")(function* (input: {
 
 const handlers = {
   // Local-file access limits this host browser to T3-launched agents.
-  html_preview: McpToolAccess.readsAsCaller((input) =>
+  pinacode_html_preview: McpToolAccess.readsAsCaller((input) =>
     Effect.gen(function* () {
       const htmlRender = yield* HtmlRender.HtmlRender;
       const source = yield* pageSource(input);
@@ -67,10 +67,13 @@ const handlers = {
       };
     }),
   ),
-  html_render: McpToolAccess.actsAsCaller((input) =>
+  pinacode_html_render: McpToolAccess.actsAsCaller((input) =>
     Effect.gen(function* () {
       const scope = yield* McpInvocationContext.McpInvocationContext;
-      const { thread } = yield* McpInvocationContext.requireThreadScope(scope, "html_render");
+      const { thread } = yield* McpInvocationContext.requireThreadScope(
+        scope,
+        "pinacode_html_render",
+      );
       const htmlRender = yield* HtmlRender.HtmlRender;
       const source = yield* pageSource(input);
       const reference = yield* htmlRender
@@ -86,9 +89,9 @@ const handlers = {
 } satisfies McpToolAccess.Handlers<typeof HtmlToolkit.tools>;
 
 export const layerPreview = McpToolAccess.toLayer(HtmlPreviewToolkit, {
-  html_preview: handlers.html_preview,
+  pinacode_html_preview: handlers.pinacode_html_preview,
 });
 
 export const layerRender = McpToolAccess.toLayer(HtmlRenderToolkit, {
-  html_render: handlers.html_render,
+  pinacode_html_render: handlers.pinacode_html_render,
 });

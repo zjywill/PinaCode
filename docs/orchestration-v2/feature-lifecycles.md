@@ -256,7 +256,7 @@ ends the thread's pull request watches, and drops wakes its delegated tasks stil
 owe, so nothing automatic restarts the thread. It then stops every delegated task
 under the thread: a `delegated-tasks.stop` effect sends the internal `thread.stop`
 command to each child thread, depth first. This runs after commit, not inside the
-parent's command, because a command holds only its own thread's lock. `task_cancel`
+parent's command, because a command holds only its own thread's lock. `pinacode_task_cancel`
 sends the same `thread.stop` to its child.
 
 ## Resumption

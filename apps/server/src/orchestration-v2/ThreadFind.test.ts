@@ -423,7 +423,7 @@ describe("V2 thread find", () => {
         {
           ...item("render", 0, ""),
           type: "dynamic_tool",
-          toolName: "html_render",
+          toolName: "pinacode_html_render",
           input: {},
           output: { htmlRender: { attachmentId: "visual", title: "Result", height: 120 } },
         },

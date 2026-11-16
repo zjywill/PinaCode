@@ -76,15 +76,15 @@ describe("device tool helpers", () => {
     expect(examples.join("\n")).not.toMatch(/--(?:platform|udid|serial|config|session)\b/);
     expect(text).not.toContain("remain available");
     expect(text).toContain("Do not use simctl, idb, adb or ssh for those actions.");
-    expect(text).toContain("If it is missing, call device_open again.");
+    expect(text).toContain("If it is missing, call pinacode_device_open again.");
   });
 
-  it("opens the app before snapshots, CLI screenshots or input, looks with device_screenshot, and records the device screen", () => {
+  it("opens the app before snapshots, CLI screenshots or input, looks with pinacode_device_screenshot, and records the device screen", () => {
     const command = "/state/device/targets/t3-a/agent-device";
     const text = agentDeviceQuickStart(device, [], command);
-    // device_open starts no agent-device session, and an iOS snapshot needs one with an app.
+    // pinacode_device_open starts no agent-device session, and an iOS snapshot needs one with an app.
     expect(text).toContain(
-      "Run open <bundle-or-package-id> (apps lists them) before snapshots, CLI screenshots or input; it starts the session they need. Use device_screenshot just to look.",
+      "Run open <bundle-or-package-id> (apps lists them) before snapshots, CLI screenshots or input; it starts the session they need. Use pinacode_device_screenshot just to look.",
     );
     // App-scoped recording needs an app opened in the session; device scope does not.
     expect(text).toContain(

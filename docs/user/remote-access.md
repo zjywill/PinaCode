@@ -314,7 +314,7 @@ an address you trust: the code is sent there.
   removes it here.
 - Links last 30 days. Link again with a new pairing code to renew one.
 
-An agent can also hand a task to a linked machine with `delegate_task`: it runs
+An agent can also hand a task to a linked machine with `pinacode_delegate_task`: it runs
 there as an ordinary thread, in the project with the same repository (or the
 one `target.projectId` names), and this thread wakes with its result when it
 ends, as for any delegated task. It keeps following the task across restarts.

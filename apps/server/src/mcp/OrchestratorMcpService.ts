@@ -375,7 +375,9 @@ function advertisedModelsHint(models: ReadonlyArray<ServerProviderModel>, reques
     .slice(0, LISTED_MODEL_LIMIT);
   const omitted = models.length - listed.length;
   return `Advertised models: ${listed.map((model) => model.slug).join(", ")}${
-    omitted > 0 ? ` and ${omitted} more; orchestrator_capabilities with search finds them` : ""
+    omitted > 0
+      ? ` and ${omitted} more; pinacode_orchestrator_capabilities with search finds them`
+      : ""
   }.`;
 }
 
@@ -444,7 +446,7 @@ function providerConstraints(
   return constraints;
 }
 
-/** t3_thread_launch keeps a selection as given, so it can hold options its model does not have. */
+/** pinacode_thread_launch keeps a selection as given, so it can hold options its model does not have. */
 function knownOptions(
   options: ReadonlyArray<ProviderOptionSelection> | undefined,
   descriptors: ReadonlyArray<ProviderOptionDescriptor> | undefined,
@@ -626,7 +628,8 @@ function directAppOwnedChildTasks(
 ): ReadonlyArray<OrchestrationV2Subagent> {
   if (
     target.thread.lineage.parentThreadId !== parent.thread.id ||
-    target.thread.lineage.relationshipToParent !== "subagent"
+    (target.thread.lineage.relationshipToParent !== "subagent" &&
+      target.thread.lineage.relationshipToParent !== "delegation")
   ) {
     return [];
   }
@@ -1374,7 +1377,7 @@ const make = Effect.gen(function* () {
   const resolveProjectTarget = (
     parent: Pick<OrchestrationV2ThreadProjection, "thread"> | undefined,
     projectId: ProjectId | undefined,
-    missingMessage = "Pass projectId: this MCP client is not running inside a T3 thread.",
+    missingMessage = "Pass projectId: this MCP client is not running inside a PinaCode thread.",
   ) =>
     projectId !== undefined
       ? Effect.succeed(projectId)
@@ -1817,6 +1820,13 @@ const make = Effect.gen(function* () {
     const result = {
       taskId: task.id,
       childThreadId: task.childThreadId,
+      ...(childControls.thread.lineage?.relationshipToParent === "delegation"
+        ? {
+            session: "independent" as const,
+            worktreePath: childControls.thread.worktreePath,
+            branch: childControls.thread.branch,
+          }
+        : {}),
       link: formatThreadLink(
         { environmentId: scope.environmentId, threadId: task.childThreadId },
         childControls.thread.title,
@@ -2233,7 +2243,7 @@ const make = Effect.gen(function* () {
         return yield* failure(
           "invalid_request",
           parent === undefined
-            ? "bindToCurrentThread needs an agent running inside a T3 thread."
+            ? "bindToCurrentThread needs an agent running inside a PinaCode thread."
             : "bindToCurrentThread binds to this thread, which belongs to a different project.",
         );
       }
@@ -2317,7 +2327,7 @@ const make = Effect.gen(function* () {
           return yield* failure(
             "invalid_request",
             parent === undefined
-              ? "bindToCurrentThread needs an agent running inside a T3 thread."
+              ? "bindToCurrentThread needs an agent running inside a PinaCode thread."
               : "bindToCurrentThread binds to this thread, which belongs to a different project.",
           );
         }
@@ -2397,7 +2407,10 @@ const make = Effect.gen(function* () {
       },
     ),
     requestSecret: Effect.fn("OrchestratorMcpService.requestSecret")(function* (scope, input) {
-      const { scope: threadScope, parent } = yield* loadThreadCaller(scope, "request_secret");
+      const { scope: threadScope, parent } = yield* loadThreadCaller(
+        scope,
+        "pinacode_request_secret",
+      );
       const threadId = threadScope.thread.threadId;
       const run = ThreadManagementService.latestActiveRun(parent);
       if (
@@ -2575,7 +2588,7 @@ const make = Effect.gen(function* () {
         runtimeMode: limits.runtimeMode,
         interactionMode: limits.interactionMode,
         providers: providers.map((provider) => {
-          // Snapshots list instances any project enables; delegate_task checks the caller's project.
+          // Snapshots list instances any project enables; pinacode_delegate_task checks the caller's project.
           const enabledForCaller =
             parent === undefined ||
             resolveProjectProviderInstanceEnabled(
@@ -2636,13 +2649,25 @@ const make = Effect.gen(function* () {
       };
     }),
     delegateTask: Effect.fn("OrchestratorMcpService.delegateTask")(function* (callerScope, input) {
+      if (input.session === "independent" && input.isolation === "shared") {
+        return yield* failure(
+          "invalid_request",
+          "Independent sessions require their own worktree.",
+        );
+      }
       const environmentId =
         input.target === undefined
           ? undefined
           : PeerForwarding.remoteTarget(callerScope, input.target.environmentId);
       if (input.target !== undefined && environmentId !== undefined) {
+        if (input.session === "independent") {
+          return yield* failure(
+            "invalid_request",
+            "Independent review sessions currently require the coordinator's environment.",
+          );
+        }
         yield* requireCapability(callerScope);
-        const scope = yield* requireThreadScope(callerScope, "delegate_task");
+        const scope = yield* requireThreadScope(callerScope, "pinacode_delegate_task");
         // The task's child runs as an ordinary thread there; this thread keeps the task.
         const { taskId } = yield* remoteDelegation.delegate(scope, {
           ...input,
@@ -2652,7 +2677,7 @@ const make = Effect.gen(function* () {
           ? awaitTask(scope, taskId, taskId, input.timeoutMs)
           : readTask(scope, taskId, false, true);
       }
-      const { scope, parent } = yield* loadThreadCaller(callerScope, "delegate_task");
+      const { scope, parent } = yield* loadThreadCaller(callerScope, "pinacode_delegate_task");
       if (
         input.target?.projectId !== undefined &&
         input.target.projectId !== parent.thread.projectId
@@ -2699,7 +2724,10 @@ const make = Effect.gen(function* () {
         input.interactionMode,
       );
       let workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy | undefined;
-      if (input.isolation === "worktree" && !isRetryOfAcceptedDelegation) {
+      if (
+        (input.isolation === "worktree" || input.session === "independent") &&
+        !isRetryOfAcceptedDelegation
+      ) {
         const project = yield* requireProject(parent.thread.projectId);
         const base = yield* gitDriver
           .resolveCommit({
@@ -2741,6 +2769,7 @@ const make = Effect.gen(function* () {
           parentRunId: parentRun.id,
           parentNodeId: parentRun.rootNodeId,
           task: taskPrompt(input),
+          ...(input.session === undefined ? {} : { session: input.session }),
           ...(input.title === undefined ? {} : { title: input.title }),
           modelSelection: target.modelSelection,
           runtimeMode,
@@ -2793,11 +2822,11 @@ const make = Effect.gen(function* () {
         : readTask(scope, taskId, false, true);
     }),
     taskStatus: Effect.fn("OrchestratorMcpService.taskStatus")(function* (callerScope, taskId) {
-      const scope = yield* requireThreadScope(callerScope, "task_status");
+      const scope = yield* requireThreadScope(callerScope, "pinacode_task_status");
       return yield* readTask(scope, taskId, false, true);
     }),
     cancelTask: Effect.fn("OrchestratorMcpService.cancelTask")(function* (callerScope, input) {
-      const scope = yield* requireThreadScope(callerScope, "task_cancel");
+      const scope = yield* requireThreadScope(callerScope, "pinacode_task_cancel");
       const current = yield* readTask(scope, input.taskId);
       const childThreadId = current.childThreadId;
       if (childThreadId === null) {
@@ -3014,7 +3043,7 @@ const make = Effect.gen(function* () {
     }),
     createThreads: Effect.fn("OrchestratorMcpService.createThreads")(
       function* (callerScope, input) {
-        const { scope, parent } = yield* loadThreadCaller(callerScope, "create_threads");
+        const { scope, parent } = yield* loadThreadCaller(callerScope, "pinacode_create_threads");
         const parentRun = ThreadManagementService.latestActiveRun(parent);
         if (
           parentRun === undefined ||
@@ -3206,7 +3235,7 @@ const make = Effect.gen(function* () {
         : yield* resolveProjectTarget(
             parent,
             input.projectId,
-            "Pass projectId, or allProjects: true for every project. This MCP client is not running inside a T3 thread.",
+            "Pass projectId, or allProjects: true for every project. This MCP client is not running inside a PinaCode thread.",
           );
       if (!input.allProjects && input.projectId !== undefined) {
         yield* requireProject(input.projectId);

@@ -57,7 +57,7 @@ it("advertises only string enum values, which Gemini requires", () => {
       else collect(value);
     }
   };
-  collect(advertisedJsonSchema(ThemeToolkit.tools.t3_theme_set));
+  collect(advertisedJsonSchema(ThemeToolkit.tools.pinacode_theme_set));
 
   expect(enumValues.filter((value) => typeof value !== "string")).toEqual([]);
 });

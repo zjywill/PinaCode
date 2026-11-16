@@ -68,41 +68,41 @@ policy. Approving without a code starts at **Read only**:
 
 ## What outside agents can call
 
-Some tools only work for an agent running inside a T3 thread, because they act
+Some tools only work for an agent running inside a PinaCode thread, because they act
 as that thread: subagents, secret requests, rendered HTML, the browser preview,
 devices, and worktree handoff. They still appear in an outside agent's tool
 list, but calling one returns an error saying it needs an agent running inside
 T3 Code.
 
-- To hand off work, start a thread with `t3_thread_launch`, then follow it with
-  `t3_thread_wait` or `t3_thread_read`, instead of `create_threads` or
-  `delegate_task`.
+- To hand off work, start a thread with `pinacode_thread_launch`, then follow it with
+  `pinacode_thread_wait` or `pinacode_thread_read`, instead of `pinacode_create_threads` or
+  `pinacode_delegate_task`.
 - Tools that default to the caller's own project or thread need an explicit
   `projectId` or `threadId`.
-- To list threads across projects, call `t3_thread_list` with
-  `allProjects: true`, or use `t3_thread_search`.
+- To list threads across projects, call `pinacode_thread_list` with
+  `allProjects: true`, or use `pinacode_thread_search`.
 
 ## Claude Code
 
 ```sh
-claude mcp add --transport http t3 https://<environment-address>/mcp
-claude mcp login t3
+claude mcp add --transport http pinacode https://<environment-address>/mcp
+claude mcp login pinacode
 ```
 
 `claude mcp login` opens the sign-in page in your browser. On a machine
 without a browser, add `--no-browser`, open the printed URL elsewhere, and
-paste the final URL back when asked. `claude mcp list` shows `t3` as connected
+paste the final URL back when asked. `claude mcp list` shows `pinacode` as connected
 once you approve.
 
 ## Codex
 
 ```sh
-codex mcp add t3 --url https://<environment-address>/mcp
-codex mcp login t3
+codex mcp add pinacode --url https://<environment-address>/mcp
+codex mcp login pinacode
 ```
 
 `codex mcp login --no-browser` prints the sign-in URL instead of opening it.
-`codex mcp list` shows `t3` with OAuth once you approve.
+`codex mcp list` shows `pinacode` with OAuth once you approve.
 
 ## ChatGPT
 

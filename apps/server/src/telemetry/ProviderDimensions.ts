@@ -136,21 +136,21 @@ export function handoffSettings(tool: string, args: unknown, result: unknown): F
   const input = asFields(args);
   const output = asFields(result);
   switch (tool) {
-    case "delegate_task":
+    case "pinacode_delegate_task":
       return defined({
         targetChosen: input.target !== undefined,
         // Rejected calls are recorded too, so input strings must match a literal.
         mode: oneOf(stringField(input, "mode"), ["async", "wait"]) ?? "async",
         ...(output.waitTimedOut === true ? { waitTimedOut: true } : {}),
       });
-    case "create_threads": {
+    case "pinacode_create_threads": {
       const threads = Array.isArray(input.threads) ? input.threads : [];
       return {
         batchSize: threads.length,
         targetChosen: threads.some((thread) => asFields(thread).target !== undefined),
       };
     }
-    case "t3_thread_launch":
+    case "pinacode_thread_launch":
       return defined({
         targetChosen: input.modelSelection !== undefined,
         workspace:
@@ -162,11 +162,11 @@ export function handoffSettings(tool: string, args: unknown, result: unknown): F
                 "existing_worktree",
               ]) ?? "root"),
       });
-    case "t3_thread_send":
+    case "pinacode_thread_send":
       return defined({ delivery: stringField(output, "delivery") });
-    case "t3_thread_send_attachments":
+    case "pinacode_thread_send_attachments":
       return { delivery: "auto" };
-    case "schedule_task": {
+    case "pinacode_schedule_task": {
       // Omitting the input lets the server decide, so read the saved task.
       const bound = output.boundThreadId;
       return bound === null || typeof bound === "string"
@@ -198,7 +198,7 @@ export function toolOutcome(
 /**
  * Event properties for an agent tool call: the calling agent, and when the call
  * handed work to other threads, the agents running them. Each target counts
- * once, so a create_threads batch on two providers reports both.
+ * once, so a pinacode_create_threads batch on two providers reports both.
  */
 export function agentToolProperties(input: {
   readonly tool: string;

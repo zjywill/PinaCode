@@ -17,7 +17,7 @@ const BoundedUrl = Schema.String.check(Schema.isTrimmed())
   .check(Schema.isMaxLength(2048));
 const URL_GUIDANCE = "Absolute http(s) URL, or a bare host (https; http for loopback).";
 const PROFILE_GUIDANCE =
-  "Profile id or name from preview_status, for a new tab. Default: the user's. A tab keeps its profile.";
+  "Profile id or name from pinacode_preview_status, for a new tab. Default: the user's. A tab keeps its profile.";
 const OptionalTimeoutMs = Schema.optional(
   Schema.Int.check(Schema.isGreaterThan(0)).check(Schema.isLessThanOrEqualTo(60_000)),
 ).annotate({ description: "Default 15000." });
@@ -425,7 +425,7 @@ export const PreviewAutomationScrollInput = Schema.Struct({
 );
 export type PreviewAutomationScrollInput = typeof PreviewAutomationScrollInput.Type;
 
-/** Strict input for each `preview_act` action. */
+/** Strict input for each `pinacode_preview_act` action. */
 export const PreviewAutomationActInputs = {
   click: PreviewAutomationClickInput,
   type: PreviewAutomationTypeInput,
@@ -758,7 +758,7 @@ export class PreviewAutomationNoAvailableHostError extends Schema.TaggedError<Pr
   },
 ) {
   override get message(): string {
-    return `No preview automation host is available for ${this.operation} in environment ${this.environmentId}. The server-owned browser may be starting or reconnecting. Retry preview_status, then call preview_open if no tab is available. If it remains unavailable, report the browser connection failure.`;
+    return `No preview automation host is available for ${this.operation} in environment ${this.environmentId}. The server-owned browser may be starting or reconnecting. Retry pinacode_preview_status, then call pinacode_preview_open if no tab is available. If it remains unavailable, report the browser connection failure.`;
   }
 }
 
@@ -783,8 +783,8 @@ export class PreviewAutomationTabNotFoundError extends Schema.TaggedError<Previe
 ) {
   override get message(): string {
     return this.tabId
-      ? `Preview tab ${this.tabId} was not found for ${this.operation}. Omit tabId to use the current tab, or call preview_open.`
-      : `No active preview tab was found for ${this.operation}. Call preview_open first.`;
+      ? `Preview tab ${this.tabId} was not found for ${this.operation}. Omit tabId to use the current tab, or call pinacode_preview_open.`
+      : `No active preview tab was found for ${this.operation}. Call pinacode_preview_open first.`;
   }
 }
 
@@ -848,12 +848,12 @@ export class PreviewAutomationControlInterruptedError extends Schema.TaggedError
     if (this.reason === "humanControl")
       return "A human controls this browser tab. Wait until they release control.";
     if (this.reason === "tabRequired")
-      return "Multiple browser tabs belong to this session. Pass a tabId from preview_open or from the tabs listed by preview_status.";
+      return "Multiple browser tabs belong to this session. Pass a tabId from pinacode_preview_open or from the tabs listed by pinacode_preview_status.";
     if (this.reason === "dialogPending")
-      return "A browser dialog is pending. Read preview_status and resolve it with preview_dialog.";
+      return "A browser dialog is pending. Read pinacode_preview_status and resolve it with pinacode_preview_dialog.";
     if (this.reason === "tabLimit")
-      return "Too many server browser tabs are open. Close one with t3_preview_close, or reuse a tabId from preview_status tabs.";
-    if (this.reason === "closed") return "This browser tab is closed. Call preview_open.";
+      return "Too many server browser tabs are open. Close one with pinacode_preview_close, or reuse a tabId from pinacode_preview_status tabs.";
+    if (this.reason === "closed") return "This browser tab is closed. Call pinacode_preview_open.";
     if (this.reason === "interrupted")
       return "Browser control changed. Take a fresh snapshot before trying again.";
     return `Preview automation ${this.operation} was interrupted on client ${this.clientId}.`;

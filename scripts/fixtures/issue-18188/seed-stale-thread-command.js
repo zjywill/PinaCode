@@ -1,5 +1,5 @@
 /**
- * Run in the isolated dev client's browser with preview_evaluate.
+ * Run in the isolated dev client's browser with pinacode_preview_evaluate.
  * Seed only IndexedDB; authoritative server state remains unchanged.
  * Await completion, then reload before exercising Stop.
  */

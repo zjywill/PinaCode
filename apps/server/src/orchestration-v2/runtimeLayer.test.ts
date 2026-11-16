@@ -539,7 +539,7 @@ it.layer(layerProjectDeletionTest)("project deletion during thread commands", (i
         }
         const save = (name: string, target: ThreadId | null, webhook = false) =>
           tasks.upsert({
-            // As schedule_task sends it, so clearing the thread unbinds the task.
+            // As pinacode_schedule_task sends it, so clearing the thread unbinds the task.
             threadMode: target === null ? "new_thread" : "continue",
             id: ScheduledTaskId.make(`automation:${deletion}:${name}`),
             title: name,
@@ -1176,7 +1176,7 @@ it.layer(layerProjectDeletionTest)("project deletion during thread commands", (i
     }),
   );
 
-  it.effect("deleted sources keep the html_render pages any live fork shows", () =>
+  it.effect("deleted sources keep the pinacode_html_render pages any live fork shows", () =>
     Effect.gen(function* () {
       const projects = yield* ProjectService.ProjectService;
       const orchestrator = yield* Orchestrator.OrchestratorV2;
@@ -3530,7 +3530,7 @@ const writeHtmlRenderRun = Effect.fn("test.writeHtmlRenderRun")(function* (input
           startedAt: now,
           completedAt: now,
           updatedAt: now,
-          toolName: "mcp__t3-code__html_render",
+          toolName: "mcp__pinacode__pinacode_html_render",
           input: {},
           output: [
             {
@@ -8953,7 +8953,7 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
           creationSource: "web",
         });
       }
-      // What t3_thread_send dispatches: no model of its own.
+      // What pinacode_thread_send dispatches: no model of its own.
       yield* orchestrator.dispatch({
         type: "message.dispatch",
         commandId: CommandId.make(`${threadId}:agent`),

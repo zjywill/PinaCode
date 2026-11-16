@@ -50,7 +50,7 @@ import * as PeerLinkRequests from "../peer/PeerLinkRequests.ts";
 import * as PeerLinks from "../peer/PeerLinks.ts";
 
 // A linked environment's session drives this one's real orchestrator through
-// its real T3 tools. What the link starts carries its origin, and the link
+// its real PinaCode tools. What the link starts carries its origin, and the link
 // changes only that.
 
 const instanceId = ProviderInstanceId.make("codex");
@@ -255,7 +255,7 @@ const launch = (
   title: string,
   extra: Record<string, unknown> = {},
 ) =>
-  call(scope, "t3_thread_launch", {
+  call(scope, "pinacode_thread_launch", {
     projectId,
     title,
     modelSelection: { instanceId, model: "gpt-5" },
@@ -358,7 +358,7 @@ it.layer(Layer.provideMerge(layerTools, layerOrchestration))("work a link starts
       const users = yield* usersOwnThread;
       const ownLaunch = yield* launch(laptop, "The laptop's");
       const rename = (scope: McpInvocationContext.McpInvocationScope, threadId: ThreadId) =>
-        call(scope, "t3_thread_update", {
+        call(scope, "pinacode_thread_update", {
           threadId,
           action: "rename",
           title: `Renamed by ${scope.client!.sessionId}`,
@@ -375,8 +375,8 @@ it.layer(Layer.provideMerge(layerTools, layerOrchestration))("work a link starts
       assert.equal((yield* rename(claudeCode, users)).isError, false);
       // Naming this environment's own id is still this environment's thread.
       for (const [name, args] of [
-        ["t3_thread_send", { message: "From the laptop." }],
-        ["t3_thread_interrupt", {}],
+        ["pinacode_thread_send", { message: "From the laptop." }],
+        ["pinacode_thread_interrupt", {}],
       ] as const) {
         const result = yield* call(laptop, name, {
           ...args,
@@ -388,12 +388,14 @@ it.layer(Layer.provideMerge(layerTools, layerOrchestration))("work a link starts
 
       // Nor scheduled tasks, which belong to no thread.
       assert.equal(
-        failureCode(yield* call(laptop, "delete_scheduled_task", { scheduledTaskId: "any" })),
+        failureCode(
+          yield* call(laptop, "pinacode_delete_scheduled_task", { scheduledTaskId: "any" }),
+        ),
         "capability_denied",
       );
 
       // Reads are not fenced.
-      const read = yield* call(laptop, "t3_thread_read", { threadId: users });
+      const read = yield* call(laptop, "pinacode_thread_read", { threadId: users });
       assert.equal(read.isError, false);
     }),
   );
@@ -409,15 +411,15 @@ it.layer(Layer.provideMerge(layerTools, layerOrchestration))("work a link starts
         access: "full-access",
       });
 
-      const renamed = yield* call(trusted, "t3_thread_update", {
+      const renamed = yield* call(trusted, "pinacode_thread_update", {
         threadId: users,
         action: "rename",
         title: "Renamed from the desk",
       });
       assert.equal(renamed.isError, false, JSON.stringify(renamed.content));
       for (const [name, args] of [
-        ["t3_project_update", { projectId, title: "The desk's now" }],
-        ["t3_project_create", { title: "t3code", workspaceRoot: "/p/t3code" }],
+        ["pinacode_project_update", { projectId, title: "The desk's now" }],
+        ["pinacode_project_create", { title: "pinacode", workspaceRoot: "/p/t3code" }],
       ] as const) {
         const changed = yield* call(trusted, name, args);
         assert.equal(changed.isError, false, `${name}: ${JSON.stringify(changed.content)}`);

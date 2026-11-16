@@ -28,7 +28,7 @@ it("exports provider-compatible object schemas", () => {
     expect(schema.type, `${tool.name} must export a top-level object schema`).toBe("object");
     expect(schema.anyOf, `${tool.name} must not export a root anyOf`).toBeUndefined();
     expect(schema.oneOf, `${tool.name} must not export a root oneOf`).toBeUndefined();
-    if (tool.name === "preview_navigate") {
+    if (tool.name === "pinacode_preview_navigate") {
       expect(schemaHasMultipleAllOfDescriptions(schema)).toBe(false);
     }
     expect(
@@ -38,8 +38,10 @@ it("exports provider-compatible object schemas", () => {
   }
 });
 
-it("preview_open accepts a target while preserving open input constraints", () => {
-  const decode = Schema.decodeUnknownSync(PreviewToolkit.tools.preview_open.parametersSchema);
+it("pinacode_preview_open accepts a target while preserving open input constraints", () => {
+  const decode = Schema.decodeUnknownSync(
+    PreviewToolkit.tools.pinacode_preview_open.parametersSchema,
+  );
   const target = { kind: "environment-port", port: 3000 };
   expect(decode({ target })).toEqual({ target });
   expect(decode({})).toEqual({});

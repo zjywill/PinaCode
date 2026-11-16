@@ -595,7 +595,7 @@ const cancelBackgroundOnlyTask = (
         const owned = Effect.map(orchestrator.getThreadProjection(task.childThreadId!), (child) =>
           child.runtimeRequests.find((request) => request.id === "request:owned"),
         );
-        // task_cancel settles a finished turn itself; a running one settles when it ends.
+        // pinacode_task_cancel settles a finished turn itself; a running one settles when it ends.
         if ((yield* owned)?.status !== "resolved") yield* Fiber.join(settled);
 
         const childAfter = yield* orchestrator.getThreadProjection(task.childThreadId!);
@@ -663,24 +663,26 @@ const cancelBackgroundOnlyTask = (
     }),
   ).pipe(Effect.provide(NodeServices.layer));
 
-it.effect("task_cancel ends a delegated child's background native subagent", () =>
+it.effect("pinacode_task_cancel ends a delegated child's background native subagent", () =>
   cancelBackgroundOnlyTask("subagent"),
 );
 
-it.effect("task_cancel ends a delegated child's background shell command", () =>
+it.effect("pinacode_task_cancel ends a delegated child's background shell command", () =>
   cancelBackgroundOnlyTask("command"),
 );
 
-it.effect("task_cancel ends background work while the child's run captures its checkpoint", () =>
-  cancelBackgroundOnlyTask("command", { cancelAt: "checkpoint" }),
+it.effect(
+  "pinacode_task_cancel ends background work while the child's run captures its checkpoint",
+  () => cancelBackgroundOnlyTask("command", { cancelAt: "checkpoint" }),
 );
 
-it.effect("task_cancel ends background work left by a turn that finishes after Stop", () =>
+it.effect("pinacode_task_cancel ends background work left by a turn that finishes after Stop", () =>
   cancelBackgroundOnlyTask("command", { cancelAt: "turn" }),
 );
 
-it.effect("task_cancel ends the shell's question though a monitor ran after the turn", () =>
-  cancelBackgroundOnlyTask("command", { cancelAt: "monitor" }),
+it.effect(
+  "pinacode_task_cancel ends the shell's question though a monitor ran after the turn",
+  () => cancelBackgroundOnlyTask("command", { cancelAt: "monitor" }),
 );
 
 it.effect("cancellation and Stop commit together and recover before the outbox ran", () =>
@@ -691,6 +693,7 @@ it.effect("a refused descendant stop does not settle or dispose its parent task"
   cancelBackgroundOnlyTask("command", { cancelAt: "refused" }),
 );
 
-it.effect("task_cancel stops a remote descendant without reacquiring its parent lock", () =>
-  cancelBackgroundOnlyTask("command", { remote: true }),
+it.effect(
+  "pinacode_task_cancel stops a remote descendant without reacquiring its parent lock",
+  () => cancelBackgroundOnlyTask("command", { remote: true }),
 );

@@ -71,8 +71,8 @@ export const FollowRetrySchedule = Context.Reference<Schedule.Schedule<unknown>>
 
 type ThreadScope = McpInvocationContext.McpThreadInvocationScope;
 
-/** `orchestrator_capabilities` there. Its toolkit imports this module, so it is described here. */
-const RemoteCapabilitiesTool = Tool.make("orchestrator_capabilities", {
+/** `pinacode_orchestrator_capabilities` there. Its toolkit imports this module, so it is described here. */
+const RemoteCapabilitiesTool = Tool.make("pinacode_orchestrator_capabilities", {
   parameters: OrchestratorMcpCapabilitiesInput,
   success: OrchestratorMcpCapabilitiesResult,
   failure: OrchestratorMcpFailure,
@@ -80,7 +80,7 @@ const RemoteCapabilitiesTool = Tool.make("orchestrator_capabilities", {
 });
 
 /**
- * `delegate_task` to a linked environment. The task's child is an ordinary
+ * `pinacode_delegate_task` to a linked environment. The task's child is an ordinary
  * thread there, launched through the link; the parent here records the task
  * like a local one, without a child thread, and a follower completes it when
  * the thread there ends, so the parent wakes as it would for a local child.
@@ -97,7 +97,7 @@ export class RemoteDelegation extends Context.Service<
       },
     ) => Effect.Effect<{ readonly taskId: NodeId }, OrchestratorMcpFailure>;
     /**
-     * A `t3_thread_send` there that started or queued a run on the thread of
+     * A `pinacode_thread_send` there that started or queued a run on the thread of
      * one of this thread's tasks that has its result: like a follow-up to a
      * finished child here, that run is a new task, whose id the send returns.
      * Any other send is returned as it came.
@@ -189,7 +189,7 @@ const make = Effect.gen(function* () {
       Effect.orElseSucceed(() => undefined),
     );
     // The project's own identity is a one-minute cache that reads blank when
-    // cold, so resolve it here, as the other side's t3_project_list does.
+    // cold, so resolve it here, as the other side's pinacode_project_list does.
     const key =
       here === undefined
         ? undefined
@@ -203,8 +203,8 @@ const make = Effect.gen(function* () {
     const matches: Array<{ readonly id: ProjectId; readonly title: string }> = [];
     let cursor: number | null = 0;
     while (cursor !== null) {
-      const listed: Tool.Success<typeof ProjectToolkit.tools.t3_project_list> =
-        yield* forwarding.call(scope, ProjectToolkit.tools.t3_project_list, environmentId, {
+      const listed: Tool.Success<typeof ProjectToolkit.tools.pinacode_project_list> =
+        yield* forwarding.call(scope, ProjectToolkit.tools.pinacode_project_list, environmentId, {
           cursor,
           limit: 100,
         });
@@ -218,7 +218,7 @@ const make = Effect.gen(function* () {
       code: "invalid_request",
       message:
         matches.length === 0
-          ? `No project there has this repository (${key}). Pass target.projectId; t3_project_list with this environmentId lists them. To bring the repository there, use t3_project_clone and then t3_project_create with this environmentId.`
+          ? `No project there has this repository (${key}). Pass target.projectId; pinacode_project_list with this environmentId lists them. To bring the repository there, use pinacode_project_clone and then pinacode_project_create with this environmentId.`
           : `Several projects there have this repository: ${matches.map((project) => `${project.title} (${project.id})`).join(", ")}. Pass target.projectId.`,
     });
   });
@@ -256,7 +256,7 @@ const make = Effect.gen(function* () {
     if (chosen === undefined) {
       return yield* new OrchestratorMcpFailure({
         code: "provider_unavailable",
-        message: `No instance of driver ${requested.driverKind} there can run a child task. orchestrator_capabilities with this environmentId lists its providers.`,
+        message: `No instance of driver ${requested.driverKind} there can run a child task. pinacode_orchestrator_capabilities with this environmentId lists its providers.`,
       });
     }
     return chosen.providerInstanceId;
@@ -294,7 +294,7 @@ const make = Effect.gen(function* () {
         return yield* new OrchestratorMcpFailure({
           code: "invalid_request",
           message:
-            'A task in a linked environment runs in that project\'s checkout; isolation "worktree" is not supported there. Omit isolation, or use t3_thread_launch with environmentId and a worktree workspaceStrategy.',
+            'A task in a linked environment runs in that project\'s checkout; isolation "worktree" is not supported there. Omit isolation, or use pinacode_thread_launch with environmentId and a worktree workspaceStrategy.',
         });
       }
       // The provider and model inherit as they do for a task here. Another
@@ -313,7 +313,8 @@ const make = Effect.gen(function* () {
       if (model === undefined) {
         return yield* new OrchestratorMcpFailure({
           code: "target_required",
-          message: "Pass target.model from orchestrator_capabilities with this environmentId.",
+          message:
+            "Pass target.model from pinacode_orchestrator_capabilities with this environmentId.",
         });
       }
       const options =
@@ -346,7 +347,7 @@ const make = Effect.gen(function* () {
       const title = input.title ?? parent.thread.title;
       const launched = yield* forwarding.call(
         scope,
-        ProjectToolkit.tools.t3_thread_launch,
+        ProjectToolkit.tools.pinacode_thread_launch,
         target.environmentId,
         {
           projectId,
@@ -728,7 +729,7 @@ const make = Effect.gen(function* () {
               const remote = task?.remoteChild;
               // A task with its result keeps it; completing it again would owe another stop there.
               if (remote === undefined || task?.result !== null) return;
-              const result = `Following the thread ${remote.threadId} in ${remote.label} failed repeatedly, so it may still run there (task_cancel stops it).`;
+              const result = `Following the thread ${remote.threadId} in ${remote.label} failed repeatedly, so it may still run there (pinacode_task_cancel stops it).`;
               yield* complete(parentThreadId, taskId, "failed", result, undefined);
             },
             failOnDefect,

@@ -12,7 +12,7 @@ Device panel work over Tailscale and T3 Connect, including when an SSH host runs
 npm-installed at a pinned version into the T3 home after its matching Device
 panel consent step. Manual setup installs and starts only expo-device-hub;
 agent-device remains absent and stopped until agent access is granted. Both run
-with the server's Node; `npx` would make the first `device_open` after a reboot
+with the server's Node; `npx` would make the first `pinacode_device_open` after a reboot
 depend on the registry. The hub is a supervised child rather than an imported
 middleware because serve-sim loads private CoreSimulator frameworks through a
 native addon, and a crash there must not take the server down.
@@ -40,7 +40,7 @@ Each session brings its own preview host (serve-sim, or serve-emu for Android)
 and agent-device daemon, with their own tokens. The proxy asks the host to
 route each request (`DeviceHostReady.upstream`) and adds the session token server-side, so
 clients never hold it. Agent config files are written per device
-(`DeviceOperations.agentEndpoint`), which is why `device_open` opens the
+(`DeviceOperations.agentEndpoint`), which is why `pinacode_device_open` opens the
 device before targeting it. Device settings and tools run `simctl` or `adb` on
 the device's machine, which Expo does not expose, so they are unavailable there.
 
@@ -53,7 +53,7 @@ agent-device cannot adopt a lease it did not allocate. The lease is bound to
 that one agent-device session and to the directory `open` ran in, so
 `agentEndpoint` hands every thread the same session, a `stateDir` holding its
 connection record, and no `--udid`/`--serial` (the gateway refuses selectors).
-Installs work only from that directory; `device_open` names it.
+Installs work only from that directory; `pinacode_device_open` names it.
 
 Simlock serves a lease's screen and input to its holder in serve-sim's formats
 on both platforms: AVCC envelopes at `/v1/leases/<id>/stream` and serve-sim's
@@ -99,7 +99,7 @@ screenshot capture and stream tuning.
 
 ## Agents drive through the CLI
 
-The `device_*` toolkit is deliberately four tools: list, open, screenshot, and
+The `pinacode_device_*` toolkit is deliberately four tools: list, open, screenshot, and
 close. Driving happens through the `agent-device` CLI, which has the semantic
 snapshot model agents need and stays current with its own releases. T3 prepends
 a shim directory to the provider's PATH. The CLI installs on the environment
@@ -109,18 +109,18 @@ That environment is fixed when the provider subprocess spawns, so
 [`prepareMcpSession`](../../apps/server/src/orchestration-v2/ProviderSessionManager.ts)
 starts agent-device only when device support and agent access have both been
 enabled, the session has the `device` capability, and the machine can run at
-least one platform. Starting it later from `device_open` would leave the
+least one platform. Starting it later from `pinacode_device_open` would leave the
 already-running agent without the CLI.
 
-How to drive a device is returned from `device_open`, not kept in an
+How to drive a device is returned from `pinacode_device_open`, not kept in an
 always-loaded prompt or skill: it costs nothing in threads that never open a
-device and cannot drift from the pinned CLI version. `device_open` returns a
+device and cannot drift from the pinned CLI version. `pinacode_device_open` returns a
 launcher bound to its agent-device session, so agents need no target flags.
 The launcher leaves out the flags a command refuses (`cdp` talks to Metro, not
 to the device), refuses the commands that would replace T3's connection, and
 checks that connection first: agent-device reports a sandboxed shell and a
 dropped tunnel alike as an unreachable daemon, so the launcher names which one it
-is. Ending a session (`device_close`, the Device panel, a shutdown) also closes
+is. Ending a session (`pinacode_device_close`, the Device panel, a shutdown) also closes
 its agent-device session, which quits the app that session opened and releases the CLI's claim on the device.
 
 Agents choose between these tools and ssh before they open anything, so

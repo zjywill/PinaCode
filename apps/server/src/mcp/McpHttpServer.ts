@@ -354,7 +354,9 @@ const boundSnapshotMetadata = (metadata: SnapshotMetadata) => {
   const { accessibilityTree, ...withoutTree } = metadata;
   const ariaTree = typeof accessibilityTree === "string" ? accessibilityTree : undefined;
   if (accessibilityTree !== undefined && ariaTree === undefined) {
-    omitted.push("accessibilityTree (use interactiveElements locators or preview_evaluate)");
+    omitted.push(
+      "accessibilityTree (use interactiveElements locators or pinacode_preview_evaluate)",
+    );
   }
   const tail = <A>(entries: ReadonlyArray<A>, label: string) => {
     if (entries.length > MAX_SNAPSHOT_LOG_ENTRIES) {
@@ -456,7 +458,7 @@ const boundSnapshotMetadata = (metadata: SnapshotMetadata) => {
   }
   if (visibleTextChars < metadata.visibleText.length) {
     omitted.push(
-      `visibleText after ${visibleTextChars} characters (use preview_evaluate for more)`,
+      `visibleText after ${visibleTextChars} characters (use pinacode_preview_evaluate for more)`,
     );
   }
   if (ariaTree !== undefined && ariaTreeChars < ariaTree.length) {
@@ -635,7 +637,7 @@ const registerPreviewSnapshot = Effect.fn("McpHttpServer.registerPreviewSnapshot
           fiber.context,
           McpInvocationContext.McpInvocationContext,
         );
-        return built.handle("preview_snapshot", payload).pipe(
+        return built.handle("pinacode_preview_snapshot", payload).pipe(
           Stream.unwrap,
           Stream.run(Sink.last()),
           Effect.flatMap(Effect.fromOption),
@@ -880,7 +882,7 @@ const registerDeviceScreenshot = Effect.fn("McpHttpServer.registerDeviceScreensh
     DeviceScreenshotTool,
     (payload) =>
       built
-        .handle("device_screenshot", payload)
+        .handle("pinacode_device_screenshot", payload)
         .pipe(Stream.unwrap, Stream.run(Sink.last()), Effect.flatMap(Effect.fromOption)),
     (effect) =>
       effect.pipe(
@@ -895,7 +897,7 @@ const registerDeviceScreenshot = Effect.fn("McpHttpServer.registerDeviceScreensh
           : (parameterValidationMessage(error) ?? "Device screenshot failed.");
       }
       return error._tag === "DeviceOperationError" && error.reason === "hub_rejected"
-        ? `${error.message} Call device_list to check the device state, and device_open if it needs to be reopened.`
+        ? `${error.message} Call pinacode_device_list to check the device state, and pinacode_device_open if it needs to be reopened.`
         : error.message;
     },
   );
@@ -912,7 +914,7 @@ const registerHtmlPreview = Effect.fn("McpHttpServer.registerHtmlPreview")(funct
     HtmlPreviewTool,
     (payload) =>
       built
-        .handle("html_preview", payload)
+        .handle("pinacode_html_preview", payload)
         .pipe(Stream.unwrap, Stream.run(Sink.last()), Effect.flatMap(Effect.fromOption)),
     (effect) =>
       effect.pipe(
@@ -933,24 +935,24 @@ const registerHtmlPreview = Effect.fn("McpHttpServer.registerHtmlPreview")(funct
  * steer it, or move context into it. Their events name the receiving agent too.
  */
 const HANDOFF_TOOLS: ReadonlySet<string> = new Set([
-  "delegate_task",
-  "create_threads",
-  "t3_thread_launch",
-  "t3_thread_send",
-  "t3_thread_send_attachments",
-  "schedule_task",
-  "run_scheduled_task_now",
+  "pinacode_delegate_task",
+  "pinacode_create_threads",
+  "pinacode_thread_launch",
+  "pinacode_thread_send",
+  "pinacode_thread_send_attachments",
+  "pinacode_schedule_task",
+  "pinacode_run_scheduled_task_now",
 ]);
 
 /** Tool actions that hand work over with only a `{ sequence }` result; the input names the thread. */
 const INPUT_TARGET_ACTIONS: Readonly<Record<string, ReadonlySet<string>>> = {
-  t3_queue: new Set(["edit", "promote_to_steer"]),
-  t3_pending_request: new Set(["respond"]),
+  pinacode_queue: new Set(["edit", "promote_to_steer"]),
+  pinacode_pending_request: new Set(["respond"]),
 };
 
 /** Tool actions that hand work over and name the receiving thread in their result. */
 const RESULT_TARGET_ACTIONS: Readonly<Record<string, ReadonlySet<string>>> = {
-  t3_thread_transfer: new Set(["fork", "merge_back"]),
+  pinacode_thread_transfer: new Set(["fork", "merge_back"]),
 };
 
 const hasAction = (
@@ -1329,7 +1331,7 @@ export const layerInProcessMcpServer = McpServer.middleware<{
 
 export const layerMcpTransport = <RA, RE, RR>(registrations: Layer.Layer<RA, RE, RR>) =>
   McpServer.layerHttp({
-    name: "T3 Code",
+    name: "PinaCode",
     version: packageJson.version,
     path: MCP_HTTP_PATH,
     // The first protocol is the fallback for clients that offer an unknown version.
@@ -1338,7 +1340,7 @@ export const layerMcpTransport = <RA, RE, RR>(registrations: Layer.Layer<RA, RE,
     registrations,
   }).pipe(Layer.provide(layerMcpAuthMiddleware));
 
-/** Every tool the T3 MCP server advertises. AgentContextBudget.test.ts measures this set. */
+/** Every tool the PinaCode MCP server advertises. AgentContextBudget.test.ts measures this set. */
 export const layerTools = Layer.mergeAll(
   layerPreviewToolkit,
   layerOrchestratorToolkit,
@@ -1369,8 +1371,8 @@ const layerToolExposure = Layer.effect(
 
 /**
  * A provider session that sends `MCP_TOOL_EXPOSURE_HEADER: deferred` lists only
- * the direct tools and what its `tool_search` calls loaded. Calls are never
- * gated, and every other client lists everything but `tool_search`.
+ * the direct tools and what its `pinacode_tool_search` calls loaded. Calls are never
+ * gated, and every other client lists everything but `pinacode_tool_search`.
  */
 const layerDeferredListing = McpServer.visibility(
   Effect.gen(function* () {
@@ -1389,7 +1391,7 @@ const layerDeferredListing = McpServer.visibility(
   { global: true },
 );
 
-/** Outside layerTools: the clients its budget measures never list `tool_search`. */
+/** Outside layerTools: the clients its budget measures never list `pinacode_tool_search`. */
 export const layerToolSearch = Layer.mergeAll(
   toolkitRegistration(ToolSearchToolkit, ToolSearchHandlers.layer),
   layerDeferredListing,

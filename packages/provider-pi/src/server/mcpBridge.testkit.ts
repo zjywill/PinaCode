@@ -64,17 +64,17 @@ export async function loadMcpBridge(
   const servers: Array<{ readonly name: string; readonly config: Record<string, unknown> }> = [];
   const catalog = [
     {
-      name: "orchestrator_capabilities",
+      name: "pinacode_orchestrator_capabilities",
       description: "Discover available providers and models.",
       annotations: { readOnlyHint: true },
     },
-    { name: "delegate_task", description: "Delegate work to another agent." },
+    { name: "pinacode_delegate_task", description: "Delegate work to another agent." },
     {
-      name: "task_status",
+      name: "pinacode_task_status",
       description: "Check delegated work.",
       annotations: { readOnlyHint: false },
     },
-    { name: "preview_snapshot", description: "Inspect the collaborative browser." },
+    { name: "pinacode_preview_snapshot", description: "Inspect the collaborative browser." },
   ].map((tool) => ({
     ...tool,
     inputSchema: options.inputSchema ?? { type: "object", properties: {} },

@@ -8,7 +8,7 @@ agent can use this endpoint to:
 - create an app-owned sub-agent on any supported provider instance;
 - wait for or poll the sub-agent's durable result;
 - cancel an active delegated task; and
-- create one or more ordinary top-level T3 threads;
+- create one or more ordinary top-level PinaCode threads;
 - list a project's threads and incrementally read any thread;
 - rename threads, regenerate titles, and link or unlink pull requests;
 - send or steer follow-up messages;
@@ -63,12 +63,12 @@ Codex gets T3's MCP server in each thread's `thread/start`, `thread/resume`,
 and `thread/fork` config, with the provider-session token in an
 `Authorization` header. The same server is registered twice:
 
-- `t3-code`: every tool except `t3_thread_wait` and `delegate_task`.
-- `t3-code-direct`: only `t3_thread_wait` and `delegate_task`, with
+- `pinacode`: every tool except `pinacode_thread_wait` and `pinacode_delegate_task`.
+- `pinacode-direct`: only `pinacode_thread_wait` and `pinacode_delegate_task`, with
   `omit_tools_from = ["code_mode", "deferred"]`.
 
 Code Mode yields a script after about 30 seconds, so the model polls a blocking
-`t3_thread_wait` or `delegate_task` with `mode: "wait"`, resending its context
+`pinacode_thread_wait` or `pinacode_delegate_task` with `mode: "wait"`, resending its context
 on each poll. The second entry makes both direct tool calls, like Codex's own
 wait tools. Codex reports calls as `<server>.<tool>`, so
 `packages/shared/src/t3McpToolPresentation.ts` must resolve both server names.
@@ -91,7 +91,7 @@ Claude receives an HTTP MCP server in its query options:
   },
   allowedTools: [
     // existing allowed tools
-    "mcp__t3-code__*",
+    "mcp__pinacode__*",
   ],
 }
 ```
@@ -166,12 +166,12 @@ T3_MCP_URL=http://127.0.0.1:<port>/mcp
 T3_MCP_BEARER_TOKEN=<provider-session-token>
 ```
 
-The extension preserves public names under `mcp__t3-code__` for saved loadouts
-and tool selectors. Modern Pi also receives hidden `mcp__t3_code__` aliases,
+The extension preserves public names under `mcp__pinacode__` for saved loadouts
+and tool selectors. Modern Pi also receives hidden `mcp__pinacode__` aliases,
 which reserve the normalized namespace against configured MCP servers without
 adding declarations or search results. On Pi 0.99+,
-`orchestrator_capabilities`, `delegate_task`, and `task_status` remain directly
-available; optional tools are discovered through Pi's builtin `tool_search`.
+`pinacode_orchestrator_capabilities`, `pinacode_delegate_task`, and `pinacode_task_status` remain directly
+available; optional tools are discovered through Pi's builtin `pinacode_tool_search`.
 On older Pi or without builtin search, all tools remain directly available.
 The bridge calls the original MCP tool name over HTTP. Follow-up requests send
 `mcp-protocol-version: 2025-06-18`; Effect's MCP transport returns 400
@@ -180,7 +180,7 @@ orchestration instructions.
 
 Pi keeps ownership of native extension discovery. T3 does not replace Pi's
 `subagent` tool or reproduce Pi's package and project-trust loader. Durable
-delegation goes through the namespaced T3 MCP `delegate_task` tool and the
+delegation goes through the namespaced T3 MCP `pinacode_delegate_task` tool and the
 shared orchestration child-thread lifecycle. When Pi's example `subagent`
 extension is installed, the adapter observes its documented `details.results`
 shape and projects task cards with no child thread id. Unknown result shapes
@@ -202,11 +202,11 @@ provider selection model-visible without allowing a request that cannot run.
 `OrchestratorToolkit` in
 [`toolkits/orchestrator/tools.ts`](../../apps/server/src/mcp/toolkits/orchestrator/tools.ts)
 is the authoritative list of orchestration tools. The sections below cover
-delegation and thread tools. `t3_thread_launch` is documented with them but
+delegation and thread tools. `pinacode_thread_launch` is documented with them but
 registered by the project toolkit in
 [`toolkits/project/tools.ts`](../../apps/server/src/mcp/toolkits/project/tools.ts).
 
-### `orchestrator_capabilities`
+### `pinacode_orchestrator_capabilities`
 
 Returns:
 
@@ -224,10 +224,10 @@ of models, and every call lands in the agent's context. Each provider lists
 custom, favorite, and the caller's own models, plus all current (non-legacy)
 models for Codex, Claude, Muse, and Grok, or the first 8 current models in the
 user's model order for other providers. `omittedModels` counts the rest, and the
-`search` input finds them, legacy models included. `delegate_task` still accepts
+`search` input finds them, legacy models included. `pinacode_delegate_task` still accepts
 any catalog model.
 
-### `delegate_task`
+### `pinacode_delegate_task`
 
 Creates a T3-owned child thread and immediately dispatches the supplied task
 prompt.
@@ -249,26 +249,26 @@ that driver; an explicit `providerInstanceId` is honored exactly and fails
 when unavailable. Selecting a different provider without a model uses that
 provider's first advertised model.
 
-Set `target.options` using the options returned by `orchestrator_capabilities`, such as
+Set `target.options` using the options returned by `pinacode_orchestrator_capabilities`, such as
 `{effort: "max"}`. Supplied values override inherited selections; `{}` or `[]` clears them.
 For local delegation, use `isolation: "worktree"` for a separate prepared checkout from
 the parent's commit; the default `"shared"` uses the parent's checkout. Uncommitted parent
 edits are not copied. A linked-environment target (`target.environmentId`) runs in the remote
 project's checkout and rejects worktree isolation. To launch an isolated thread there, use
-`t3_thread_launch` with `environmentId` and a worktree `workspaceStrategy`.
+`pinacode_thread_launch` with `environmentId` and a worktree `workspaceStrategy`.
 
 A provider runs a runtime mode it does not offer as `approval-required`, so a
-child would ask for approval on every command. `orchestrator_capabilities`
+child would ask for approval on every command. `pinacode_orchestrator_capabilities`
 lists `runtimeModes` only for a provider that offers some of the modes, and
 omits it for a provider that offers all of them. When the target lists
 `runtimeModes`, an explicit `runtimeMode` outside that list is refused, and an
 inherited mode steps down to the broadest mode the target offers.
 
-Each independent delegated review round uses a new `delegate_task` call with the
+Each independent delegated review round uses a new `pinacode_delegate_task` call with the
 original brief, prior findings, responses, and unresolved objections. Track each
 round by its own `taskId` and use a distinct `clientRequestId` per round, stable
 across retries of that round.
-A follow-up that needs the same child's conversation goes through `t3_thread_send`
+A follow-up that needs the same child's conversation goes through `pinacode_thread_send`
 on its `childThreadId`. After the original task completes, that follow-up runs as a
 fresh task in the child thread; it does not reopen the completed task or change its
 published result.
@@ -284,14 +284,14 @@ the timeout expires. A wait timeout does not cancel the child; the result sets
 do not wait on the task or poll it; continue other work, and end the turn when none is
 left. A pending blocking question also ends the wait with `hasPendingQuestion: true` and
 `waitTimedOut: false`.
-If `hasPendingQuestion`, pass `threadId=childThreadId` to `t3_pending_request` with
+If `hasPendingQuestion`, pass `threadId=childThreadId` to `pinacode_pending_request` with
 action `list`, `read` (with `requestId`), or `respond`, or ask the user; the task's completion still wakes this thread. A pending live approval for the
 task's own unfinished work also ends the wait. Its identity appears in `pendingApproval`;
 it grants no approval authority. Read the fresh full request in the child thread before
 responding, since the durable record can outlive its provider callback. Async questions
 do not end the wait.
 
-### `task_status`
+### `pinacode_task_status`
 
 Reads a delegated task from the parent thread's durable projection. A task ID
 from another parent thread is rejected. `childRunId` identifies the original
@@ -305,7 +305,7 @@ and result transfer then remain stable across later follow-ups.
 exposes later executed, non-monitor results without replacing the published task
 result.
 
-### `task_cancel`
+### `pinacode_task_cancel`
 
 Stops every task the child delegated, then the child thread with the internal
 `thread.stop` command, cancels the task's own queued turn, and disposes automatic
@@ -322,9 +322,9 @@ run but still shows as running on the parent is cancelled there and reported as
 `cancelled`. Published task results remain available. It accepts an
 optional cancellation reason.
 
-### `create_threads`
+### `pinacode_create_threads`
 
-Creates between one and twenty ordinary top-level T3 threads:
+Creates between one and twenty ordinary top-level PinaCode threads:
 
 ```ts
 import type { OrchestratorMcpCreateThreadsInput as CreateThreadsInput } from "@t3tools/contracts";
@@ -333,11 +333,11 @@ import type { OrchestratorMcpCreateThreadsInput as CreateThreadsInput } from "@t
 Each entry independently resolves provider, model, and modes. The new threads
 inherit the parent's project, branch, and worktree path, but they have no
 sub-agent lineage. Entries with a prompt immediately dispatch a run; entries
-without a prompt remain idle. `create_threads` is local-only: `target.environmentId` and
+without a prompt remain idle. `pinacode_create_threads` is local-only: `target.environmentId` and
 `target.projectId` are ignored even though the shared target contract accepts them. Use
-`t3_thread_launch` with `environmentId` and `projectId` to select another environment or project.
+`pinacode_thread_launch` with `environmentId` and `projectId` to select another environment or project.
 
-### `t3_thread_launch`
+### `pinacode_thread_launch`
 
 Launches one ordinary top-level thread through the app's launch service. Use an
 explicit `workspaceStrategy` to create a new worktree (`worktree` with `baseRef`),
@@ -350,26 +350,26 @@ Pass the task in `message`. Project, model, and modes inherit when omitted;
 workspace does not. `scratch: true` launches without a project, in a folder of
 its own under the environment's Scratch project. A new worktree with `startFromOrigin` omitted follows the new-worktree setting. For stacked PRs, use the parent branch as `baseRef` with
 `startFromOrigin: false`. The new thread may not run with broader runtime or
-interaction modes than the caller. As for `delegate_task`, a runtime mode the
+interaction modes than the caller. As for `pinacode_delegate_task`, a runtime mode the
 provider does not offer is refused, and an inherited or default one steps down
 to the broadest mode it offers. Launch has no retry key, so inspect existing threads after a failed or lost response before
-launching again. `create_threads` remains the batch option for a shared checkout.
+launching again. `pinacode_create_threads` remains the batch option for a shared checkout.
 
-### `t3_thread_list`
+### `pinacode_thread_list`
 
 Lists durable thread shells in one project, newest first: `projectId` when
 given, else the calling thread's project. Callers can filter by title, run
 status, and whether app-owned sub-agent threads are included. Results are
 bounded and offset-paginated. Deleted threads are never listed.
 
-### `t3_thread_read`
+### `pinacode_thread_read`
 
 Reads the durable state, recent runs, and visible timeline of any thread in
 the environment by thread ID. A deleted thread returns `thread_not_found`. The
 default `messages` view returns user messages, assistant
 messages, and proposed plans. The `activity` view also returns summarized tool,
 reasoning, checkpoint, handoff, and runtime-request items. Large item text is
-bounded and reports whether it was truncated. An agent in a T3 thread that
+bounded and reports whether it was truncated. An agent in a PinaCode thread that
 reads without a cursor gets the newest items, and `beforePosition=earlierPosition`
 reads older ones. Client callers (the CLI, linked environments, outside MCP
 clients) start at the oldest item instead, because the CLI and linked
@@ -401,7 +401,7 @@ on the server's `T3CODE_HOSTED_APP_URL`, for threads in this environment. The
 hosted app offers the desktop app, the mobile app, or itself.
 
 List and read results report `snoozed`, `snoozedUntil`, and `pinned`, and
-`t3_thread_list` filters on `snoozed`. The server's `isSnoozed` follows the
+`pinacode_thread_list` filters on `snoozed`. The server's `isSnoozed` follows the
 client's `effectiveSnoozed`, so agents and the sidebar agree: a snoozed thread
 wakes early only when it has a pending request or fails after snoozing. Completed
 runs, background wakes, and delegated completions keep it snoozed.
@@ -412,12 +412,12 @@ still waits on after its run completed. A subagent or `background_task` holds
 the thread. A command or monitor holds it only with `awaited: true`, since agents
 often leave a dev server running.
 
-### `t3_thread_update`
+### `pinacode_thread_update`
 
 Updates metadata for the calling thread or any other thread in the environment.
 The typed actions are `rename`, which requires `title`, and `regenerate_title`,
 which rejects one. Pull request links go through the separate
-`link_pull_request` and `unlink_pull_request` tools. Branch and workspace
+`pinacode_link_pull_request` and `pinacode_unlink_pull_request` tools. Branch and workspace
 changes are outside this tool.
 
 The result includes the command ID and durable event sequence together with the
@@ -426,7 +426,7 @@ resultant title, title-regeneration marker, and linked pull request. Reusing a
 receipt. Thread list and read results expose the linked pull request, and thread
 detail also exposes an in-flight title regeneration.
 
-### `t3_thread_send`
+### `pinacode_thread_send`
 
 Sends a message to any ordinary or delegated thread in the environment:
 
@@ -446,14 +446,14 @@ The target runtime and interaction modes may not be broader than the caller's.
 Stable command and message IDs are derived from `clientRequestId` for
 idempotent retries.
 
-### `t3_thread_wait`
+### `pinacode_thread_wait`
 
 Waits for a selected run to become `completed`, `failed`, `cancelled`,
 `interrupted`, or `rolled_back`. Without `runId`, it pins the latest run at call
 time; an idle thread returns immediately. A timeout reports the latest durable
 status and does not cancel work.
 
-### `t3_thread_interrupt`
+### `pinacode_thread_interrupt`
 
 Interrupts a selected active run through the normal V2 `run.interrupt` command.
 Without `runId`, it selects the newest interruptible run. A terminal run is
@@ -462,8 +462,8 @@ returned unchanged, and a thread with no active provider turn returns
 
 ### Scheduled tasks
 
-`schedule_task`, `list_scheduled_tasks`, and `delete_scheduled_task` manage
-recurring work in the app scheduler; `schedule_task` with a `scheduledTaskId`
+`pinacode_schedule_task`, `pinacode_list_scheduled_tasks`, and `pinacode_delete_scheduled_task` manage
+recurring work in the app scheduler; `pinacode_schedule_task` with a `scheduledTaskId`
 updates an existing task. A schedule
 runs its prompt on an interval, at a fixed time in the server's local time
 zone, or on each qualifying webhook request, even when no turn is active.
@@ -473,7 +473,7 @@ Signature checks, filters, and dedupe can skip a webhook request.
 the task's project; otherwise it defaults to `false`. Bound runs post into
 that thread; unbound runs each launch a fresh thread in the task's project.
 Explicit `bindToCurrentThread: true` without a caller thread in that project
-is rejected. Pausing uses `schedule_task` with `scheduledTaskId` and `enabled: false`;
+is rejected. Pausing uses `pinacode_schedule_task` with `scheduledTaskId` and `enabled: false`;
 deletion is permanent.
 
 ## Delegated Task Lifecycle
@@ -483,7 +483,7 @@ directly.
 
 ```text
 provider model
-  -> MCP tools/call delegate_task
+  -> MCP tools/call pinacode_delegate_task
   -> authenticated OrchestratorMcpService
   -> shared ThreadManagementService
   -> V2 delegated_task.request command
@@ -495,7 +495,7 @@ provider model
   -> child run reaches a terminal state
   -> parent subagent/node/turn item finalized
   -> consumed subagent_result context transfer
-  -> wait result or later task_status result
+  -> wait result or later pinacode_task_status result
 ```
 
 The child thread has lineage relationship `subagent` and points back to the
@@ -518,7 +518,7 @@ long-running orchestrator turn that may never end. Otherwise it queues. If the
 question is answered or dismissed before a queued notification starts a turn,
 that queued turn is cancelled. Approvals are not
 routed, because those tools cannot answer them.
-A parent still blocked in a `delegate_task` wait gets the blocking question
+A parent still blocked in a `pinacode_delegate_task` wait gets the blocking question
 through that wait instead.
 If the provider cuts that wait short, a still-pending live question wakes the
 parent when its launching run completes, fails, or waits for post-turn work.

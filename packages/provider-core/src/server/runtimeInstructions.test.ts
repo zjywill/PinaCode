@@ -24,7 +24,7 @@ describe("buildRuntimeInstructions", () => {
     assert.notInclude(instructions, "git log -1");
     assert.notInclude(instructions, "work on");
     // Listing linked PRs as an end-of-work check found nothing to add in audited threads.
-    assert.notInclude(instructions, "list_thread_pull_requests");
+    assert.notInclude(instructions, "pinacode_list_thread_pull_requests");
   });
 
   it("waits on a PR only with the watch, never with a poll loop", () => {
@@ -36,7 +36,7 @@ describe("buildRuntimeInstructions", () => {
     assert.notInclude(instructions, "On a wake");
     assert.include(
       instructions,
-      "Call watch_pull_request when asked to monitor or babysit, or when work you were asked to do, such as a merge, still waits on checks or reviews, even after an earlier unwatch",
+      "Call pinacode_watch_pull_request when asked to monitor or babysit, or when work you were asked to do, such as a merge, still waits on checks or reviews, even after an earlier unwatch",
     );
     assert.notInclude(instructions, "merge it now");
     assert.include(instructions, "Otherwise act now or hand back.");
@@ -50,6 +50,6 @@ describe("buildRuntimeInstructions", () => {
       instructions,
       "For PR waits, no sleep, loops, gh --watch, Monitor or ScheduleWakeup.",
     );
-    assert.include(instructions, "call unwatch_pull_request");
+    assert.include(instructions, "call pinacode_unwatch_pull_request");
   });
 });

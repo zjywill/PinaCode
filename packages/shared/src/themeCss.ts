@@ -70,7 +70,7 @@ export const THEME_CSS_HOOKS = [
   { selector: '[data-slot="scroll-area-thumb"]', styles: "overlay scrollbar thumb" },
 ] as const;
 
-/** What an agent needs to restyle the app. `t3_theme_read` returns it. */
+/** What an agent needs to restyle the app. `pinacode_theme_read` returns it. */
 export const THEME_GUIDE = [
   "Themes restyle Pina Code on web and desktop. Mobile does not use them.",
   "",

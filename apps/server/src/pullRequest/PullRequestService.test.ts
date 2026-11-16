@@ -508,7 +508,12 @@ it.effect("reads nothing from a host with no implementation, but reports it", ()
     const listed: string[] = [];
     const service = yield* makeService({
       projects: [
-        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+        project({
+          id: "p1",
+          title: "pinacode",
+          workspaceRoot: "/a",
+          repository: "pingdotgg/t3code",
+        }),
         project({ id: "p2", title: "notes", workspaceRoot: "/b" }),
         project({
           id: "p3",
@@ -600,7 +605,12 @@ it.effect("says where each repository carries on, and from nothing it has run ou
   Effect.gen(function* () {
     const service = yield* makeService({
       projects: [
-        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+        project({
+          id: "p1",
+          title: "pinacode",
+          workspaceRoot: "/a",
+          repository: "pingdotgg/t3code",
+        }),
         project({ id: "p2", title: "web", workspaceRoot: "/b", repository: "acme/web" }),
       ],
       providers: [
@@ -721,7 +731,12 @@ it.effect("keeps a row already sent at the boundary instant from arriving twice"
   Effect.gen(function* () {
     const service = yield* makeService({
       projects: [
-        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+        project({
+          id: "p1",
+          title: "pinacode",
+          workspaceRoot: "/a",
+          repository: "pingdotgg/t3code",
+        }),
       ],
       providers: [
         fakePullRequestProvider(SourceControlProviderKind.make("github"), {
@@ -758,7 +773,12 @@ it.effect("keeps the earlier exclusions when a slice ends on the instant it bega
   Effect.gen(function* () {
     const service = yield* makeService({
       projects: [
-        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+        project({
+          id: "p1",
+          title: "pinacode",
+          workspaceRoot: "/a",
+          repository: "pingdotgg/t3code",
+        }),
       ],
       providers: [
         fakePullRequestProvider(SourceControlProviderKind.make("github"), {
@@ -794,7 +814,12 @@ it.effect("calls a transient viewer failure a failed operation, not a signed-out
   Effect.gen(function* () {
     const service = yield* makeService({
       projects: [
-        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+        project({
+          id: "p1",
+          title: "pinacode",
+          workspaceRoot: "/a",
+          repository: "pingdotgg/t3code",
+        }),
       ],
       providers: [
         fakePullRequestProvider(SourceControlProviderKind.make("github"), {
@@ -821,7 +846,12 @@ it.effect("reports an unusable host over a merely failing one", () =>
   Effect.gen(function* () {
     const service = yield* makeService({
       projects: [
-        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+        project({
+          id: "p1",
+          title: "pinacode",
+          workspaceRoot: "/a",
+          repository: "pingdotgg/t3code",
+        }),
         project({
           id: "p2",
           title: "on gitlab",
@@ -1077,7 +1107,12 @@ it.effect("reads a repository once when several worktrees share it", () =>
     let calls = 0;
     const service = yield* makeService({
       projects: [
-        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+        project({
+          id: "p1",
+          title: "pinacode",
+          workspaceRoot: "/a",
+          repository: "pingdotgg/t3code",
+        }),
         project({
           id: "p2",
           title: "t3code worktree",
@@ -1111,7 +1146,12 @@ it.effect("keeps healthy repositories when one of them cannot be read", () =>
   Effect.gen(function* () {
     const service = yield* makeService({
       projects: [
-        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+        project({
+          id: "p1",
+          title: "pinacode",
+          workspaceRoot: "/a",
+          repository: "pingdotgg/t3code",
+        }),
         project({ id: "p2", title: "broken", workspaceRoot: "/b", repository: "pingdotgg/broken" }),
       ],
       providers: [
@@ -1143,7 +1183,12 @@ it.effect("offers each label once across repositories, despite one that cannot b
     const reads: Array<string> = [];
     const service = yield* makeService({
       projects: [
-        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+        project({
+          id: "p1",
+          title: "pinacode",
+          workspaceRoot: "/a",
+          repository: "pingdotgg/t3code",
+        }),
         project({
           id: "p5",
           title: "t3code worktree",
@@ -1204,7 +1249,12 @@ it.effect("puts the author a query names exactly ahead of those it only begins",
     const queries: Array<string | undefined> = [];
     const service = yield* makeService({
       projects: [
-        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+        project({
+          id: "p1",
+          title: "pinacode",
+          workspaceRoot: "/a",
+          repository: "pingdotgg/t3code",
+        }),
       ],
       providers: [
         fakePullRequestProvider(SourceControlProviderKind.make("github"), {
@@ -1239,7 +1289,12 @@ it.effect("ranks references by number, keeping the host's recent-first order", (
   Effect.gen(function* () {
     const service = yield* makeService({
       projects: [
-        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+        project({
+          id: "p1",
+          title: "pinacode",
+          workspaceRoot: "/a",
+          repository: "pingdotgg/t3code",
+        }),
         project({ id: "p2", title: "tree", workspaceRoot: "/b", repository: "pingdotgg/t3code" }),
       ],
       providers: [
@@ -1946,7 +2001,12 @@ it.effect("refuses a repository that does not belong to the requested project", 
   Effect.gen(function* () {
     const service = yield* makeService({
       projects: [
-        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+        project({
+          id: "p1",
+          title: "pinacode",
+          workspaceRoot: "/a",
+          repository: "pingdotgg/t3code",
+        }),
       ],
       providers: [fakePullRequestProvider(SourceControlProviderKind.make("github"))],
     });
@@ -2912,7 +2972,12 @@ it.effect("reads a host's repositories in one search, and files the rows back un
     const separately: string[] = [];
     const service = yield* makeService({
       projects: [
-        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+        project({
+          id: "p1",
+          title: "pinacode",
+          workspaceRoot: "/a",
+          repository: "pingdotgg/t3code",
+        }),
         project({ id: "p2", title: "web", workspaceRoot: "/b", repository: "acme/web" }),
         project({
           id: "p3",
@@ -2970,7 +3035,12 @@ it.effect("carries every repository of a slice on from the oldest row in it", ()
   Effect.gen(function* () {
     const service = yield* makeService({
       projects: [
-        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+        project({
+          id: "p1",
+          title: "pinacode",
+          workspaceRoot: "/a",
+          repository: "pingdotgg/t3code",
+        }),
         project({ id: "p2", title: "web", workspaceRoot: "/b", repository: "acme/web" }),
         project({ id: "p3", title: "docs", workspaceRoot: "/c", repository: "acme/docs" }),
       ],

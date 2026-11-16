@@ -1280,7 +1280,7 @@ it.effect.each(["shutdown", "close"] as const)(
       expect(released.every(([, existed]) => existed)).toBe(true);
       // agent-device can close the session's app only while the device is on.
       expect(releasedWhileBooted).toEqual([true, true]);
-      // A device_open that was still preparing when the close landed.
+      // A pinacode_device_open that was still preparing when the close landed.
       expect(yield* service.agentLauncher({ ...target(threadId), targetArgs: [] })).toEqual(
         Option.none(),
       );

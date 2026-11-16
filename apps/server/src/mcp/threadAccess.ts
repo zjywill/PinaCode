@@ -61,7 +61,7 @@ export const threadNotFound = Effect.fn("OrchestratorMcpService.threadNotFound")
     scope.client?.linked === true ||
     fencingLinkOrigin({ scope, caller: caller ?? undefined }) !== undefined
       ? ""
-      : " Thread ids belong to one environment: for a thread on a linked one, find it with `t3_environment_links` and pass its `environmentId` to a tool that takes one.";
+      : " Thread ids belong to one environment: for a thread on a linked one, find it with `pinacode_environment_links` and pass its `environmentId` to a tool that takes one.";
   return yield* new OrchestratorMcpFailure({
     code: "thread_not_found",
     message: `${message}${mcpHint}${linksHint}`,
@@ -201,7 +201,7 @@ export const resolveProjectId = (context: Caller, projectId: ProjectId | undefin
       : Effect.fail(
           new OrchestratorMcpFailure({
             code: "target_required",
-            message: "Pass projectId: this MCP client is not running inside a T3 thread.",
+            message: "Pass projectId: this MCP client is not running inside a PinaCode thread.",
           }),
         );
 
@@ -213,7 +213,7 @@ const resolveThreadId = (context: Caller, threadId: ThreadId | undefined) =>
       : Effect.fail(
           new OrchestratorMcpFailure({
             code: "target_required",
-            message: "Pass threadId: this MCP client is not running inside a T3 thread.",
+            message: "Pass threadId: this MCP client is not running inside a PinaCode thread.",
           }),
         );
 

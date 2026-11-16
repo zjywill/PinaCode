@@ -27,8 +27,8 @@ const HtmlPath = Schema.String.annotate({
 const PAGE_RULES =
   "Self-contained: inline <style> and <script>. Local images as absolute paths are inlined. Remote URLs load as-is.";
 
-export const HtmlPreviewTool = Tool.make("html_preview", {
-  description: `Check an HTML page before html_render. Returns PNG, contentHeight, and console output. ${PAGE_RULES} Theme and layout rules are in html_render.`,
+export const HtmlPreviewTool = Tool.make("pinacode_html_preview", {
+  description: `Check an HTML page before pinacode_html_render. Returns PNG, contentHeight, and console output. ${PAGE_RULES} Theme and layout rules are in pinacode_html_render.`,
   parameters: Schema.Struct({
     path: Schema.optional(HtmlPath),
     html: Schema.optional(Html),
@@ -86,7 +86,7 @@ const HtmlRenderTool = Tool.make(HTML_RENDER_TOOL_NAME, {
       Schema.isMaxLength(HTML_RENDER_MAX_TITLE_LENGTH),
     ),
     height: Schema.Int.annotate({
-      description: `Frame height in CSS pixels, ${HTML_RENDER_MIN_HEIGHT} to ${HTML_RENDER_MAX_HEIGHT}. Use the contentHeight from html_preview.`,
+      description: `Frame height in CSS pixels, ${HTML_RENDER_MIN_HEIGHT} to ${HTML_RENDER_MAX_HEIGHT}. Use the contentHeight from pinacode_html_preview.`,
     }),
   }),
   success: Schema.Struct({

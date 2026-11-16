@@ -12,6 +12,15 @@ const decodeDelegateTaskResult = Schema.decodeUnknownSync(OrchestratorMcpDelegat
 const decodeThreadWaitResult = Schema.decodeUnknownSync(OrchestratorMcpThreadWaitResult);
 
 describe("orchestrator MCP contracts", () => {
+  it("preserves independent sessions and rejects shared-checkout independent work", () => {
+    expect(decodeDelegateTaskInput({ task: "Fix issue 1", session: "independent" }).session).toBe(
+      "independent",
+    );
+    expect(() =>
+      decodeDelegateTaskInput({ task: "Fix issue 1", session: "independent", isolation: "shared" }),
+    ).toThrow();
+  });
+
   it("decodes cross-provider delegated task requests and durable results", () => {
     const request = decodeDelegateTaskInput({
       task: "Inspect the workspace and report the result.",

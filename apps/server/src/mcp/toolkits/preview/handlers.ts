@@ -39,7 +39,7 @@ import { PreviewSnapshotToolkit, PreviewStandardToolkit, PreviewToolkit } from "
 /** Whether a preview the agent
  * said nothing about surfaces is the user's `browserAutoShowFloatingPreview`
  * preference, which is desktop-local and unreadable from here — filling in
- * `true` would silently override it for every `preview_open`.
+ * `true` would silently override it for every `pinacode_preview_open`.
  */
 function normalizePreviewOpenInput(input: PreviewAutomationOpenInput): PreviewAutomationOpenInput {
   const open = input.open ?? input.show;
@@ -190,14 +190,14 @@ export const claimPreviewRecording = Effect.fn("PreviewToolkit.claimRecording")(
 });
 
 const handlers = {
-  preview_dialog: McpToolAccess.actsAsCaller((input) =>
+  pinacode_preview_dialog: McpToolAccess.actsAsCaller((input) =>
     invokeTargeted<PreviewAutomationStatus>("dialog", input),
   ),
-  preview_status: McpToolAccess.readsAsCaller((input) =>
+  pinacode_preview_status: McpToolAccess.readsAsCaller((input) =>
     invokeTargeted<PreviewAutomationStatus>("status", input ?? {}),
   ),
   // Models often pass a dev server as both `url` and `target`; the target knows the environment.
-  preview_open: McpToolAccess.actsAsCaller(({ target, url, ...input }) =>
+  pinacode_preview_open: McpToolAccess.actsAsCaller(({ target, url, ...input }) =>
     Effect.gen(function* () {
       const opened = yield* invokeTargeted<PreviewAutomationStatus>(
         "open",
@@ -212,16 +212,16 @@ const handlers = {
       });
     }),
   ),
-  preview_navigate: McpToolAccess.actsAsCaller((input) =>
+  pinacode_preview_navigate: McpToolAccess.actsAsCaller((input) =>
     invokeTargeted<PreviewAutomationStatus>("navigate", input, input.timeoutMs),
   ),
-  preview_resize: McpToolAccess.actsAsCaller((input) =>
+  pinacode_preview_resize: McpToolAccess.actsAsCaller((input) =>
     invokeTargeted<PreviewAutomationResizeResult>("resize", input, input.timeoutMs),
   ),
-  preview_set_appearance: McpToolAccess.actsAsCaller((input) =>
+  pinacode_preview_set_appearance: McpToolAccess.actsAsCaller((input) =>
     invokeTargeted<PreviewAutomationSetColorSchemeResult>("setColorScheme", input),
   ),
-  preview_snapshot: McpToolAccess.readsAsCaller((input) => {
+  pinacode_preview_snapshot: McpToolAccess.readsAsCaller((input) => {
     const { includeImage, save, ...operationInput } = input ?? {};
     // The saved file is for people, so it keeps the resolution the agent's image is capped below.
     return invokeTargeted<PreviewAutomationSnapshot | PreviewAutomationSnapshotMetadata>(
@@ -233,7 +233,7 @@ const handlers = {
       },
     );
   }),
-  preview_act: McpToolAccess.actsAsCaller(({ action, ...input }) =>
+  pinacode_preview_act: McpToolAccess.actsAsCaller(({ action, ...input }) =>
     decodeActInput[action](input).pipe(
       Effect.mapError(
         (cause) => new OrchestratorMcpFailure({ code: "invalid_request", message: cause.message }),
@@ -247,7 +247,7 @@ const handlers = {
       ),
     ),
   ),
-  preview_evaluate: McpToolAccess.actsAsCaller(({ tabId, ...input }) =>
+  pinacode_preview_evaluate: McpToolAccess.actsAsCaller(({ tabId, ...input }) =>
     invoke<unknown>("evaluate", input, undefined, tabId).pipe(
       Effect.map(({ result, toolIcon }) => ({
         value: result ?? null,
@@ -255,13 +255,13 @@ const handlers = {
       })),
     ),
   ),
-  preview_wait_for: McpToolAccess.readsAsCaller((input) =>
+  pinacode_preview_wait_for: McpToolAccess.readsAsCaller((input) =>
     invokeTargeted<object>("waitFor", input, input.timeoutMs),
   ),
-  preview_recording_start: McpToolAccess.actsAsCaller((input) =>
+  pinacode_preview_recording_start: McpToolAccess.actsAsCaller((input) =>
     invokeTargeted<PreviewAutomationRecordingStatus>("recordingStart", input ?? {}),
   ),
-  preview_recording_stop: McpToolAccess.actsAsCaller((input) =>
+  pinacode_preview_recording_stop: McpToolAccess.actsAsCaller((input) =>
     Effect.gen(function* () {
       const scope = yield* McpInvocationContext.requireThreadMcpCapability("preview");
       const { tabId, ...operationInput } = input;
@@ -277,10 +277,10 @@ const handlers = {
   ),
 } satisfies McpToolAccess.Handlers<typeof PreviewToolkit.tools>;
 
-const { preview_snapshot, ...standardHandlers } = handlers;
+const { pinacode_preview_snapshot, ...standardHandlers } = handlers;
 
 export const layerStandard = McpToolAccess.toLayer(PreviewStandardToolkit, standardHandlers);
 
 export const layerSnapshot = McpToolAccess.toLayer(PreviewSnapshotToolkit, {
-  preview_snapshot,
+  pinacode_preview_snapshot,
 });

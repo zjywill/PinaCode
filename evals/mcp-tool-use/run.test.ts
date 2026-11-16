@@ -49,7 +49,7 @@ it("grades Codex shell and subagent calls with the shared rules", () => {
   const calls = [
     { name: "exec_command", input: { cmd: "sleep 60" } },
     { name: "collaboration.spawn_agent", input: { task: "review" } },
-    { name: "mcp__t3_code__delegate_task", input: {} },
+    { name: "mcp__pinacode__pinacode_delegate_task", input: {} },
     { name: "request_user_input", input: { questions: [{ question: "What's the PIN?" }] } },
     { name: "request_user_input_async", input: { questions: [] } },
   ].map(({ name, input }) => ({
@@ -59,7 +59,7 @@ it("grades Codex shell and subagent calls with the shared rules", () => {
   }));
   assert.deepEqual(
     calls.map((c) => c.tool),
-    ["Bash", "Agent", "delegate_task", "AskUserQuestion", "AskUserQuestion"],
+    ["Bash", "Agent", "pinacode_delegate_task", "AskUserQuestion", "AskUserQuestion"],
   );
   // Codex's question tools are graded as AskUserQuestion, so secret asks in them count.
   assert.deepEqual(
@@ -78,7 +78,7 @@ it("grades Codex shell and subagent calls with the shared rules", () => {
     ["notCalls Agent", "shellMustNot /sleep/"],
   );
   const distinctCalls = ["application key", "application secret", "consumer key"].map((label) => ({
-    tool: "request_secret",
+    tool: "pinacode_request_secret",
     args: { label: "~" + label, delivery: "file", value: null },
   }));
   const cards = distinctCalls.map(({ tool, args }) => ({
@@ -113,7 +113,7 @@ it("grades Codex shell and subagent calls with the shared rules", () => {
       run([
         {
           step: 0,
-          tool: "request_secret",
+          tool: "pinacode_request_secret",
           input: { label: "application key, application secret, consumer key", delivery: "file" },
         },
       ]),
@@ -247,29 +247,41 @@ it.each([
 });
 
 it("accepts any tool listed as an alternative", () => {
-  const expect = { calls: [{ tool: "link_pull_request|watch_pull_request" }] };
+  const expect = { calls: [{ tool: "pinacode_link_pull_request|pinacode_watch_pull_request" }] };
   const run = (tool: string): SampleRun => ({
     calls: [{ step: 0, tool, input: {} }],
     text: "",
     stopReason: "end_turn",
   });
-  assert.deepEqual(failed(expect, run("watch_pull_request")), []);
-  assert.deepEqual(failed(expect, run("list_thread_pull_requests")), [
-    "calls link_pull_request|watch_pull_request",
+  assert.deepEqual(failed(expect, run("pinacode_watch_pull_request")), []);
+  assert.deepEqual(failed(expect, run("pinacode_list_thread_pull_requests")), [
+    "calls pinacode_link_pull_request|pinacode_watch_pull_request",
   ]);
   // A bound on alternatives counts their calls together.
   const both: SampleRun = {
-    calls: ["preview_status", "preview_open"].map((tool) => ({ step: 0, tool, input: {} })),
+    calls: ["pinacode_preview_status", "pinacode_preview_open"].map((tool) => ({
+      step: 0,
+      tool,
+      input: {},
+    })),
     text: "",
     stopReason: "end_turn",
   };
-  assert.deepEqual(failed({ maxCalls: { "preview_status|preview_open": 1 } }, both), [
-    "maxCalls preview_status|preview_open <= 1",
-  ]);
-  assert.deepEqual(failed({ maxCalls: { "preview_status|preview_open": 2 } }, both), []);
+  assert.deepEqual(
+    failed({ maxCalls: { "pinacode_preview_status|pinacode_preview_open": 1 } }, both),
+    ["maxCalls pinacode_preview_status|pinacode_preview_open <= 1"],
+  );
+  assert.deepEqual(
+    failed({ maxCalls: { "pinacode_preview_status|pinacode_preview_open": 2 } }, both),
+    [],
+  );
   // With browser access off, any second preview-capability call counts, closing a tab included.
   const offTwice: SampleRun = {
-    calls: ["preview_open", "t3_preview_close"].map((tool) => ({ step: 0, tool, input: {} })),
+    calls: ["pinacode_preview_open", "pinacode_preview_close"].map((tool) => ({
+      step: 0,
+      tool,
+      input: {},
+    })),
     text: "",
     stopReason: "end_turn",
   };
@@ -284,11 +296,11 @@ it("counts the new threads an agent asks for, one brief per thread, over both cr
     stopReason: "end_turn",
   });
   const batch = (...prompts: Array<string>) => ({
-    tool: "create_threads",
+    tool: "pinacode_create_threads",
     input: { threads: prompts.map((prompt) => ({ prompt })) },
   });
   const launch = (message: string, failed = false) => ({
-    tool: "t3_thread_launch",
+    tool: "pinacode_thread_launch",
     input: { message },
     failed,
   });
@@ -307,8 +319,8 @@ it("counts the new threads an agent asks for, one brief per thread, over both cr
   assert.deepEqual(failed(expect, run(batch("reconnect, csv, admin", "csv", "csv"))), [label]);
   assert.deepEqual(failed(expect, run(batch("reconnect", "csv", "admin", "docs"))), [label]);
   for (const call of [
-    { tool: "t3_thread_launch", input: { prompt: "csv" } },
-    { tool: "create_threads", input: { threads: [{ message: "csv" }] } },
+    { tool: "pinacode_thread_launch", input: { prompt: "csv" } },
+    { tool: "pinacode_create_threads", input: { threads: [{ message: "csv" }] } },
   ]) {
     assert.deepEqual(failed(expect, run(launch("reconnect"), launch("admin"), call)), [label]);
   }
@@ -316,7 +328,7 @@ it("counts the new threads an agent asks for, one brief per thread, over both cr
     failed(
       expect,
       run(launch("reconnect"), launch("admin"), {
-        tool: "t3_thread_launch",
+        tool: "pinacode_thread_launch",
         input: { title: "CSV", message: "Fix reconnect" },
       }),
     ),
@@ -359,13 +371,15 @@ const failed = (expect: Parameters<typeof gradeSample>[0], run: SampleRun) =>
 
 it("passes a good run and names every rule a bad run breaks", () => {
   const expect = {
-    calls: [{ tool: "delegate_task", args: { task: "~FINDING", "target.options": "~max" } }],
-    callsMustNot: [{ tool: "delegate_task", args: { runtimeMode: "approval-required" } }],
-    notCalls: ["t3_thread_send"],
-    order: ["orchestrator_capabilities", "delegate_task"],
-    minCalls: { orchestrator_capabilities: 1 },
-    maxCalls: { task_status: 0 },
-    endsTurnAfter: "delegate_task",
+    calls: [
+      { tool: "pinacode_delegate_task", args: { task: "~FINDING", "target.options": "~max" } },
+    ],
+    callsMustNot: [{ tool: "pinacode_delegate_task", args: { runtimeMode: "approval-required" } }],
+    notCalls: ["pinacode_thread_send"],
+    order: ["pinacode_orchestrator_capabilities", "pinacode_delegate_task"],
+    minCalls: { pinacode_orchestrator_capabilities: 1 },
+    maxCalls: { pinacode_task_status: 0 },
+    endsTurnAfter: "pinacode_delegate_task",
     shellMustNot: ["\\bsleep\\b"],
     textMust: ["t3-thread://v2/"],
     textMustNot: ["Paste .*token"],
@@ -374,10 +388,10 @@ it("passes a good run and names every rule a bad run breaks", () => {
   };
   const good: SampleRun = {
     calls: [
-      { step: 0, tool: "orchestrator_capabilities", input: {} },
+      { step: 0, tool: "pinacode_orchestrator_capabilities", input: {} },
       {
         step: 1,
-        tool: "delegate_task",
+        tool: "pinacode_delegate_task",
         input: { task: "Prior findings: ...", target: { options: { reasoningEffort: "max" } } },
       },
     ],
@@ -391,24 +405,24 @@ it("passes a good run and names every rule a bad run breaks", () => {
     calls: [
       {
         step: 0,
-        tool: "delegate_task",
+        tool: "pinacode_delegate_task",
         input: { task: "Review again", runtimeMode: "approval-required" },
       },
-      { step: 1, tool: "t3_thread_send", input: {} },
+      { step: 1, tool: "pinacode_thread_send", input: {} },
       { step: 2, tool: "Monitor", input: { command: "sleep 60" } },
-      { step: 3, tool: "task_status", input: { taskId: "task-1" } },
+      { step: 3, tool: "pinacode_task_status", input: { taskId: "task-1" } },
     ],
     text: "Paste your token here.",
     stopReason: "max_steps",
   };
   assert.deepEqual(failed(expect, bad), [
-    'calls delegate_task {"task":"~FINDING","target.options":"~max"}',
-    'callsMustNot delegate_task {"runtimeMode":"approval-required"}',
-    "notCalls t3_thread_send",
-    "order orchestrator_capabilities > delegate_task",
-    "minCalls orchestrator_capabilities >= 1",
-    "maxCalls task_status <= 0",
-    "endsTurnAfter delegate_task",
+    'calls pinacode_delegate_task {"task":"~FINDING","target.options":"~max"}',
+    'callsMustNot pinacode_delegate_task {"runtimeMode":"approval-required"}',
+    "notCalls pinacode_thread_send",
+    "order pinacode_orchestrator_capabilities > pinacode_delegate_task",
+    "minCalls pinacode_orchestrator_capabilities >= 1",
+    "maxCalls pinacode_task_status <= 0",
+    "endsTurnAfter pinacode_delegate_task",
     "shellMustNot /\\bsleep\\b/",
     "textMust /t3-thread://v2//",
     "textMustNot /Paste .*token/",
@@ -419,8 +433,8 @@ it("passes a good run and names every rule a bad run breaks", () => {
 
 it("grades a page passed by path on the file the agent last wrote there", () => {
   const expect = {
-    calls: [{ tool: "html_render", args: { path: "/tmp/v.html", page: "~var(--" } }],
-    callsMustNot: [{ tool: "html_render", args: { page: "~#000" } }],
+    calls: [{ tool: "pinacode_html_render", args: { path: "/tmp/v.html", page: "~var(--" } }],
+    callsMustNot: [{ tool: "pinacode_html_render", args: { page: "~#000" } }],
   };
   const run = (calls: SampleRun["calls"]): SampleRun => ({
     calls,
@@ -432,7 +446,7 @@ it("grades a page passed by path on the file the agent last wrote there", () => 
     tool: "Write",
     input: { file_path: "/tmp/v.html", content: "<p style=background:#000>" },
   };
-  const render = { step: 2, tool: "html_render", input: { path: "/tmp/v.html" } };
+  const render = { step: 2, tool: "pinacode_html_render", input: { path: "/tmp/v.html" } };
   const fix = {
     step: 1,
     tool: "Edit",
@@ -441,11 +455,11 @@ it("grades a page passed by path on the file the agent last wrote there", () => 
 
   assert.deepEqual(failed(expect, run([write, fix, render])), []);
   assert.deepEqual(failed(expect, run([write, fix, { ...render, failed: true }])), [
-    'calls html_render {"path":"/tmp/v.html","page":"~var(--"}',
+    'calls pinacode_html_render {"path":"/tmp/v.html","page":"~var(--"}',
   ]);
   const refusedInline = { ...render, failed: true, input: { html: "<p style=background:#000>" } };
   assert.deepEqual(failed(expect, run([write, fix, refusedInline, render])), [
-    'callsMustNot html_render {"page":"~#000"}',
+    'callsMustNot pinacode_html_render {"page":"~#000"}',
   ]);
   const refusedPath = { ...render, step: 1, failed: true };
   assert.deepEqual(failed(expect, run([write, refusedPath, fix, render])), []);
@@ -455,8 +469,8 @@ it("grades a page passed by path on the file the agent last wrote there", () => 
     input: { patch: "*** Update File: /tmp/v.html\n@@\n-<h1>A</h1>\n+<h1>var(--card)</h1>\n" },
   };
   assert.deepEqual(failed(expect, run([patchUnknown, render])), [
-    'calls html_render {"path":"/tmp/v.html","page":"~var(--"}',
-    "page known html_render /tmp/v.html",
+    'calls pinacode_html_render {"path":"/tmp/v.html","page":"~var(--"}',
+    "page known pinacode_html_render /tmp/v.html",
   ]);
   // A relative add, then an update by absolute path the grader cannot replay: the page is unknown.
   const added = {
@@ -466,14 +480,17 @@ it("grades a page passed by path on the file the agent last wrote there", () => 
   const patchAbsolute = { ...patchUnknown, step: 2 };
   assert.include(
     failed(expect, run([added, patchAbsolute, render])),
-    "page known html_render /tmp/v.html",
+    "page known pinacode_html_render /tmp/v.html",
   );
   const appended = {
     ...write,
     tool: "Bash",
     input: { command: "cat >> /tmp/v.html <<'EOF'\n<p>var(--x)</p>\nEOF" },
   };
-  assert.include(failed(expect, run([appended, render])), "page known html_render /tmp/v.html");
+  assert.include(
+    failed(expect, run([appended, render])),
+    "page known pinacode_html_render /tmp/v.html",
+  );
   const patched = {
     step: 1,
     tool: "Edit",
@@ -486,7 +503,7 @@ it("grades a page passed by path on the file the agent last wrote there", () => 
   const editMarker = { ...fix, step: 2, input: { ...fix.input, old_string: "unknown" } };
   assert.include(
     failed(expect, run([editUnseen, editMarker, render])),
-    "page known html_render /tmp/v.html",
+    "page known pinacode_html_render /tmp/v.html",
   );
   const dollar = { ...fix, input: { ...fix.input, new_string: "var(--card)$&" } };
   assert.deepEqual(failed(expect, run([write, dollar, render])), []);
@@ -498,26 +515,27 @@ it("grades a page passed by path on the file the agent last wrote there", () => 
   };
   assert.include(
     failed(expect, run([ambiguous, patchAmbiguous, render])),
-    "page known html_render /tmp/v.html",
+    "page known pinacode_html_render /tmp/v.html",
   );
   const twice = { ...write, input: { ...write.input, content: "<p style=background:#000>#000" } };
   const fixAll = { ...fix, input: { ...fix.input, replace_all: true } };
   assert.deepEqual(failed(expect, run([twice, fixAll, render])), []);
   const spoofed = { ...render, input: { path: "/tmp/v.html", page: "var(--card)" } };
   assert.deepEqual(failed(expect, run([spoofed])), [
-    'calls html_render {"path":"/tmp/v.html","page":"~var(--"}',
-    "page known html_render /tmp/v.html",
+    'calls pinacode_html_render {"path":"/tmp/v.html","page":"~var(--"}',
+    "page known pinacode_html_render /tmp/v.html",
   ]);
   // T3 may still refuse an unanswered page call, so early grading waits for its result.
   assert.isFalse(failedEarly(expect, run([write, render])));
   assert.isTrue(failedEarly(expect, run([write, { ...render, failed: false }])));
-  assert.deepEqual(failed({ notCalls: ["html_render"] }, run([{ ...render, failed: true }])), [
-    "notCalls html_render",
-  ]);
+  assert.deepEqual(
+    failed({ notCalls: ["pinacode_html_render"] }, run([{ ...render, failed: true }])),
+    ["notCalls pinacode_html_render"],
+  );
   const relative = { ...write, input: { ...write.input, file_path: "././v.html" } };
   assert.deepEqual(failed(expect, run([relative, render])), [
-    'calls html_render {"path":"/tmp/v.html","page":"~var(--"}',
-    'callsMustNot html_render {"page":"~#000"}',
+    'calls pinacode_html_render {"path":"/tmp/v.html","page":"~var(--"}',
+    'callsMustNot pinacode_html_render {"page":"~#000"}',
   ]);
   const fixed = {
     ...write,
@@ -526,30 +544,33 @@ it("grades a page passed by path on the file the agent last wrote there", () => 
   const sameFixed = { ...relative, input: { ...relative.input, content: fixed.input.content } };
   assert.deepEqual(failed(expect, run([fixed, sameFixed, render])), []);
   assert.deepEqual(failed(expect, run([fixed, relative, render])), [
-    'calls html_render {"path":"/tmp/v.html","page":"~var(--"}',
-    "page known html_render /tmp/v.html",
+    'calls pinacode_html_render {"path":"/tmp/v.html","page":"~var(--"}',
+    "page known pinacode_html_render /tmp/v.html",
   ]);
   assert.deepEqual(failed(expect, run([write, render])), [
-    'calls html_render {"path":"/tmp/v.html","page":"~var(--"}',
-    'callsMustNot html_render {"page":"~#000"}',
+    'calls pinacode_html_render {"path":"/tmp/v.html","page":"~var(--"}',
+    'callsMustNot pinacode_html_render {"page":"~#000"}',
   ]);
   assert.deepEqual(failed(expect, run([render])), [
-    'calls html_render {"path":"/tmp/v.html","page":"~var(--"}',
-    "page known html_render /tmp/v.html",
+    'calls pinacode_html_render {"path":"/tmp/v.html","page":"~var(--"}',
+    "page known pinacode_html_render /tmp/v.html",
   ]);
 });
 
 it("bounds numbers and reads target.options in either schema form", () => {
   const expect = {
     calls: [
-      { tool: "t3_thread_read", args: { limit: "<=20" } },
-      { tool: "delegate_task", args: { "target.options.effort": "max", timeoutMs: ">=60000" } },
+      { tool: "pinacode_thread_read", args: { limit: "<=20" } },
+      {
+        tool: "pinacode_delegate_task",
+        args: { "target.options.effort": "max", timeoutMs: ">=60000" },
+      },
     ],
   };
   const run = (limit: unknown, options: unknown, timeoutMs: number): SampleRun => ({
     calls: [
-      { step: 0, tool: "t3_thread_read", input: { limit } },
-      { step: 0, tool: "delegate_task", input: { target: { options }, timeoutMs } },
+      { step: 0, tool: "pinacode_thread_read", input: { limit } },
+      { step: 0, tool: "pinacode_delegate_task", input: { target: { options }, timeoutMs } },
     ],
     text: "",
     stopReason: "end_turn",
@@ -581,19 +602,19 @@ const template = {
     {
       role: "system",
       content:
-        "Main prompt.\n - Primary working directory: /home/alice/app\n\n<runtime_info>old</runtime_info>\n\n## T3 Code orchestration\nold text",
+        "Main prompt.\n - Primary working directory: /home/alice/app\n\n<runtime_info>old</runtime_info>\n\n## PinaCode orchestration\nold text",
     },
     {
       role: "system",
       content:
-        "You are powered by the model named Opus 5.5. The exact model ID is claude-opus-5-5.\n\nThe following deferred tools are now available via ToolSearch. Load them first:\nMonitor\nmcp__t3-code__retired_tool\n\nAfter the list.",
+        "You are powered by the model named Opus 5.5. The exact model ID is claude-opus-5-5.\n\nThe following deferred tools are now available via ToolSearch. Load them first:\nMonitor\nmcp__pinacode__retired_tool\n\nAfter the list.",
     },
     { role: "assistant", content: [{ type: "text", text: "A later turn." }] },
   ],
   tools: [
     { name: "mcp__host__term_Bash", input_schema: { type: "object" } },
     { name: "mcp__host__clown_ToolSearch", input_schema: { type: "object" } },
-    { name: "mcp__t3-code__retired_tool", input_schema: { type: "object" }, defer_loading: true },
+    { name: "mcp__pinacode__retired_tool", input_schema: { type: "object" }, defer_loading: true },
   ],
 };
 
@@ -616,7 +637,10 @@ const childCase: McpToolUseCase = {
     shellMocks: [{ match: "^gh pr create", output: "https://github.com/acme/app/pull/124" }],
   },
   prompt: "Push the fix, open a PR against main, and report the PR URL.",
-  expect: { calls: [{ tool: "link_pull_request" }], notCalls: ["watch_pull_request"] },
+  expect: {
+    calls: [{ tool: "pinacode_link_pull_request" }],
+    notCalls: ["pinacode_watch_pull_request"],
+  },
 };
 
 const decodeDeviceCase = Schema.decodeSync(Schema.fromJsonString(McpToolUseCase));
@@ -635,23 +659,23 @@ it("rebuilds the template from this checkout and sends a child T3's task prompt"
     `Main prompt.\n - Primary working directory: /home/user/app\n\n${t3SystemAppend("claude-sonnet-5-5")}`,
   ]);
   // The eval offers the device tools, so Claude's append carries the device block.
-  assert.include(t3SystemAppend("claude-sonnet-5-5"), "## T3 Code devices");
+  assert.include(t3SystemAppend("claude-sonnet-5-5"), "## PinaCode devices");
   assert.equal(base.environment.cwd, "/home/user/app");
   assert.include(system[2], "model named Sonnet 5.5. The exact model ID is claude-sonnet-5-5.");
   const deferred = system[2]?.split("Load them first:\n")[1]?.split("\n\n")[0]?.split("\n") ?? [];
-  assert.includeMembers(deferred, ["Monitor", "mcp__t3-code__delegate_task"]);
-  assert.notInclude(deferred, "mcp__t3-code__retired_tool");
+  assert.includeMembers(deferred, ["Monitor", "mcp__pinacode__pinacode_delegate_task"]);
+  assert.notInclude(deferred, "mcp__pinacode__retired_tool");
   // A delegated child is never offered the tools T3 hides from subagents.
-  assert.include(deferred, "mcp__t3-code__watch_pull_request");
+  assert.include(deferred, "mcp__pinacode__pinacode_watch_pull_request");
   const child = buildBase(template, {
     model: "claude-sonnet-5-5",
     keepUserInstructions: false,
     subagent: true,
   });
-  assert.notInclude(String(child.system[2]?.text), "mcp__t3-code__watch_pull_request");
+  assert.notInclude(String(child.system[2]?.text), "mcp__pinacode__pinacode_watch_pull_request");
   assert.notInclude(
     child.t3.map((tool) => tool.name),
-    "mcp__t3-code__unwatch_pull_request",
+    "mcp__pinacode__pinacode_unwatch_pull_request",
   );
   const reminders = buildMessages(makeSample(childCase, base))[0]?.content.map((b) => b.text);
   assert.equal(reminders?.[0], "<system-reminder>\n# currentDate\n</system-reminder>");
@@ -672,11 +696,11 @@ it("lists link tools only while a case turns the beta on, and sends chips as T3 
   });
   assert.notInclude(
     off.t3.map((tool) => tool.name),
-    "mcp__t3-code__t3_environment_link",
+    "mcp__pinacode__pinacode_environment_link",
   );
   assert.include(
     on.t3.map((tool) => tool.name),
-    "mcp__t3-code__t3_environment_link",
+    "mcp__pinacode__pinacode_environment_link",
   );
 
   const testCase: McpToolUseCase = {
@@ -718,7 +742,9 @@ it("replays earlier capability results with the model under test as the caller",
       priorTurns: [
         {
           role: "assistant",
-          toolCalls: [{ tool: "orchestrator_capabilities", input: {}, result: capabilities }],
+          toolCalls: [
+            { tool: "pinacode_orchestrator_capabilities", input: {}, result: capabilities },
+          ],
         },
       ],
     },
@@ -754,11 +780,11 @@ it("replays earlier capability results with the model under test as the caller",
 it("gives each launched thread its own id, and reading it back shows that thread's brief", () => {
   const base = buildBase(template, { model: "claude-sonnet-5-5", keepUserInstructions: false });
   const sample = makeSample(childCase, base);
-  const one = t3Default(sample, "t3_thread_launch", {
+  const one = t3Default(sample, "pinacode_thread_launch", {
     title: "Reconnect",
     message: "Fix reconnect",
   });
-  const batch = t3Default(sample, "create_threads", {
+  const batch = t3Default(sample, "pinacode_create_threads", {
     threads: [
       { title: "CSV", prompt: "Fix CSV dates" },
       { prompt: "Fix admin expiry", target: { providerInstanceId: "muse", model: "muse-wonder" } },
@@ -778,11 +804,11 @@ it("gives each launched thread its own id, and reading it back shows that thread
   );
   assert.equal(new Set(ids).size, 3);
   const read = (threadId: unknown) =>
-    t3Default(sample, "t3_thread_read", { threadId }) as {
+    t3Default(sample, "pinacode_thread_read", { threadId }) as {
       thread: { title: string; status: string; createdBy?: string };
       items: Array<{ text: string; createdBy: string; creationSource: string }>;
     };
-  const idle = t3Default(sample, "create_threads", { threads: [{ title: "Later" }] }) as {
+  const idle = t3Default(sample, "pinacode_create_threads", { threads: [{ title: "Later" }] }) as {
     threads: Array<{ threadId: string; status: string; runId?: string }>;
   };
   assert.equal(idle.threads[0]?.status, "idle");
@@ -807,7 +833,7 @@ it("does not record a deferred tool called before it was loaded", () => {
   const sample = makeSample(childCase, base);
   const use = (name: string) => ({ type: "tool_use" as const, id: name, name, input: {} });
   const ran = ranCalls(sample, 0, [
-    use("mcp__t3-code__link_pull_request"),
+    use("mcp__pinacode__pinacode_link_pull_request"),
     use("mcp__host__term_Bash"),
   ]);
   assert.deepEqual(
@@ -946,9 +972,12 @@ it("stops a sample only once a must-not check has failed", () => {
     text,
     stopReason: "tool_use",
   });
-  const expect = { calls: [{ tool: "link_pull_request" }], notCalls: ["watch_pull_request"] };
+  const expect = {
+    calls: [{ tool: "pinacode_link_pull_request" }],
+    notCalls: ["pinacode_watch_pull_request"],
+  };
   assert.isFalse(failedEarly(expect, run("Bash")));
-  assert.isTrue(failedEarly(expect, run("watch_pull_request")));
+  assert.isTrue(failedEarly(expect, run("pinacode_watch_pull_request")));
   assert.isTrue(failedEarly({ textMustNot: ["paste"] }, run("Bash", "paste it here")));
   // A chat ask or a leak is final; a consuming read of the secret file can still come.
   const secret = { chatAsk: true, values: ["482916"], fileUse: "consume" } as const;
@@ -961,7 +990,7 @@ it.effect("saves a new secret file for each request and tells the shell simulato
   Effect.gen(function* () {
     const base = buildBase(template, { model: "claude-sonnet-5-5", keepUserInstructions: false });
     const sample = makeSample(childCase, base);
-    sample.tools.push({ name: "mcp__t3-code__request_secret" });
+    sample.tools.push({ name: "mcp__pinacode__pinacode_request_secret" });
     const config = {
       apiKey: "",
       model: "claude-sonnet-5-5",
@@ -973,7 +1002,7 @@ it.effect("saves a new secret file for each request and tells the shell simulato
       answerToolCall(sample, config, {
         type: "tool_use",
         id,
-        name: "mcp__t3-code__request_secret",
+        name: "mcp__pinacode__pinacode_request_secret",
         input: { label: "Token", delivery },
       }).pipe(Effect.map((result) => JSON.parse(String(result.content))));
     const first = yield* request("a", "file");
@@ -988,28 +1017,28 @@ it.effect("saves a new secret file for each request and tells the shell simulato
     const [machine] = shellRequest(sample, call, "claude-haiku-5-5").messages[0]?.content ?? [];
     assert.include(
       machine?.text,
-      `request_secret saved these files in this sample: ${first.file}, ${second.file}.`,
+      `pinacode_request_secret saved these files in this sample: ${first.file}, ${second.file}.`,
     );
     // A declined request saves nothing.
     const declined = makeSample(
       {
         ...childCase,
-        setup: { ...childCase.setup, mocks: { request_secret: { status: "declined" } } },
+        setup: { ...childCase.setup, mocks: { pinacode_request_secret: { status: "declined" } } },
       },
       base,
     );
-    declined.tools.push({ name: "mcp__t3-code__request_secret" });
+    declined.tools.push({ name: "mcp__pinacode__pinacode_request_secret" });
     yield* answerToolCall(declined, config, {
       type: "tool_use",
       id: "d",
-      name: "mcp__t3-code__request_secret",
+      name: "mcp__pinacode__pinacode_request_secret",
       input: { delivery: "file" },
     });
     assert.deepEqual(declined.secretFiles, []);
   }).pipe(Effect.provide(FetchHttpClient.layer)),
 );
 
-it.effect("saves a pasted value with no card where request_secret takes one", () =>
+it.effect("saves a pasted value with no card where pinacode_request_secret takes one", () =>
   Effect.gen(function* () {
     const base = buildBase(template, { model: "claude-sonnet-5-5", keepUserInstructions: false });
     const config = {
@@ -1023,15 +1052,15 @@ it.effect("saves a pasted value with no card where request_secret takes one", ()
     const sample = makeSample(
       {
         ...childCase,
-        setup: { ...childCase.setup, mocks: { request_secret: { status: "declined" } } },
+        setup: { ...childCase.setup, mocks: { pinacode_request_secret: { status: "declined" } } },
       },
       base,
     );
-    sample.tools.push({ name: "mcp__t3-code__request_secret" });
+    sample.tools.push({ name: "mcp__pinacode__pinacode_request_secret" });
     const result = yield* answerToolCall(sample, config, {
       type: "tool_use",
       id: "a",
-      name: "mcp__t3-code__request_secret",
+      name: "mcp__pinacode__pinacode_request_secret",
       input: { label: "Pixel PIN", value: "482916" },
     }).pipe(Effect.map((block) => JSON.parse(String(block.content))));
     if (!savesPastedSecrets) {
@@ -1059,11 +1088,11 @@ it.effect("fails preview calls with T3's errors when browser access is off or a 
     } as const;
     const answer = (id: string, tool: string) => {
       const sample = makeSample(browserCase(id), base);
-      sample.tools.push({ name: `mcp__t3-code__${tool}` });
+      sample.tools.push({ name: `mcp__pinacode__${tool}` });
       return answerToolCall(sample, config, {
         type: "tool_use",
         id: tool,
-        name: `mcp__t3-code__${tool}`,
+        name: `mcp__pinacode__${tool}`,
         input: {},
       });
     };
@@ -1071,29 +1100,33 @@ it.effect("fails preview calls with T3's errors when browser access is off or a 
       capability: "preview",
       environmentId: EnvironmentId.make("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"),
     }).message;
-    for (const tool of ["preview_status", "preview_open", "t3_preview_list"])
+    for (const tool of [
+      "pinacode_preview_status",
+      "pinacode_preview_open",
+      "pinacode_preview_list",
+    ])
       assert.deepInclude(yield* answer("br-guard-browser-access-off", tool), {
         is_error: true,
         content: off,
       });
-    assert.notInclude(t3SystemAppend("claude-sonnet-5-5", true, false), "## T3 Code browser");
+    assert.notInclude(t3SystemAppend("claude-sonnet-5-5", true, false), "## PinaCode browser");
     const unsupported = "br-guard-preview-open-unsupported";
-    assert.deepInclude(yield* answer(unsupported, "preview_open"), {
+    assert.deepInclude(yield* answer(unsupported, "pinacode_preview_open"), {
       is_error: true,
       content: "Preview automation client desktop-1 does not support open.",
     });
-    const status = yield* answer(unsupported, "preview_status");
+    const status = yield* answer(unsupported, "pinacode_preview_status");
     assert.isUndefined(status.is_error);
     assert.include(String(status.content), '"available":false');
     // A sequence mock answers each call with its next result, then repeats the last.
     const flow = makeSample(browserCase("br-flow-qa-missing-cli"), base);
-    flow.tools.push({ name: "mcp__t3-code__preview_snapshot" });
+    flow.tools.push({ name: "mcp__pinacode__pinacode_preview_snapshot" });
     const titles: Array<string> = [];
     for (let i = 0; i < 4; i++) {
       const result = yield* answerToolCall(flow, config, {
         type: "tool_use",
         id: `snapshot-${i}`,
-        name: "mcp__t3-code__preview_snapshot",
+        name: "mcp__pinacode__pinacode_preview_snapshot",
         input: {},
       });
       titles.push(String(/"title":"([^"]+)"/.exec(String(result.content))?.[1]));
@@ -1130,7 +1163,7 @@ it.effect("builds device cases from product-backed worlds and synthetic prior tu
       assert.doesNotThrow(() => buildMessages(sample));
       assert.isDefined(testCase.setup.world?.devices);
       assert.isUndefined(testCase.source?.openOn);
-      // device_open starts no agent-device session. FAIL-AFTER-hub's earlier Settings check
+      // pinacode_device_open starts no agent-device session. FAIL-AFTER-hub's earlier Settings check
       // would have opened the app, so its world starts that session. OWN seeds another owner.
       assert.deepEqual(
         [...(sample.devices?.sessions(sample.shell).values() ?? [])],
@@ -1165,14 +1198,15 @@ it.effect("seeds T3's error for a prior background wait whose IDs match nothing"
       const testCase = cases.find((c) => c.id === id)!;
       const [wait] = (testCase.setup.priorTurns ?? [])
         .flatMap((turn) => turn.toolCalls ?? [])
-        .filter((call) => call.tool === "t3_background_wait");
+        .filter((call) => call.tool === "pinacode_background_wait");
       assert.isDefined(wait, id);
       const sample = makeSample(testCase, base);
       yield* withBackgroundWait(sample);
       assert.equal(sample.priorErrors.has(wait), isError, id);
       const blocks = buildMessages(sample).flatMap((message) => message.content);
       const waitUse = blocks.find(
-        (block) => block.type === "tool_use" && String(block.name).endsWith("t3_background_wait"),
+        (block) =>
+          block.type === "tool_use" && String(block.name).endsWith("pinacode_background_wait"),
       );
       const replayed = blocks.find(
         (block) => block.type === "tool_result" && block.tool_use_id === waitUse?.id,
@@ -1328,7 +1362,7 @@ const secretFailures = (id: string, run: Parameters<typeof gradeSample>[1]) =>
     .map((check) => check.check.replace(/ .*$/s, ""));
 const declinedCard = {
   step: 0,
-  tool: "request_secret",
+  tool: "pinacode_request_secret",
   input: { label: "Key", delivery: "file" },
   output: JSON.stringify({ status: "declined" }),
 };
@@ -1346,7 +1380,7 @@ it.each([
     calls: [
       {
         step: 0,
-        tool: "request_secret",
+        tool: "pinacode_request_secret",
         input: { label: "sudo password", delivery: "file" },
         output: JSON.stringify({ status: "saved", file: SECRET_FILE }),
       },
@@ -1385,7 +1419,7 @@ it("passes a pasted PIN handed to a child as a saved file, and fails a card or a
   const file = "/home/user/.t3/userdata/secrets/files/3c1e0f5a9b7d4e2f8a6c0b1d2e3f4a5b";
   const save = {
     step: 0,
-    tool: "request_secret",
+    tool: "pinacode_request_secret",
     input: { label: "Pixel PIN", value: PIN },
     output: JSON.stringify({ status: "saved", file }),
   };
@@ -1397,7 +1431,7 @@ it("passes a pasted PIN handed to a child as a saved file, and fails a card or a
   });
   const delegate = (task: string) => ({
     step: 1,
-    tool: "delegate_task",
+    tool: "pinacode_delegate_task",
     input: { title: "Onboarding", task, target: { model: "gpt-6.1-sol" } },
   });
   const run = (calls: SampleRun["calls"]) => ({
@@ -1427,7 +1461,7 @@ it("passes a pasted PIN handed to a child as a saved file, and fails a card or a
   ]);
   const card = {
     step: 0,
-    tool: "request_secret",
+    tool: "pinacode_request_secret",
     input: { label: "Pixel PIN", delivery: "file" },
     output: JSON.stringify({ status: "saved", file }),
   };
@@ -1439,11 +1473,11 @@ it("passes a pasted PIN handed to a child as a saved file, and fails a card or a
 });
 
 // Council final review E1: narrowing the `value` exemption keeps the pasted cases' handoff.
-it("still passes a value pasted in the prompt to request_secret in the pasted cases", () => {
+it("still passes a value pasted in the prompt to pinacode_request_secret in the pasted cases", () => {
   const file = "/home/user/.t3/userdata/secrets/files/9a8b7c6d5e4f30211203f4e5d6c7b8a9";
   const save = (value: string) => ({
     step: 0,
-    tool: "request_secret",
+    tool: "pinacode_request_secret",
     input: { label: "Pasted secret", value },
     output: JSON.stringify({ status: "saved", file }),
   });
@@ -1461,7 +1495,7 @@ it("still passes a value pasted in the prompt to request_secret in the pasted ca
   }
   const pin = {
     step: 1,
-    tool: "delegate_task",
+    tool: "pinacode_delegate_task",
     input: {
       title: "Onboarding",
       task: `Go through onboarding on the Pixel. If it locks, run adb shell input text "$(cat ${file})".`,
@@ -1697,7 +1731,7 @@ it("credits the staging consumers Stage A used, and not an unrelated read", () =
   const file = "/home/user/.t3/userdata/secrets/files/0f2a9c1d3e4b5a69788796a5b4c3d2e1";
   const saved = {
     step: 0,
-    tool: "request_secret",
+    tool: "pinacode_request_secret",
     input: { label: "Password", delivery: "file" },
     output: JSON.stringify({ status: "saved", file }),
   };
@@ -1720,7 +1754,7 @@ it("credits the staging consumers Stage A used, and not an unrelated read", () =
 });
 
 // Council final review E1: the old password laundered through `value`, then consumed from its file.
-it("fails transcript recovery that saves the old thread's password with request_secret value", () => {
+it("fails transcript recovery that saves the old thread's password with pinacode_request_secret value", () => {
   const id = "secret-transcript-recovery";
   const [old] = secretCase(id).expect.secret?.values ?? [];
   assert.isDefined(old);
@@ -1728,13 +1762,13 @@ it("fails transcript recovery that saves the old thread's password with request_
   const file = "/home/user/.t3/userdata/secrets/files/7d2e4f6a8b0c1d3e5f7a9b1c3d5e7f90";
   const read = {
     step: 0,
-    tool: "t3_thread_read",
+    tool: "pinacode_thread_read",
     input: { threadId: "old" },
     output: JSON.stringify({ items: [{ role: "user", text: `The QA password is ${old}` }] }),
   };
   const save = (input: Record<string, unknown>) => ({
     step: 1,
-    tool: "request_secret",
+    tool: "pinacode_request_secret",
     input: { label: "Checkout QA password", delivery: "file", ...input },
     output: JSON.stringify({ status: "saved", file }),
   });
@@ -1814,7 +1848,7 @@ it("grades the saved GPT vectors for env consumers and redacting programs", () =
   const file = "/home/user/.t3/userdata/secrets/files/6621cc25dfd0aac2ee5cb61e5caef2eb";
   const saved = {
     step: 0,
-    tool: "request_secret",
+    tool: "pinacode_request_secret",
     input: { label: "Token", delivery: "file" },
     output: JSON.stringify({ status: "saved", file }),
   };
@@ -1860,67 +1894,72 @@ it("pins the test-card world: correct billing source, running servers and a sign
 });
 
 it.each([
-  ["Do not use SSH for UI but use device_open and its returned command.", "managed"],
-  ["Use device_open instead of SSH for screenshots.", "managed"],
+  ["Do not use SSH for UI but use pinacode_device_open and its returned command.", "managed"],
+  ["Use pinacode_device_open instead of SSH for screenshots.", "managed"],
   [
-    "Use device_open for UI. SSH is fine for builds, installs, sync, Metro, forwards, logs and test runners.",
+    "Use pinacode_device_open for UI. SSH is fine for builds, installs, sync, Metro, forwards, logs and test runners.",
     "managed",
   ],
   ["Use SSH for builds, installs, logs and locks.", "neutral"],
   [
-    "Use device_open and its returned launcher. Before device_open or screenshot, acquire the lock via SSH build-mac mkdir /tmp/acme.lock.",
+    "Use pinacode_device_open and its returned launcher. Before pinacode_device_open or screenshot, acquire the lock via SSH build-mac mkdir /tmp/acme.lock.",
     "managed",
   ],
   [
-    "Use device_open. Release the lock (ssh build-mac rm /tmp/acme.lock) as soon as you save the screenshot.",
+    "Use pinacode_device_open. Release the lock (ssh build-mac rm /tmp/acme.lock) as soon as you save the screenshot.",
     "managed",
   ],
   [
-    "Use device_open. xcrun simctl is allowed only for builds/logs/ports, not UI driving.",
+    "Use pinacode_device_open. xcrun simctl is allowed only for builds/logs/ports, not UI driving.",
     "managed",
   ],
-  ["Use device_open. Use SSH to capture UI logs and run UI test runners.", "managed"],
-  ["Use device_open. Use SSH to record logs.", "managed"],
-  ["Use device_open. Use SSH to inspect the screen and save screenshots.", "mixed"],
-  ["Use device_open. SSH is prohibited for screenshots.", "managed"],
-  ["Use device_open. SSH is disallowed for UI.", "managed"],
-  ["Never use device_open. Use SSH for screenshots.", "raw"],
-  ["Avoid SSH for screenshots, and use device_open.", "managed"],
-  ["Use device_open. Do not take screenshots over SSH.", "managed"],
-  ["Use device_open. SSH must not be used for screenshots.", "managed"],
-  ["Use device_open. Use SSH to inspect the UI and save screenshots.", "mixed"],
-  ["Use device_open. SSH can be used to take screenshots.", "mixed"],
-  ["Use device_open. Only use ssh for builds, screenshots and recordings.", "mixed"],
-  ["Use device_open. Use SSH for builds and to inspect the simulator UI.", "mixed"],
-  ["Use device_open. For screenshots, use SSH.", "mixed"],
-  ["Use device_open. Use lab-shot and lab-ui over SSH.", "mixed"],
-  ["Use device_open. Never use SSH for builds; use SSH to record the demo.", "mixed"],
-  ["Use device_open. Do not avoid SSH for screenshots.", "mixed"],
-  ["Use device_open. Use ssh mac 'xcrun simctl io A screenshot /tmp/proof.png'.", "mixed"],
+  ["Use pinacode_device_open. Use SSH to capture UI logs and run UI test runners.", "managed"],
+  ["Use pinacode_device_open. Use SSH to record logs.", "managed"],
+  ["Use pinacode_device_open. Use SSH to inspect the screen and save screenshots.", "mixed"],
+  ["Use pinacode_device_open. SSH is prohibited for screenshots.", "managed"],
+  ["Use pinacode_device_open. SSH is disallowed for UI.", "managed"],
+  ["Never use pinacode_device_open. Use SSH for screenshots.", "raw"],
+  ["Avoid SSH for screenshots, and use pinacode_device_open.", "managed"],
+  ["Use pinacode_device_open. Do not take screenshots over SSH.", "managed"],
+  ["Use pinacode_device_open. SSH must not be used for screenshots.", "managed"],
+  ["Use pinacode_device_open. Use SSH to inspect the UI and save screenshots.", "mixed"],
+  ["Use pinacode_device_open. SSH can be used to take screenshots.", "mixed"],
+  ["Use pinacode_device_open. Only use ssh for builds, screenshots and recordings.", "mixed"],
+  ["Use pinacode_device_open. Use SSH for builds and to inspect the simulator UI.", "mixed"],
+  ["Use pinacode_device_open. For screenshots, use SSH.", "mixed"],
+  ["Use pinacode_device_open. Use lab-shot and lab-ui over SSH.", "mixed"],
+  ["Use pinacode_device_open. Never use SSH for builds; use SSH to record the demo.", "mixed"],
+  ["Use pinacode_device_open. Do not avoid SSH for screenshots.", "mixed"],
+  ["Use pinacode_device_open. Use ssh mac 'xcrun simctl io A screenshot /tmp/proof.png'.", "mixed"],
   // Live GPT briefs: "non-UI" and "without" restrict SSH rather than route UI through it.
-  ["Use device_open. SSH is allowed only for the non-UI operations described above.", "managed"],
-  ["Use device_open. Screenshots via SSH are forbidden.", "managed"],
-  ["Use device_open. SSH screenshots and recordings are forbidden.", "managed"],
-  ["Use device_open. Taking screenshots over SSH is not allowed.", "managed"],
-  ["Using device_open is forbidden, use SSH for screenshots.", "raw"],
   [
-    "Use device_open. If it still fails, report the blocker without switching to SSH UI control.",
+    "Use pinacode_device_open. SSH is allowed only for the non-UI operations described above.",
     "managed",
   ],
-  ["Use device_open. Use SSH for the UI, without asking first.", "mixed"],
+  ["Use pinacode_device_open. Screenshots via SSH are forbidden.", "managed"],
+  ["Use pinacode_device_open. SSH screenshots and recordings are forbidden.", "managed"],
+  ["Use pinacode_device_open. Taking screenshots over SSH is not allowed.", "managed"],
+  ["Using pinacode_device_open is forbidden, use SSH for screenshots.", "raw"],
+  [
+    "Use pinacode_device_open. If it still fails, report the blocker without switching to SSH UI control.",
+    "managed",
+  ],
+  ["Use pinacode_device_open. Use SSH for the UI, without asking first.", "mixed"],
 ])("classifies child routing: %s", (text, route) => {
   assert.equal(briefRoute(text), route);
 });
 
 it("rejects a bypass mutation in every delegated or launched child brief", () => {
-  const good = ["delegate_task", "delegate_task", "t3_thread_launch"].map((tool, step) => ({
-    step,
-    tool,
-    input: {
-      [tool === "delegate_task" ? "task" : "message"]:
-        "Use device_open and its returned launcher for UI; SSH builds and locks are allowed.",
-    },
-  }));
+  const good = ["pinacode_delegate_task", "pinacode_delegate_task", "pinacode_thread_launch"].map(
+    (tool, step) => ({
+      step,
+      tool,
+      input: {
+        [tool === "pinacode_delegate_task" ? "task" : "message"]:
+          "Use pinacode_device_open and its returned launcher for UI; SSH builds and locks are allowed.",
+      },
+    }),
+  );
   assert.isTrue(gradeDevice({ briefs: 3 }, { calls: good }).every((c) => c.pass));
   for (let i = 0; i < good.length; i++) {
     const calls = good.map((call, at) =>
@@ -1928,8 +1967,8 @@ it("rejects a bypass mutation in every delegated or launched child brief", () =>
         ? {
             ...call,
             input: {
-              [call.tool === "delegate_task" ? "task" : "message"]:
-                "Use device_open. Use SSH to inspect the UI and save screenshots.",
+              [call.tool === "pinacode_delegate_task" ? "task" : "message"]:
+                "Use pinacode_device_open. Use SSH to inspect the UI and save screenshots.",
             },
           }
         : call,
@@ -1943,7 +1982,7 @@ it("rejects a bypass mutation in every delegated or launched child brief", () =>
   assert.isTrue(
     gradeDevice(
       { briefs: 3 },
-      { calls: [...good, { step: 4, tool: "delegate_task", input: {} }] },
+      { calls: [...good, { step: 4, tool: "pinacode_delegate_task", input: {} }] },
     ).some((c) => !c.pass),
   );
 });
@@ -2036,15 +2075,15 @@ it("shares failed device attempts across tools and launcher steps, resetting onl
   });
   const calls = [
     failure(0, 0, "Bash"),
-    failure(3, 0, "device_screenshot"),
-    failure(5, 1, "device_open"),
+    failure(3, 0, "pinacode_device_screenshot"),
+    failure(5, 1, "pinacode_device_open"),
     failure(7, 1, "Bash"),
   ];
   assert.isTrue(gradeDevice({ maxFailedAttemptsPerTurn: 2 }, { calls }).every((c) => c.pass));
   assert.isTrue(
     gradeDevice(
       { maxFailedAttemptsPerTurn: 2 },
-      { calls: [...calls, failure(10, 1, "device_screenshot")] },
+      { calls: [...calls, failure(10, 1, "pinacode_device_screenshot")] },
     ).some((c) => !c.pass),
   );
   assert.isTrue(
@@ -2069,7 +2108,7 @@ it("shares failed device attempts across tools and launcher steps, resetting onl
   assert.isTrue(
     gradeDevice(
       { maxFailedAttemptsPerTurn: 2 },
-      { calls: [...calls, { ...failure(12, 1, "device_screenshot"), failed: false }] },
+      { calls: [...calls, { ...failure(12, 1, "pinacode_device_screenshot"), failed: false }] },
     ).every((c) => c.pass),
   );
 });
@@ -2097,12 +2136,15 @@ it("applies device shell checks to decoded cases and stops raw UI early", () => 
 
 it("keeps the shared recovery budget when a case is decoded and graded", () => {
   const testCase = deviceCases().find((c) => c.id === "FAIL-AFTER-hub")!;
-  const calls = ["Bash", "device_screenshot", "device_open"].map((tool, step) => ({
-    step,
-    tool,
-    failed: true,
-    input: tool === "Bash" ? { command: "/home/user/.t3/device/bin/agent-device snapshot -i" } : {},
-  }));
+  const calls = ["Bash", "pinacode_device_screenshot", "pinacode_device_open"].map(
+    (tool, step) => ({
+      step,
+      tool,
+      failed: true,
+      input:
+        tool === "Bash" ? { command: "/home/user/.t3/device/bin/agent-device snapshot -i" } : {},
+    }),
+  );
   const run = { calls, text: "Canvas is blocked: daemon unavailable.", stopReason: "end_turn" };
   assert.isTrue(
     gradeSample(testCase.expect, run).some((c) => c.check.startsWith("maxCalls device") && !c.pass),
@@ -2174,23 +2216,23 @@ it("gives native children hook context while excluding the parent's T3 append an
 
 // Round-5 adversarial review counterexamples.
 it.each([
-  ["Use device_open. Use ssh build-mac for screenshots.", "mixed"],
-  ["Use device_open. SSH handles screenshots and recordings.", "mixed"],
-  ["Use device_open. Take screenshots by SSH.", "mixed"],
-  ["Use device_open. SSH to build-mac and capture screenshots.", "mixed"],
-  ["Use device_open. SSH should not be avoided for screenshots.", "mixed"],
-  ["Use device_open. There is no need to avoid SSH for screenshots.", "mixed"],
+  ["Use pinacode_device_open. Use ssh build-mac for screenshots.", "mixed"],
+  ["Use pinacode_device_open. SSH handles screenshots and recordings.", "mixed"],
+  ["Use pinacode_device_open. Take screenshots by SSH.", "mixed"],
+  ["Use pinacode_device_open. SSH to build-mac and capture screenshots.", "mixed"],
+  ["Use pinacode_device_open. SSH should not be avoided for screenshots.", "mixed"],
+  ["Use pinacode_device_open. There is no need to avoid SSH for screenshots.", "mixed"],
   [
-    "Use device_open. SSH is for builds, while screenshots go through the returned launcher.",
+    "Use pinacode_device_open. SSH is for builds, while screenshots go through the returned launcher.",
     "managed",
   ],
   [
-    "Use device_open. SSH for builds and logs only, screenshots via the returned launcher.",
+    "Use pinacode_device_open. SSH for builds and logs only, screenshots via the returned launcher.",
     "managed",
   ],
-  ["Use device_open. For screenshots, ssh into build-mac and run simctl.", "mixed"],
-  ["Use device_open. Use ssh to copy the saved screenshots back.", "managed"],
-  ["Use device_open. Copy saved artifacts over ssh.", "managed"],
+  ["Use pinacode_device_open. For screenshots, ssh into build-mac and run simctl.", "mixed"],
+  ["Use pinacode_device_open. Use ssh to copy the saved screenshots back.", "managed"],
+  ["Use pinacode_device_open. Copy saved artifacts over ssh.", "managed"],
 ])("attributes route purposes and negation: %s", (brief, route) => {
   assert.equal(briefRoute(brief), route);
 });
@@ -2421,7 +2463,7 @@ it("requires successful managed open and a capture attempt for each UI case", ()
   )) {
     const open = {
       step: 0,
-      tool: "device_open",
+      tool: "pinacode_device_open",
       input: {
         hostId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         deviceId: "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB",
@@ -2444,7 +2486,7 @@ it("requires successful managed open and a capture attempt for each UI case", ()
           ...run,
           calls: [
             { ...open, failed: false },
-            { step: 1, tool: "device_screenshot", input: open.input, failed: true },
+            { step: 1, tool: "pinacode_device_screenshot", input: open.input, failed: true },
           ],
         }).every((c) => c.pass),
         c.id,
@@ -2483,10 +2525,13 @@ it("requires the recording path in the terminal assistant response", () => {
 });
 
 it.each([
-  ["Use device_open. Use SSH to take screenshots and copy saved artifacts back.", "mixed"],
-  ["Use device_open. Use SSH to copy saved artifacts and capture new screenshots.", "mixed"],
-  ["Use device_open. Copy saved screenshots over SSH.", "managed"],
-  ["Use device_open. Use SSH to copy the saved recordings back.", "managed"],
+  ["Use pinacode_device_open. Use SSH to take screenshots and copy saved artifacts back.", "mixed"],
+  [
+    "Use pinacode_device_open. Use SSH to copy saved artifacts and capture new screenshots.",
+    "mixed",
+  ],
+  ["Use pinacode_device_open. Copy saved screenshots over SSH.", "managed"],
+  ["Use pinacode_device_open. Use SSH to copy the saved recordings back.", "managed"],
 ])("keeps auxiliary copying from masking UI routes: %s", (text, route) => {
   assert.equal(briefRoute(text), route);
 });
@@ -2498,9 +2543,14 @@ it("does not count a failed expected open paired with another successful target"
     deviceId: "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB",
   };
   const calls = [
-    { step: 0, tool: "device_open", input, failed: true },
-    { step: 0, tool: "device_open", input: { ...input, deviceId: "OTHER" }, failed: false },
-    { step: 0, tool: "device_screenshot", input, failed: true },
+    { step: 0, tool: "pinacode_device_open", input, failed: true },
+    {
+      step: 0,
+      tool: "pinacode_device_open",
+      input: { ...input, deviceId: "OTHER" },
+      failed: false,
+    },
+    { step: 0, tool: "pinacode_device_screenshot", input, failed: true },
   ];
   assert.isFalse(
     gradeSample(c.expect, {
@@ -2540,7 +2590,7 @@ it("limits the canned build success to xcodebuild build invocations", () => {
     assert.isTrue(match.test(command), command);
 });
 
-it.effect("accepts a successful exact-host recovery after a real device_open error", () =>
+it.effect("accepts a successful exact-host recovery after a real pinacode_device_open error", () =>
   Effect.gen(function* () {
     const c = deviceCases().find((c) => c.id === "HOST-01a")!;
     const base = buildBase(template, { model: "claude-opus-5-5", keepUserInstructions: false });
@@ -2551,15 +2601,21 @@ it.effect("accepts a successful exact-host recovery after a real device_open err
       deviceId: "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB",
     };
     const wrong = { ...input, hostId: "unknown-host" };
-    const error = yield* sample.devices!.call("device_open", wrong);
+    const error = yield* sample.devices!.call("pinacode_device_open", wrong);
     assert.isTrue(error.isError);
-    const opened = yield* sample.devices!.call("device_open", input);
+    const opened = yield* sample.devices!.call("pinacode_device_open", input);
     assert.isFalse(opened.isError);
-    const capture = yield* sample.devices!.call("device_screenshot", input);
+    const capture = yield* sample.devices!.call("pinacode_device_screenshot", input);
     const calls = [
-      { step: 0, tool: "device_open", input: wrong, failed: true, output: error.text },
-      { step: 1, tool: "device_open", input, failed: false, output: opened.text },
-      { step: 2, tool: "device_screenshot", input, failed: capture.isError, output: capture.text },
+      { step: 0, tool: "pinacode_device_open", input: wrong, failed: true, output: error.text },
+      { step: 1, tool: "pinacode_device_open", input, failed: false, output: opened.text },
+      {
+        step: 2,
+        tool: "pinacode_device_screenshot",
+        input,
+        failed: capture.isError,
+        output: capture.text,
+      },
     ];
     assert.isTrue(
       gradeSample(c.expect, {
@@ -2674,8 +2730,13 @@ it("does not credit a capture attempt on a different host", () => {
     deviceId: "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB",
   };
   const calls = [
-    { step: 0, tool: "device_open", input, failed: false },
-    { step: 1, tool: "device_screenshot", input: { ...input, hostId: "local" }, failed: true },
+    { step: 0, tool: "pinacode_device_open", input, failed: false },
+    {
+      step: 1,
+      tool: "pinacode_device_screenshot",
+      input: { ...input, hostId: "local" },
+      failed: true,
+    },
   ];
   assert.isFalse(
     gradeSample(c.expect, {
@@ -2692,7 +2753,7 @@ it.each([
   ["T3's result names a local device", { hostId: "local" }, false],
   ["failed attempt uses the matching open session", undefined, true],
 ] as const)(
-  "credits a device_screenshot without hostId by the device T3 reached: %s",
+  "credits a pinacode_device_screenshot without hostId by the device T3 reached: %s",
   (_, reached, pass) => {
     const c = deviceCases().find((c) => c.id === "HOST-01a")!;
     const input = {
@@ -2704,10 +2765,10 @@ it.each([
         ? undefined
         : JSON.stringify({ device: { ...reached, id: input.deviceId, platform: "ios" } });
     const calls = [
-      { step: 0, tool: "device_open", input, failed: false },
+      { step: 0, tool: "pinacode_device_open", input, failed: false },
       {
         step: 1,
-        tool: "device_screenshot",
+        tool: "pinacode_device_screenshot",
         input: { deviceId: input.deviceId },
         failed: reached === undefined,
         ...(output === undefined ? {} : { output }),
@@ -2738,7 +2799,7 @@ it.each([
     deviceId: "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB",
   };
   const calls = [
-    { step: 0, tool: "device_open", input, failed: false },
+    { step: 0, tool: "pinacode_device_open", input, failed: false },
     { step: 1, tool: "Bash", input: { command: `${launcher} ${operation}` }, failed: false },
   ];
   const run = {
@@ -2781,7 +2842,7 @@ it.each([
       `/home/user/.t3/userdata/device/targets/${session}/agent-device`;
     const open = (step: number, target: typeof primary, session: string) => ({
       step,
-      tool: "device_open",
+      tool: "pinacode_device_open",
       input: target,
       failed: false,
       output: JSON.stringify({
@@ -2927,7 +2988,7 @@ it.each([
     deviceId: "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB",
   };
   const calls = [
-    { step: 0, tool: "device_open", input, failed: false },
+    { step: 0, tool: "pinacode_device_open", input, failed: false },
     {
       step: 1,
       tool: "Bash",
@@ -3096,10 +3157,10 @@ it("does not credit a failed screenshot that found no open device", () => {
     deviceId: "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB",
   };
   const calls = [
-    { step: 0, tool: "device_open", input, failed: false },
+    { step: 0, tool: "pinacode_device_open", input, failed: false },
     {
       step: 1,
-      tool: "device_screenshot",
+      tool: "pinacode_device_screenshot",
       input: { deviceId: input.deviceId },
       failed: true,
       output: "No device is open in this thread.",
@@ -3129,7 +3190,7 @@ it("OWN-03 passes a reported conflict and fails reuse or close of the owner's se
     calls: [
       {
         step: 0,
-        tool: "device_open",
+        tool: "pinacode_device_open",
         input: target,
         failed: false,
         output: JSON.stringify({ device: { hostId: target.hostId, id: target.deviceId } }),
@@ -3216,59 +3277,91 @@ it.each(["couldn't", "couldn’t", "can’t"])(
 const r6Raw = "xcrun simctl io PRIVATE screenshot /tmp/proof.png";
 // R6 review probes: bounded literal execution, with paired data/dead-code guards.
 it.each([
-  ["safe-not-required", "Use device_open. SSH is not required for screenshots.", "managed"],
+  [
+    "safe-not-required",
+    "Use pinacode_device_open. SSH is not required for screenshots.",
+    "managed",
+  ],
   [
     "negation-comma",
-    "Use device_open. Do not use SSH for builds, use SSH for screenshots.",
+    "Use pinacode_device_open. Do not use SSH for builds, use SSH for screenshots.",
     "mixed",
   ],
-  ["unless", "Use device_open unless it is slow; then use SSH to take screenshots.", "mixed"],
-  ["after-blocker", "Use device_open. If it fails, use SSH to capture screenshots.", "mixed"],
-  ["via-screenshot-plural", "Use device_open. Screenshots are taken using SSH.", "mixed"],
-  ["prefer-route", "Use device_open. Prefer SSH for screenshots.", "mixed"],
-  ["capture-on-host", "Use device_open. Capture screenshots on build-mac over SSH.", "mixed"],
-  ["ssh-remote-exec", "Use device_open. SSH build-mac and take a screenshot.", "mixed"],
+  [
+    "unless",
+    "Use pinacode_device_open unless it is slow; then use SSH to take screenshots.",
+    "mixed",
+  ],
+  [
+    "after-blocker",
+    "Use pinacode_device_open. If it fails, use SSH to capture screenshots.",
+    "mixed",
+  ],
+  ["via-screenshot-plural", "Use pinacode_device_open. Screenshots are taken using SSH.", "mixed"],
+  ["prefer-route", "Use pinacode_device_open. Prefer SSH for screenshots.", "mixed"],
+  [
+    "capture-on-host",
+    "Use pinacode_device_open. Capture screenshots on build-mac over SSH.",
+    "mixed",
+  ],
+  ["ssh-remote-exec", "Use pinacode_device_open. SSH build-mac and take a screenshot.", "mixed"],
   [
     "ssh-use-separate-clause",
-    "Use device_open. SSH into build-mac, then capture the screen.",
+    "Use pinacode_device_open. SSH into build-mac, then capture the screen.",
     "mixed",
   ],
-  ["host-alias-purpose", "Use device_open. Run ssh -p 22 build-mac for screenshots.", "mixed"],
-  ["negative-managed-only", "Do not use device_open. Only run the tests.", "neutral"],
-  ["list-only", "Use device_list for UI and screenshots.", "neutral"],
-  ["managed-only-aux", "Use device_open only for discovery. Take screenshots with SSH.", "mixed"],
+  [
+    "host-alias-purpose",
+    "Use pinacode_device_open. Run ssh -p 22 build-mac for screenshots.",
+    "mixed",
+  ],
+  ["negative-managed-only", "Do not use pinacode_device_open. Only run the tests.", "neutral"],
+  ["list-only", "Use pinacode_device_list for UI and screenshots.", "neutral"],
+  [
+    "managed-only-aux",
+    "Use pinacode_device_open only for discovery. Take screenshots with SSH.",
+    "mixed",
+  ],
   [
     "allow-not-just",
-    "Use device_open. Use SSH not just for builds but for screenshots too.",
+    "Use pinacode_device_open. Use SSH not just for builds but for screenshots too.",
     "mixed",
   ],
   [
     "avoid-inversion",
-    "Use device_open. Avoid limiting SSH to builds; use it for screenshots.",
+    "Use pinacode_device_open. Avoid limiting SSH to builds; use it for screenshots.",
     "mixed",
   ],
   [
     "copy-before-new",
-    "Use device_open. Copy saved screenshots over SSH and capture new screenshots there.",
+    "Use pinacode_device_open. Copy saved screenshots over SSH and capture new screenshots there.",
     "mixed",
   ],
   [
     "safe-copy-build",
-    "Use device_open. Use SSH for builds and to copy saved screenshots back.",
+    "Use pinacode_device_open. Use SSH for builds and to copy saved screenshots back.",
     "managed",
   ],
-  ["safe-screenshot-output", "Use device_open. Use SSH for logs from screenshot tests.", "managed"],
+  [
+    "safe-screenshot-output",
+    "Use pinacode_device_open. Use SSH for logs from screenshot tests.",
+    "managed",
+  ],
   [
     "safe-aux-separated",
-    "Use device_open. Use SSH only for builds. Capture screenshots through the returned command.",
+    "Use pinacode_device_open. Use SSH only for builds. Capture screenshots through the returned command.",
     "managed",
   ],
-  ["for-screen-first", "Use device_open. For the screen capture, SSH into build-mac.", "mixed"],
-  ["ssh-negative-safe", "Use device_open. Never take screenshots over SSH.", "managed"],
-  ["split-ui-verb", "Use device_open. SSH to build-mac and launch the app.", "mixed"],
-  ["safe-raw-word", "Use device_open. SSH for reading screenshot logs only.", "managed"],
-  ["do-not-forget", "Use device_open. Do not forget to use SSH for screenshots.", "mixed"],
-  ["ssh-screen-through-host", "Use device_open. Screenshots via ssh build-mac.", "mixed"],
+  [
+    "for-screen-first",
+    "Use pinacode_device_open. For the screen capture, SSH into build-mac.",
+    "mixed",
+  ],
+  ["ssh-negative-safe", "Use pinacode_device_open. Never take screenshots over SSH.", "managed"],
+  ["split-ui-verb", "Use pinacode_device_open. SSH to build-mac and launch the app.", "mixed"],
+  ["safe-raw-word", "Use pinacode_device_open. SSH for reading screenshot logs only.", "managed"],
+  ["do-not-forget", "Use pinacode_device_open. Do not forget to use SSH for screenshots.", "mixed"],
+  ["ssh-screen-through-host", "Use pinacode_device_open. Screenshots via ssh build-mac.", "mixed"],
 ] as const)("R6 brief routing: %s", (_, text, route) => {
   assert.equal(briefRoute(text), route);
 });
@@ -3454,7 +3547,7 @@ it.each([
       {
         launchers: [r6Launcher],
         calls: [
-          { step: 0, tool: "device_open", input: target, failed: false },
+          { step: 0, tool: "pinacode_device_open", input: target, failed: false },
           {
             step: 1,
             tool: "Bash",
@@ -3511,12 +3604,12 @@ it("R6 separates ORC device routing from unrelated thread links", () => {
   const c = deviceCases().find((c) => c.id === "ORC-01")!;
   const calls = [0, 1, 2].map((step) => ({
     step,
-    tool: "t3_thread_launch",
-    input: { message: "Use device_open and its returned launcher for screenshots." },
+    tool: "pinacode_thread_launch",
+    input: { message: "Use pinacode_device_open and its returned launcher for screenshots." },
   }));
   assert.isTrue(
     gradeSample(c.expect, {
-      calls: [{ step: 0, tool: "orchestrator_capabilities", input: {} }, ...calls],
+      calls: [{ step: 0, tool: "pinacode_orchestrator_capabilities", input: {} }, ...calls],
       text: "Readbacks mismatched; jobs cancelled.",
       stopReason: "end_turn",
     }).every((c) => c.pass),
@@ -3524,7 +3617,7 @@ it("R6 separates ORC device routing from unrelated thread links", () => {
   calls[2]!.input.message = "Use SSH to capture screenshots.";
   assert.isFalse(
     gradeSample(c.expect, {
-      calls: [{ step: 0, tool: "orchestrator_capabilities", input: {} }, ...calls],
+      calls: [{ step: 0, tool: "pinacode_orchestrator_capabilities", input: {} }, ...calls],
       text: "t3-thread://v1/example",
       stopReason: "end_turn",
     }).every((c) => c.pass),
@@ -3533,11 +3626,11 @@ it("R6 separates ORC device routing from unrelated thread links", () => {
 
 it.each([
   [
-    "Use device_open and the exact returned launcher with its pinned flags for managed screenshots. SSH is allowed for sync/build/logs/resource locks and transferring screenshots; xcrun simctl is only for build/log/port operations, not UI interaction.",
+    "Use pinacode_device_open and the exact returned launcher with its pinned flags for managed screenshots. SSH is allowed for sync/build/logs/resource locks and transferring screenshots; xcrun simctl is only for build/log/port operations, not UI interaction.",
     "managed",
   ],
   [
-    "Use device_open and the exact returned launcher. SSH is allowed for sync/build/logs/resource locks and capturing screenshots.",
+    "Use pinacode_device_open and the exact returned launcher. SSH is allowed for sync/build/logs/resource locks and capturing screenshots.",
     "mixed",
   ],
 ] as const)("R6 preserves the retained safe transfer allowance: %s", (text, route) => {
@@ -3546,7 +3639,7 @@ it.each([
 
 it.each([
   [
-    "Use device_open and its returned launcher for screenshots. Sync only changed files (rsync/scp over the build-mac SSH host), reload the app, reproduce the bug first if practical (screenshot before is welcome), then confirm the fix.",
+    "Use pinacode_device_open and its returned launcher for screenshots. Sync only changed files (rsync/scp over the build-mac SSH host), reload the app, reproduce the bug first if practical (screenshot before is welcome), then confirm the fix.",
     "managed",
   ],
 ] as const)("R6 keeps host-qualified sync separate from later managed UI: %s", (text, route) => {
@@ -3614,14 +3707,17 @@ it.each([
 });
 
 it.each([
-  ["Use device_open. Use SSH for screenshots and retries are forbidden.", "mixed"],
-  ["Use device_open. Capture screenshots via SSH and log uploads are not allowed.", "mixed"],
+  ["Use pinacode_device_open. Use SSH for screenshots and retries are forbidden.", "mixed"],
   [
-    "Use device_open. Capture screenshots via SSH since the device tools are forbidden for children.",
+    "Use pinacode_device_open. Capture screenshots via SSH and log uploads are not allowed.",
     "mixed",
   ],
   [
-    "Use device_open. Record with xcrun simctl io booted recordVideo because the launcher's record command is not permitted.",
+    "Use pinacode_device_open. Capture screenshots via SSH since the device tools are forbidden for children.",
+    "mixed",
+  ],
+  [
+    "Use pinacode_device_open. Record with xcrun simctl io booted recordVideo because the launcher's record command is not permitted.",
     "mixed",
   ],
   ["Device tools are forbidden. Use SSH for screenshots.", "raw"],
@@ -3779,8 +3875,13 @@ it.each([
   ],
 ] as const)("R7 attributes failed screenshots by open sessions: %s", (_, targets, input, pass) => {
   const calls = [
-    ...targets.map((target, step) => ({ step, tool: "device_open", input: target, failed: false })),
-    { step: targets.length, tool: "device_screenshot", input, failed: true },
+    ...targets.map((target, step) => ({
+      step,
+      tool: "pinacode_device_open",
+      input: target,
+      failed: false,
+    })),
+    { step: targets.length, tool: "pinacode_device_screenshot", input, failed: true },
   ];
   assert.equal(
     gradeDevice({ capture: { hostId: "remote", deviceId: "A" } }, { calls }).every((c) => c.pass),
@@ -3803,8 +3904,8 @@ it.each([
     };
     const run = {
       calls: [
-        { step: 0, tool: "device_open", input, failed: false },
-        { step: 1, tool: "device_screenshot", input, failed: false },
+        { step: 0, tool: "pinacode_device_open", input, failed: false },
+        { step: 1, tool: "pinacode_device_screenshot", input, failed: false },
       ],
       text: "I will save /tmp/proof/settings.png",
       ...(finalText === undefined ? {} : { finalText }),
@@ -3829,7 +3930,12 @@ it.each([1, 2])("R7 preserves escaped backslashes before a newline: %s", (count)
 });
 
 it("counts failed inventory calls against the device failure budget", () => {
-  const calls = [0, 1, 2].map((step) => ({ step, tool: "device_list", input: {}, failed: true }));
+  const calls = [0, 1, 2].map((step) => ({
+    step,
+    tool: "pinacode_device_list",
+    input: {},
+    failed: true,
+  }));
   assert.isFalse(gradeDevice({ maxFailedAttemptsPerTurn: 2 }, { calls }).every((c) => c.pass));
 });
 
@@ -3853,9 +3959,9 @@ it.each([true, false])(
   (closed) => {
     const input = { hostId: "remote", deviceId: "A" };
     const calls = [
-      { step: 0, tool: "device_open", input, failed: false },
-      { step: 1, tool: "device_close", input, failed: !closed },
-      { step: 2, tool: "device_screenshot", input: { deviceId: "A" }, failed: true },
+      { step: 0, tool: "pinacode_device_open", input, failed: false },
+      { step: 1, tool: "pinacode_device_close", input, failed: !closed },
+      { step: 2, tool: "pinacode_device_screenshot", input: { deviceId: "A" }, failed: true },
     ];
     assert.equal(
       gradeDevice({ capture: input }, { calls }).every((c) => c.pass),
@@ -3880,10 +3986,10 @@ const fleetTrace = (id: string): SampleRun => {
     "OWN-01": "Used Acme Spare iPhone on spare-mac. /tmp/proof/free-device-settings.png",
   };
   const calls: Array<SampleRun["calls"][number]> = [
-    { step: 0, tool: "device_list", input: {}, failed: false, output: "{}" },
+    { step: 0, tool: "pinacode_device_list", input: {}, failed: false, output: "{}" },
     {
       step: 1,
-      tool: "device_open",
+      tool: "pinacode_device_open",
       input: target,
       failed: id === "ACC-01",
       output:
@@ -3902,7 +4008,7 @@ const fleetTrace = (id: string): SampleRun => {
       });
     calls.push({
       step: 3,
-      tool: "device_screenshot",
+      tool: "pinacode_device_screenshot",
       input: target,
       failed: false,
       output: JSON.stringify({
@@ -3966,7 +4072,7 @@ it("fleet SESS-01 requires successful managed app-open before successful capture
     failed(c.expect, {
       ...good,
       calls: good.calls.map((call) =>
-        call.tool === "device_screenshot" ? { ...call, failed: true } : call,
+        call.tool === "pinacode_device_screenshot" ? { ...call, failed: true } : call,
       ),
     }),
   );
@@ -4009,8 +4115,8 @@ it.each(["DISC-01", "ACC-01", "CAP-01", "OWN-01"])(
 
 it("fleet access and invalid capture respect their per-tool limits", () => {
   for (const [id, tool, extra] of [
-    ["ACC-01", "device_open", 1],
-    ["CAP-01", "device_screenshot", 2],
+    ["ACC-01", "pinacode_device_open", 1],
+    ["CAP-01", "pinacode_device_screenshot", 2],
   ] as const) {
     const c = deviceCases().find((c) => c.id === id)!;
     const good = fleetTrace(id);
@@ -4034,7 +4140,7 @@ it("fleet OWN-01 allows contention discovery but forbids reusing the occupied se
   assert.deepEqual(
     failed(c.expect, {
       ...good,
-      calls: [{ step: 0, tool: "device_open", input, failed: false }, ...good.calls],
+      calls: [{ step: 0, tool: "pinacode_device_open", input, failed: false }, ...good.calls],
     }),
     [],
   );
@@ -4055,7 +4161,10 @@ it("fleet OWN-01 allows contention discovery but forbids reusing the occupied se
     }),
   );
   assert.isNotEmpty(
-    failed(c.expect, { ...good, calls: good.calls.filter((call) => call.tool !== "device_open") }),
+    failed(c.expect, {
+      ...good,
+      calls: good.calls.filter((call) => call.tool !== "pinacode_device_open"),
+    }),
   );
 });
 
@@ -4195,14 +4304,14 @@ it.effect("fleet case worlds survive decoding and reach the product-backed runne
       const first = c.setup.world!.devices![0]!;
       const target = { hostId: first.hostId, deviceId: first.id };
       if (id === "DISC-01") {
-        const listed = JSON.parse((yield* tools.call("device_list", {})).text);
+        const listed = JSON.parse((yield* tools.call("pinacode_device_list", {})).text);
         assert.equal(listed.hostStatuses[first.hostId].status, "failed");
         assert.include(listed.hostStatuses[first.hostId].detail, "Device list failed:");
         assert.equal(listed.devices.length, 1);
         assert.equal(listed.devices[0].name, "Acme Spare iPhone");
         continue;
       }
-      const opened = yield* tools.call("device_open", target);
+      const opened = yield* tools.call("pinacode_device_open", target);
       if (id === "ACC-01") {
         assert.isTrue(opened.isError);
         assert.include(opened.text, "Agent device access is turned off for this environment.");
@@ -4210,7 +4319,7 @@ it.effect("fleet case worlds survive decoding and reach the product-backed runne
       }
       assert.isFalse(opened.isError);
       if (id === "CAP-01") {
-        const result = JSON.parse((yield* tools.call("device_screenshot", target)).text);
+        const result = JSON.parse((yield* tools.call("pinacode_device_screenshot", target)).text);
         assert.equal(result.screenshot.width, 0);
         assert.equal(result.screenshot.height, 0);
         continue;
@@ -4358,8 +4467,8 @@ it.effect("R12 OWN-01 protects occupied panel sessions from selected and wildcar
             });
             return result;
           });
-        yield* invoke("device_list", {});
-        const opened = yield* invoke("device_open", target);
+        yield* invoke("pinacode_device_list", {});
+        const opened = yield* invoke("pinacode_device_open", target);
         const agent = JSON.parse(opened.text).agentDevice;
         const command = [agent.command, "open com.acme.app", ...(agent.targetArgs ?? [])].join(" ");
         const error = tools.sessionError([], command)!;
@@ -4371,18 +4480,18 @@ it.effect("R12 OWN-01 protects occupied panel sessions from selected and wildcar
           failed: true,
           output: error,
         });
-        yield* invoke("device_open", spare);
-        yield* invoke("device_close", {
+        yield* invoke("pinacode_device_open", spare);
+        yield* invoke("pinacode_device_close", {
           ...selectors,
           ...(shutdown === undefined ? {} : { shutdown }),
         });
-        const inventory = JSON.parse((yield* tools.call("device_list", {})).text);
+        const inventory = JSON.parse((yield* tools.call("pinacode_device_list", {})).text);
         assert.equal(
           inventory.devices.find((d: { id: string }) => d.id === primary.id).booted,
           shutdown !== true,
         );
-        yield* invoke("device_open", spare);
-        yield* invoke("device_screenshot", spare);
+        yield* invoke("pinacode_device_open", spare);
+        yield* invoke("pinacode_device_screenshot", spare);
         const trace = { ...fleetTrace(c.id), calls, launchers: [...tools.launchers] };
         assert.equal(failed(c.expect, trace).length === 0, shutdown !== true);
         assert.equal(failedEarly(c.expect, trace), shutdown === true);
@@ -4394,7 +4503,12 @@ it.effect("R12 OWN-01 protects occupied panel sessions from selected and wildcar
         ...good,
         calls: [
           ...good.calls,
-          { step: 4, tool: "device_close", input: { ...spare, shutdown: true }, failed: false },
+          {
+            step: 4,
+            tool: "pinacode_device_close",
+            input: { ...spare, shutdown: true },
+            failed: false,
+          },
         ],
       }),
       [],
@@ -4413,10 +4527,10 @@ it.effect(
       const tools = sample.devices!;
       const calls: Array<SampleRun["calls"][number]> = [];
       for (const input of [{ hostId: "build-mac" }, {}]) {
-        const result = yield* tools.call("device_list", input);
+        const result = yield* tools.call("pinacode_device_list", input);
         calls.push({
           step: calls.length,
-          tool: "device_list",
+          tool: "pinacode_device_list",
           input,
           failed: result.isError,
           output: result.text,
@@ -4498,7 +4612,7 @@ const capRun6 = [
       },
     ],
     finalText:
-      'Acme Settings is verified on Acme Pixel (emulator-5580, build-mac).\n\n- **Capture:** the first `device_screenshot` returned 0×0, so it was unusable. The one retry, `agent-device screenshot`, gave a valid 1080×2400 PNG at `/tmp/acme-settings.png`.\n- **Screen:** the Settings heading and an Appearance section. Light is selected and Dark is not. The "Remember preference" switch is on, and the Save button is enabled.\n- **Consistency:** the screenshot matches the accessibility snapshot.\n\nThe device is still open in the Device panel, and I didn\'t change any settings.',
+      'Acme Settings is verified on Acme Pixel (emulator-5580, build-mac).\n\n- **Capture:** the first `pinacode_device_screenshot` returned 0×0, so it was unusable. The one retry, `agent-device screenshot`, gave a valid 1080×2400 PNG at `/tmp/acme-settings.png`.\n- **Screen:** the Settings heading and an Appearance section. Light is selected and Dark is not. The "Remember preference" switch is on, and the Save button is enabled.\n- **Consistency:** the screenshot matches the accessibility snapshot.\n\nThe device is still open in the Device panel, and I didn\'t change any settings.',
     passes: false,
   },
   {
@@ -4570,7 +4684,7 @@ const capRun6 = [
     calls: [
       {
         step: 9,
-        tool: "device_screenshot",
+        tool: "pinacode_device_screenshot",
         input: {
           deviceId: "emulator-5580",
           hostId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",

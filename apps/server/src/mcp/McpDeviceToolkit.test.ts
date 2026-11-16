@@ -160,13 +160,18 @@ it.effect("registers the device tools and returns the screenshot as image conten
     Effect.gen(function* () {
       const server = yield* McpServer.McpServer;
       const names = server.tools.map(({ tool }) => tool.name).toSorted();
-      expect(names).toEqual(["device_close", "device_list", "device_open", "device_screenshot"]);
+      expect(names).toEqual([
+        "pinacode_device_close",
+        "pinacode_device_list",
+        "pinacode_device_open",
+        "pinacode_device_screenshot",
+      ]);
 
       const callWith = (capabilities: ReadonlyArray<McpInvocationContext.McpCapability>) =>
         Effect.provideService(McpInvocationContext.McpInvocationContext, invocation(capabilities));
 
       const opened = yield* server
-        .callTool({ name: "device_open", arguments: { platform: "ios" } })
+        .callTool({ name: "pinacode_device_open", arguments: { platform: "ios" } })
         .pipe(callWith(["device"]), Effect.provideService(McpSchema.McpServerClient, client));
       expect(opened.isError).toBe(false);
       const openedContent = opened.structuredContent as {
@@ -196,7 +201,7 @@ it.effect("registers the device tools and returns the screenshot as image conten
       );
 
       const shot = yield* server
-        .callTool({ name: "device_screenshot", arguments: { deviceId: "UDID-1" } })
+        .callTool({ name: "pinacode_device_screenshot", arguments: { deviceId: "UDID-1" } })
         .pipe(callWith(["device"]), Effect.provideService(McpSchema.McpServerClient, client));
       expect(shot.isError).toBe(false);
       expect(shot.content.map((entry) => entry.type)).toEqual(["text", "image"]);
@@ -205,13 +210,13 @@ it.effect("registers the device tools and returns the screenshot as image conten
       });
 
       const foreign = yield* server
-        .callTool({ name: "device_screenshot", arguments: { deviceId: "UDID-2" } })
+        .callTool({ name: "pinacode_device_screenshot", arguments: { deviceId: "UDID-2" } })
         .pipe(callWith(["device"]), Effect.provideService(McpSchema.McpServerClient, client));
       expect(foreign.isError).toBe(true);
       expect(foreign.content.map((entry) => entry.type)).toEqual(["text"]);
 
       const listed = yield* server
-        .callTool({ name: "device_list", arguments: { hostId: "THIS MACHINE" } })
+        .callTool({ name: "pinacode_device_list", arguments: { hostId: "THIS MACHINE" } })
         .pipe(callWith(["device"]), Effect.provideService(McpSchema.McpServerClient, client));
       expect(listed.structuredContent).toMatchObject({
         hosts: [{ id: "local" }],
@@ -219,7 +224,7 @@ it.effect("registers the device tools and returns the screenshot as image conten
       });
 
       const unknownHost = yield* server
-        .callTool({ name: "device_screenshot", arguments: { hostId: "oliverMac" } })
+        .callTool({ name: "pinacode_device_screenshot", arguments: { hostId: "oliverMac" } })
         .pipe(callWith(["device"]), Effect.provideService(McpSchema.McpServerClient, client));
       expect(unknownHost.isError).toBe(true);
       expect(unknownHost.content).toEqual([
@@ -227,7 +232,7 @@ it.effect("registers the device tools and returns the screenshot as image conten
       ]);
 
       const denied = yield* server
-        .callTool({ name: "device_list", arguments: {} })
+        .callTool({ name: "pinacode_device_list", arguments: {} })
         .pipe(callWith(["preview"]), Effect.provideService(McpSchema.McpServerClient, client));
       expect(denied.isError).toBe(true);
       // The agent can't see Settings, and a running session keeps the capabilities it started with,
@@ -254,7 +259,7 @@ it.effect("rejects unavailable agent access before booting or opening a device",
   return Effect.gen(function* () {
     const server = yield* McpServer.McpServer;
     const result = yield* server
-      .callTool({ name: "device_open", arguments: { platform: "ios" } })
+      .callTool({ name: "pinacode_device_open", arguments: { platform: "ios" } })
       .pipe(
         Effect.provideService(McpInvocationContext.McpInvocationContext, invocation(["device"])),
         Effect.provideService(McpSchema.McpServerClient, client),
@@ -285,7 +290,7 @@ it.effect("rejects unavailable agent access before booting or opening a device",
   );
 });
 
-it.effect("device_open reports a failed host's setup error instead of no devices", () => {
+it.effect("pinacode_device_open reports a failed host's setup error instead of no devices", () => {
   const failure = "Device support failed: npm was not found. Install Node.js, which includes npm.";
   const failedState = {
     ...state,
@@ -308,7 +313,7 @@ it.effect("device_open reports a failed host's setup error instead of no devices
       { deviceId: "Pixel_API_35" },
     ]) {
       const result = yield* server
-        .callTool({ name: "device_open", arguments: args })
+        .callTool({ name: "pinacode_device_open", arguments: args })
         .pipe(
           Effect.provideService(McpInvocationContext.McpInvocationContext, invocation(["device"])),
           Effect.provideService(McpSchema.McpServerClient, client),
@@ -482,8 +487,11 @@ describe("device targeting across hosts", () => {
   it.effect("opens a device id that exists only on another host", () =>
     run([], ({ opened, call }) =>
       Effect.gen(function* () {
-        const result = yield* call("device_open", { deviceId: "MAC-UDID" });
-        const byLabel = yield* call("device_open", { platform: "ios", hostId: "MAC MINI" });
+        const result = yield* call("pinacode_device_open", { deviceId: "MAC-UDID" });
+        const byLabel = yield* call("pinacode_device_open", {
+          platform: "ios",
+          hostId: "MAC MINI",
+        });
         expect(byLabel.isError).toBe(false);
         expect(text(result)).not.toContain("No device");
         expect(result.isError).toBe(false);
@@ -501,7 +509,10 @@ describe("device targeting across hosts", () => {
       [],
       ({ call }) =>
         Effect.gen(function* () {
-          const result = yield* call("device_open", { deviceId: "Pixel_10", hostId: "mac-mini" });
+          const result = yield* call("pinacode_device_open", {
+            deviceId: "Pixel_10",
+            hostId: "mac-mini",
+          });
           expect(result.isError).toBe(false);
           expect(targets).toEqual(["emulator-5554", "emulator-5554"]);
         }),
@@ -522,19 +533,21 @@ describe("device targeting across hosts", () => {
     );
   });
 
-  it.effect("says a device closed during device_open was closed, not that its host is down", () =>
-    run(
-      [],
-      ({ call }) =>
-        Effect.gen(function* () {
-          const result = yield* call("device_open", { deviceId: "MAC-UDID" });
-          expect(result.isError).toBe(true);
-          expect(text(result)).toBe(
-            "The device was closed while device_open was preparing it. Call device_open again only if you still need it.",
-          );
-        }),
-      { agentLauncher: () => Effect.succeedNone },
-    ),
+  it.effect(
+    "says a device closed during pinacode_device_open was closed, not that its host is down",
+    () =>
+      run(
+        [],
+        ({ call }) =>
+          Effect.gen(function* () {
+            const result = yield* call("pinacode_device_open", { deviceId: "MAC-UDID" });
+            expect(result.isError).toBe(true);
+            expect(text(result)).toBe(
+              "The device was closed while pinacode_device_open was preparing it. Call pinacode_device_open again only if you still need it.",
+            );
+          }),
+        { agentLauncher: () => Effect.succeedNone },
+      ),
   );
 
   it.effect("refuses a device id that exists on two hosts and names both", () =>
@@ -542,7 +555,7 @@ describe("device targeting across hosts", () => {
       [],
       ({ opened, call }) =>
         Effect.gen(function* () {
-          const result = yield* call("device_open", { deviceId: "Pixel_10" });
+          const result = yield* call("pinacode_device_open", { deviceId: "Pixel_10" });
           expect(result.isError).toBe(true);
           expect(text(result)).toContain("hostId local");
           expect(text(result)).toContain("hostId mac-mini");
@@ -560,7 +573,10 @@ describe("device targeting across hosts", () => {
       [],
       ({ opened, call }) =>
         Effect.gen(function* () {
-          const result = yield* call("device_open", { deviceId: "MAC-UDID", hostId: "local" });
+          const result = yield* call("pinacode_device_open", {
+            deviceId: "MAC-UDID",
+            hostId: "local",
+          });
           expect(result.isError).toBe(true);
           expect(text(result)).toContain("hostId mac-mini");
           expect(text(result)).toBe(
@@ -576,12 +592,12 @@ describe("device targeting across hosts", () => {
     run([], ({ opened, call }) =>
       Effect.gen(function* () {
         const missing = (args: Record<string, unknown>) =>
-          call("device_open", { deviceId: "Pixel_9", ...args }).pipe(Effect.map(text));
+          call("pinacode_device_open", { deviceId: "Pixel_9", ...args }).pipe(Effect.map(text));
         expect(yield* missing({})).toBe(
-          "No device Pixel_9 on any host. Call device_list for current ids.",
+          "No device Pixel_9 on any host. Call pinacode_device_list for current ids.",
         );
         expect(yield* missing({ hostId: "mac-mini" })).toBe(
-          "No device Pixel_9 on 'Mac Mini' (hostId mac-mini). Call device_list for current ids.",
+          "No device Pixel_9 on 'Mac Mini' (hostId mac-mini). Call pinacode_device_list for current ids.",
         );
         expect(yield* missing({ hostId: "unknown-host" })).toBe(
           "No device host unknown-host. Known hosts: This machine (local), Mac Mini (mac-mini).",
@@ -594,22 +610,22 @@ describe("device targeting across hosts", () => {
   it.effect("screenshots an open device by id on whichever host it is on", () =>
     run([session("mac-mini", "MAC-UDID", "ios")], ({ call }) =>
       Effect.gen(function* () {
-        const result = yield* call("device_screenshot", { deviceId: "MAC-UDID" });
+        const result = yield* call("pinacode_device_screenshot", { deviceId: "MAC-UDID" });
         expect(result.isError).toBe(false);
         expect(result.structuredContent).toMatchObject({ device: { hostId: "mac-mini" } });
-        const byLabel = yield* call("device_screenshot", { hostId: "MAC MINI" });
+        const byLabel = yield* call("pinacode_device_screenshot", { hostId: "MAC MINI" });
         expect(byLabel.isError).toBe(false);
         expect(byLabel.structuredContent).toMatchObject({ device: { hostId: "mac-mini" } });
       }),
     ),
   );
 
-  it.effect("says why device_screenshot failed instead of a generic error", () =>
+  it.effect("says why pinacode_device_screenshot failed instead of a generic error", () =>
     run(
       [session("mac-mini", "MAC-UDID", "ios")],
       ({ call }) =>
         Effect.gen(function* () {
-          const wrongHost = yield* call("device_screenshot", {
+          const wrongHost = yield* call("pinacode_device_screenshot", {
             deviceId: "MAC-UDID",
             hostId: "local",
           });
@@ -623,10 +639,10 @@ describe("device targeting across hosts", () => {
     ),
   );
 
-  it.effect("names a device_screenshot argument the tool does not declare", () =>
+  it.effect("names a pinacode_device_screenshot argument the tool does not declare", () =>
     run([session("mac-mini", "MAC-UDID", "ios")], ({ call }) =>
       Effect.gen(function* () {
-        const result = yield* call("device_screenshot", {
+        const result = yield* call("pinacode_device_screenshot", {
           deviceId: "MAC-UDID",
           includeImage: false,
         });
@@ -639,26 +655,30 @@ describe("device targeting across hosts", () => {
   it.effect("tells an agent to open a device id before screenshotting it", () =>
     run([], ({ call }) =>
       Effect.gen(function* () {
-        const result = yield* call("device_screenshot", { deviceId: "MAC-UDID" });
+        const result = yield* call("pinacode_device_screenshot", { deviceId: "MAC-UDID" });
         expect(result.isError).toBe(true);
         expect(text(result)).toBe(
-          "Device MAC-UDID is not open in this thread. Call device_open first.",
+          "Device MAC-UDID is not open in this thread. Call pinacode_device_open first.",
         );
       }),
     ),
   );
 
-  it.effect("tells an agent with no open device to call device_open before a screenshot", () =>
-    run([], ({ call }) =>
-      Effect.gen(function* () {
-        const result = yield* call("device_screenshot", {});
-        expect(result.isError).toBe(true);
-        expect(text(result)).toBe("No device is open in this thread. Call device_open first.");
-        expect(result.structuredContent).toMatchObject({
-          error: { _tag: "DeviceToolUnavailableError" },
-        });
-      }),
-    ),
+  it.effect(
+    "tells an agent with no open device to call pinacode_device_open before a screenshot",
+    () =>
+      run([], ({ call }) =>
+        Effect.gen(function* () {
+          const result = yield* call("pinacode_device_screenshot", {});
+          expect(result.isError).toBe(true);
+          expect(text(result)).toBe(
+            "No device is open in this thread. Call pinacode_device_open first.",
+          );
+          expect(result.structuredContent).toMatchObject({
+            error: { _tag: "DeviceToolUnavailableError" },
+          });
+        }),
+      ),
   );
 
   it.effect("refuses to close an id open on two hosts instead of closing both", () =>
@@ -666,7 +686,7 @@ describe("device targeting across hosts", () => {
       [session("local", "Pixel_10", "android"), session("mac-mini", "Pixel_10", "android")],
       ({ closed, call }) =>
         Effect.gen(function* () {
-          const result = yield* call("device_close", { deviceId: "Pixel_10" });
+          const result = yield* call("pinacode_device_close", { deviceId: "Pixel_10" });
           expect(result.isError).toBe(true);
           expect(text(result)).toContain("hostId mac-mini");
           expect(text(result)).toBe(
@@ -681,10 +701,12 @@ describe("device targeting across hosts", () => {
   it.effect("closes an open device on its host and treats an unopened one as closed", () =>
     run([session("mac-mini", "MAC-UDID", "ios")], ({ closed, call }) =>
       Effect.gen(function* () {
-        expect((yield* call("device_close", { deviceId: "MAC-UDID" })).isError).toBe(false);
-        expect((yield* call("device_close", { deviceId: "Pixel_9" })).isError).toBe(false);
-        expect((yield* call("device_close", { hostId: "MAC MINI" })).isError).toBe(false);
-        const unknown = yield* call("device_close", { hostId: "unknown-host" });
+        expect((yield* call("pinacode_device_close", { deviceId: "MAC-UDID" })).isError).toBe(
+          false,
+        );
+        expect((yield* call("pinacode_device_close", { deviceId: "Pixel_9" })).isError).toBe(false);
+        expect((yield* call("pinacode_device_close", { hostId: "MAC MINI" })).isError).toBe(false);
+        const unknown = yield* call("pinacode_device_close", { hostId: "unknown-host" });
         expect(unknown.isError).toBe(true);
         expect(text(unknown)).toContain("No device host unknown-host.");
         expect(closed).toEqual([

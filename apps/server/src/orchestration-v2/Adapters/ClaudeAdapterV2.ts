@@ -2109,12 +2109,12 @@ function parseClaudeInteger(text: string): number {
 }
 
 // Claude Code defers MCP tools behind ToolSearch, so the agent only finds
-// t3_background_wait when the system prompt says when to reach for it.
+// pinacode_background_wait when the system prompt says when to reach for it.
 const CLAUDE_BACKGROUND_WAIT_INSTRUCTIONS = `
 
 ### Background work you wait on
 
-To wait for a background command or Monitor you started (tests, a build), call \`t3_background_wait\` with its task ID before you end your turn. Do not mark work you leave running, or PRs. T3 MCP tools are deferred: load one with ToolSearch before you call it.
+To wait for a background command or Monitor you started (tests, a build), call \`pinacode_background_wait\` with its task ID before you end your turn. Do not mark work you leave running, or PRs. T3 MCP tools are deferred: load one with ToolSearch before you call it.
 `;
 
 // Claude 5.1+ returns text written before a tool call as a progress update, which the API
@@ -2122,7 +2122,7 @@ To wait for a background command or Monitor you started (tests, a build), call \
 const CLAUDE_SEND_TO_USER_INSTRUCTIONS = `
 ### Text the user must read mid-turn
 
-Text you write before a tool call may reach the user only as a one-line summary. When the user must read something in full before your turn ends, such as a draft, a code block, or what a question you're about to ask refers to, send it with \`send_to_user\`. Put everything else in your final reply.
+Text you write before a tool call may reach the user only as a one-line summary. When the user must read something in full before your turn ends, such as a draft, a code block, or what a question you're about to ask refers to, send it with \`pinacode_send_to_user\`. Put everything else in your final reply.
 `;
 
 // Native subagents start from their task, not this session's system prompt.
@@ -2415,30 +2415,30 @@ export const readClaudeLaunchArgSettings = Effect.fn("ClaudeAdapterV2.readLaunch
   },
 );
 
-export const CLAUDE_T3_MCP_TOOL_WILDCARD = "mcp__t3-code__*";
+export const CLAUDE_T3_MCP_TOOL_WILDCARD = "mcp__pinacode__*";
 
 // Keep in sync with OrchestratorToolkit Tool.Readonly annotations; ClaudeAdapterV2.test.ts checks this.
 export const CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS: ReadonlyArray<string> = [
-  "mcp__t3-code__orchestrator_capabilities",
-  "mcp__t3-code__list_scheduled_tasks",
-  "mcp__t3-code__t3_background_wait",
-  "mcp__t3-code__t3_thread_list",
-  "mcp__t3-code__t3_thread_wait",
-  "mcp__t3-code__t3_worktree_status",
-  "mcp__t3-code__t3_worktree_list",
-  "mcp__t3-code__t3_project_list",
-  "mcp__t3-code__t3_project_read",
-  "mcp__t3-code__t3_thread_search",
-  "mcp__t3-code__t3_preview_list",
-  "mcp__t3-code__t3_environment_read",
-  "mcp__t3-code__t3_environment_links",
-  "mcp__t3-code__t3_theme_read",
-  "mcp__t3-code__html_preview",
-  "mcp__t3-code__html_render",
-  "mcp__t3-code__send_to_user",
+  "mcp__pinacode__pinacode_orchestrator_capabilities",
+  "mcp__pinacode__pinacode_list_scheduled_tasks",
+  "mcp__pinacode__pinacode_background_wait",
+  "mcp__pinacode__pinacode_thread_list",
+  "mcp__pinacode__pinacode_thread_wait",
+  "mcp__pinacode__pinacode_worktree_status",
+  "mcp__pinacode__pinacode_worktree_list",
+  "mcp__pinacode__pinacode_project_list",
+  "mcp__pinacode__pinacode_project_read",
+  "mcp__pinacode__pinacode_thread_search",
+  "mcp__pinacode__pinacode_preview_list",
+  "mcp__pinacode__pinacode_environment_read",
+  "mcp__pinacode__pinacode_environment_links",
+  "mcp__pinacode__pinacode_theme_read",
+  "mcp__pinacode__pinacode_html_preview",
+  "mcp__pinacode__pinacode_html_render",
+  "mcp__pinacode__pinacode_send_to_user",
 ];
 
-// request_secret can wait an hour; exceed Claude's default 60 s timeout.
+// pinacode_request_secret can wait an hour; exceed Claude's default 60 s timeout.
 export const CLAUDE_T3_MCP_TOOL_TIMEOUT_MS = 65 * 60 * 1_000;
 
 // allowedTools pre-approves calls; tools controls availability. Pre-approve T3 tools for headless modes,
@@ -2462,7 +2462,7 @@ export function claudeMcpQueryOverrides(input: {
   return {
     allowedTools: Array.from(new Set([...(input.allowedTools ?? []), ...mcpAllowedTools])),
     mcpServers: {
-      "t3-code": {
+      pinacode: {
         type: "http",
         url: session.endpoint,
         headers: {
@@ -8552,7 +8552,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             const { liveQuery, toolCall } = input;
             if (
               !toolCall.toolName.startsWith("mcp__") ||
-              toolCall.toolName.startsWith("mcp__t3-code__") ||
+              toolCall.toolName.startsWith("mcp__pinacode__") ||
               !claudeSupportsMcpApps(liveQuery.capabilities)
             ) {
               return undefined;

@@ -870,7 +870,7 @@ const seedParent = (
 
 const delegateToBox = (laptopEnv: Effect.Success<ReturnType<typeof makeLaptop>>) =>
   laptopEnv
-    .call("delegate_task", {
+    .call("pinacode_delegate_task", {
       task: "Run the full suite on the box.",
       target: {
         environmentId: box.environmentId,
@@ -954,7 +954,7 @@ it.effect("a task delegated to the box wakes the laptop's parent when it ends th
 
       // Its provider there has not started the turn yet.
       yield* Ref.set(thread.status, "starting");
-      const starting = yield* a.call("task_status", { taskId: delegated.taskId });
+      const starting = yield* a.call("pinacode_task_status", { taskId: delegated.taskId });
       expect(starting.structuredContent).toMatchObject({
         status: "starting",
         workState: "working",
@@ -982,7 +982,7 @@ it.effect("a task delegated to the box wakes the laptop's parent when it ends th
         },
       });
       const running = yield* a
-        .call("task_status", { taskId: delegated.taskId })
+        .call("pinacode_task_status", { taskId: delegated.taskId })
         .pipe(Effect.withTracer(historyTracer));
       expect(running.structuredContent).toMatchObject({
         taskId: delegated.taskId,
@@ -1033,7 +1033,7 @@ it.effect("a task delegated to the box wakes the laptop's parent when it ends th
         },
       });
       const status = yield* a
-        .call("task_status", { taskId: delegated.taskId })
+        .call("pinacode_task_status", { taskId: delegated.taskId })
         .pipe(Effect.withTracer(tracer));
       expect(status.structuredContent).toMatchObject({
         status: "completed",
@@ -1125,7 +1125,7 @@ it.effect.each(["no active parent run", "a newer run owned by another provider"]
           ],
         });
 
-        const status = yield* a.call("task_status", { taskId: delegated.taskId });
+        const status = yield* a.call("pinacode_task_status", { taskId: delegated.taskId });
         if (observer === "no active parent run") {
           expect(status.isError).toBe(true);
           expect(status.content).toEqual([
@@ -1180,7 +1180,7 @@ it.effect(
         const delegated = yield* delegateToBox(a);
 
         yield* a.settings.updateSettings({ linkedEnvironmentsEnabled: false });
-        const refused = yield* a.call("delegate_task", {
+        const refused = yield* a.call("pinacode_delegate_task", {
           task: "Run the linter on the box.",
           target: {
             environmentId: box.environmentId,
@@ -1231,7 +1231,7 @@ it.effect("a task named only by environment inherits the parent's model, within 
       };
       yield* seedParent(a, parentModelSelection);
 
-      const result = yield* a.call("delegate_task", {
+      const result = yield* a.call("pinacode_delegate_task", {
         task: "Run the suite on the box.",
         target: { environmentId: box.environmentId },
       });
@@ -1244,7 +1244,7 @@ it.effect("a task named only by environment inherits the parent's model, within 
       });
 
       // Asking for more than the link allows is still refused there.
-      const broader = yield* a.call("delegate_task", {
+      const broader = yield* a.call("pinacode_delegate_task", {
         task: "Run the suite on the box.",
         target: { environmentId: box.environmentId },
         runtimeMode: "full-access",
@@ -1268,7 +1268,7 @@ it.effect("a task naming another driver there never runs its model on the parent
       yield* linkTo(a.links, b, "full-access");
       yield* seedParent(a);
 
-      const result = yield* a.call("delegate_task", {
+      const result = yield* a.call("pinacode_delegate_task", {
         task: "Run the suite on the box.",
         target: {
           environmentId: box.environmentId,
@@ -1297,7 +1297,7 @@ it.effect("refuses worktree isolation for a task there before launching anything
       yield* linkTo(a.links, b, "auto");
       yield* seedParent(a);
 
-      const result = yield* a.call("delegate_task", {
+      const result = yield* a.call("pinacode_delegate_task", {
         task: "Run the suite on the box.",
         target: { environmentId: box.environmentId },
         isolation: "worktree",
@@ -1356,7 +1356,7 @@ it.effect("fails the task when the box revokes the link, and cancel interrupts i
       yield* seedParent(a);
 
       const cancelled = yield* delegateToBox(a);
-      const cancel = yield* a.call("task_cancel", {
+      const cancel = yield* a.call("pinacode_task_cancel", {
         taskId: cancelled.taskId,
         reason: "Not needed",
       });
@@ -1369,19 +1369,22 @@ it.effect("fails the task when the box revokes the link, and cancel interrupts i
       expect(yield* taskResult(a, cancelled.taskId)).toMatchObject({ status: "cancelled" });
 
       // Cancelling again, once the result is in, still stops what came after it there.
-      const again = yield* a.call("task_cancel", {
+      const again = yield* a.call("pinacode_task_cancel", {
         taskId: cancelled.taskId,
         clientRequestId: "cancel-again",
       });
       expect(again.structuredContent).toEqual({ taskId: cancelled.taskId, status: "cancelled" });
       expect(yield* Ref.get(thread.interrupted)).toBe(2);
       // ...and a retry of that cancel stops nothing new.
-      yield* a.call("task_cancel", { taskId: cancelled.taskId, clientRequestId: "cancel-again" });
+      yield* a.call("pinacode_task_cancel", {
+        taskId: cancelled.taskId,
+        clientRequestId: "cancel-again",
+      });
       expect(yield* Ref.get(thread.interrupted)).toBe(2);
 
       // A second task, then the box revokes the link before it ends.
       const revoked = yield* a
-        .call("delegate_task", {
+        .call("pinacode_delegate_task", {
           task: "Another one.",
           target: {
             environmentId: box.environmentId,
@@ -1416,7 +1419,7 @@ it.effect("a task's result is its own run's whole last reply, not a later run's"
       yield* linkTo(a.links, b, "full-access");
       yield* seedParent(a);
 
-      const result = yield* a.call("delegate_task", {
+      const result = yield* a.call("pinacode_delegate_task", {
         task: "Review the diff.",
         role: "review",
         target: { environmentId: box.environmentId },
@@ -1441,7 +1444,7 @@ it.effect("a task's result is its own run's whole last reply, not a later run's"
       expect(task?.result).toBe(
         `Requested model gpt-5.4; the provider reported running gpt-5.4-mini.\n\n${long}`,
       );
-      const status = yield* a.call("task_status", { taskId });
+      const status = yield* a.call("pinacode_task_status", { taskId });
       expect(status.structuredContent).toMatchObject({
         status: "completed",
         executedModel: "gpt-5.4-mini",
@@ -1487,7 +1490,7 @@ it.effect("a task whose thread there waits on its own task ends with the answer 
         status: "completed",
         result: "The review found two issues; both are fixed.",
       });
-      const status = yield* a.call("task_status", { taskId: delegated.taskId });
+      const status = yield* a.call("pinacode_task_status", { taskId: delegated.taskId });
       expect(status.structuredContent).toMatchObject({
         status: "completed",
         executedModel: null,
@@ -1511,7 +1514,7 @@ it.effect("the same key from another provider session is another task", () =>
 
       const first = yield* delegateToBox(a);
       const later = yield* a.call(
-        "delegate_task",
+        "pinacode_delegate_task",
         {
           task: "Run the full suite on the box.",
           target: { environmentId: box.environmentId },
@@ -1555,7 +1558,7 @@ it.effect.each([null, "Working before the provider failed."])(
           status: "failed",
           result: error,
         });
-        const status = yield* a.call("task_status", { taskId: delegated.taskId });
+        const status = yield* a.call("pinacode_task_status", { taskId: delegated.taskId });
         expect(status.structuredContent).toMatchObject({
           status: "failed",
           summary: error,
@@ -1650,7 +1653,7 @@ it.effect("fails the task when its thread there is gone, or the link here is", (
       // The link is forgotten here while the task runs there.
       yield* Ref.set(thread.gone, false);
       const forgotten = yield* a
-        .call("delegate_task", {
+        .call("pinacode_delegate_task", {
           task: "Another one.",
           target: { environmentId: box.environmentId },
           clientRequestId: "forgotten",
@@ -1681,7 +1684,7 @@ it.effect("cancel ends the task here even when the link is gone", () =>
 
       const delegated = yield* delegateToBox(a);
       yield* a.links.unlink(box.environmentId);
-      const cancel = yield* a.call("task_cancel", { taskId: delegated.taskId });
+      const cancel = yield* a.call("pinacode_task_cancel", { taskId: delegated.taskId });
       expect(cancel.structuredContent).toEqual({
         taskId: delegated.taskId,
         status: "cancel_requested",
@@ -2055,7 +2058,7 @@ it.effect("stopping the parent stops follow-up work on a task there that has its
       });
 
       // The parent sends the thread there a follow-up, which starts a run there as a new task.
-      const sent = yield* a.call("t3_thread_send", {
+      const sent = yield* a.call("pinacode_thread_send", {
         environmentId: box.environmentId,
         threadId: delegated.remoteChild.threadId,
         message: "Now run the slow suite too.",
@@ -2118,12 +2121,12 @@ it.effect.each([
         yield* Deferred.succeed(thread.finished, undefined);
         yield* taskResult(a, delegated.taskId);
 
-        const sendFollowUp = a.call("t3_thread_send", {
+        const sendFollowUp = a.call("pinacode_thread_send", {
           environmentId: box.environmentId,
           threadId: delegated.remoteChild.threadId,
           message: "Now run the slow suite too.",
         });
-        const sendQueued = a.call("t3_thread_send", {
+        const sendQueued = a.call("pinacode_thread_send", {
           environmentId: box.environmentId,
           threadId: delegated.remoteChild.threadId,
           message: "Then the flaky suite.",
@@ -2187,12 +2190,12 @@ it.effect.each([
         yield* Deferred.succeed(thread.finished, undefined);
         yield* taskResult(a, delegated.taskId);
 
-        const followUp = yield* a.call("t3_thread_send", {
+        const followUp = yield* a.call("pinacode_thread_send", {
           environmentId: box.environmentId,
           threadId: delegated.remoteChild.threadId,
           message: "Now run the slow suite too.",
         });
-        yield* a.call("t3_thread_send", {
+        yield* a.call("pinacode_thread_send", {
           environmentId: box.environmentId,
           threadId: delegated.remoteChild.threadId,
           message: "Then the flaky suite.",
@@ -2265,7 +2268,7 @@ it.effect("a follow-up sent after the parent's own run ended is still a task", (
         ],
       });
 
-      const sent = yield* a.call("t3_thread_send", {
+      const sent = yield* a.call("pinacode_thread_send", {
         environmentId: box.environmentId,
         threadId: delegated.remoteChild.threadId,
         message: "Now run the slow suite too.",
@@ -2325,7 +2328,7 @@ it.effect("a delayed Stop acknowledgement leaves a newer Stop owed", () =>
       });
       yield* Deferred.await(thread.stopStarted);
       // Work starts after the first Stop landed there, but before its acknowledgement returns.
-      const sent = yield* a.call("t3_thread_send", {
+      const sent = yield* a.call("pinacode_thread_send", {
         environmentId: box.environmentId,
         threadId: delegated.remoteChild.threadId,
         message: "Run another check.",
@@ -2449,7 +2452,7 @@ it.effect("a task cancelled while the box is unreachable is stopped there after 
           yield* seedParent(before);
           const task = yield* delegateToBox(before);
           yield* Ref.set(b.descriptor, descriptorOf("environment-elsewhere", "Elsewhere"));
-          yield* before.call("task_cancel", { taskId: task.taskId });
+          yield* before.call("pinacode_task_cancel", { taskId: task.taskId });
           expect(yield* taskResult(before, task.taskId)).toMatchObject({ status: "cancelled" });
           return task;
         }),
@@ -2507,7 +2510,7 @@ it.effect("a local task runs in this thread's project", () =>
       const a = yield* makeLaptop(database, offers);
       yield* seedParent(a);
 
-      const result = yield* a.call("delegate_task", {
+      const result = yield* a.call("pinacode_delegate_task", {
         task: "Run it here.",
         target: { projectId: "project:elsewhere" },
       });

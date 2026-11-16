@@ -1772,7 +1772,7 @@ const make = Effect.gen(function* () {
   const assertTabCapacity = (agentSessionId: string) => {
     if (atTabLimit(agentSessionId))
       throw new BrowserControlInterrupted({
-        message: `Too many server browser tabs are open (${AGENT_TAB_LIMIT} per agent session, ${SERVER_TAB_LIMIT} per server). Close one with t3_preview_close or reuse one from preview_status tabs.`,
+        message: `Too many server browser tabs are open (${AGENT_TAB_LIMIT} per agent session, ${SERVER_TAB_LIMIT} per server). Close one with pinacode_preview_close or reuse one from pinacode_preview_status tabs.`,
         reason: "tabLimit",
       });
   };
@@ -2195,7 +2195,7 @@ const make = Effect.gen(function* () {
       if (message.includes("Download is starting")) {
         throw new ServerBrowserPage.ServerBrowserOperationError({
           tag: "PreviewAutomationExecutionError",
-          message: `${url} is a file this browser cannot show, so it was downloaded instead. preview_status lists it under downloads.`,
+          message: `${url} is a file this browser cannot show, so it was downloaded instead. pinacode_preview_status lists it under downloads.`,
         });
       }
       if (/ERR_[A-Z_]+/.test(message)) {
@@ -2484,7 +2484,7 @@ const make = Effect.gen(function* () {
     if (!request.tabIdExplicit && owned.length > 1)
       throw new BrowserControlInterrupted({
         message:
-          "Multiple tabs belong to this agent session. Pass a tabId from preview_open or preview_status tabs.",
+          "Multiple tabs belong to this agent session. Pass a tabId from pinacode_preview_open or pinacode_preview_status tabs.",
         reason: "tabRequired",
       });
     const tab =
@@ -2496,7 +2496,7 @@ const make = Effect.gen(function* () {
     if (!tab) {
       throw new ServerBrowserPage.ServerBrowserOperationError({
         tag: "PreviewAutomationTabNotFoundError",
-        message: "No server preview tab is open for this thread. Call preview_open first.",
+        message: "No server preview tab is open for this thread. Call pinacode_preview_open first.",
       });
     }
     if (!READ_OPERATIONS.has(request.operation) && !tab.control.agentMayAct(request.agentSessionId))
@@ -2603,7 +2603,7 @@ const make = Effect.gen(function* () {
         if (existing?.dialog)
           throw new BrowserControlInterrupted({
             message:
-              "A browser dialog is pending. Read preview_status and use preview_dialog first.",
+              "A browser dialog is pending. Read pinacode_preview_status and use pinacode_preview_dialog first.",
             reason: "dialogPending",
           });
         return tab.control.agent(
@@ -2612,7 +2612,7 @@ const make = Effect.gen(function* () {
             if (tab.dialog)
               throw new BrowserControlInterrupted({
                 message:
-                  "A browser dialog is pending. Read preview_status and use preview_dialog first.",
+                  "A browser dialog is pending. Read pinacode_preview_status and use pinacode_preview_dialog first.",
                 reason: "dialogPending",
               });
             if (existing) {
@@ -2672,7 +2672,7 @@ const make = Effect.gen(function* () {
         )
           throw new BrowserControlInterrupted({
             message:
-              "Multiple tabs belong to this agent session. Pass a tabId from preview_open or preview_status tabs.",
+              "Multiple tabs belong to this agent session. Pass a tabId from pinacode_preview_open or pinacode_preview_status tabs.",
             reason: "tabRequired",
           });
         const recordings = [...tabs.values()].filter(
@@ -2734,7 +2734,7 @@ const make = Effect.gen(function* () {
       return tab.control.observe(async () => {
         if (tab.dialog)
           throw new BrowserControlInterrupted({
-            message: "A browser dialog is pending. Read preview_status.",
+            message: "A browser dialog is pending. Read pinacode_preview_status.",
             reason: "dialogPending",
           });
         return executeTabOperation(tab, request, deadlineMs);
@@ -2746,7 +2746,7 @@ const make = Effect.gen(function* () {
         if (tab.dialog)
           throw new BrowserControlInterrupted({
             message:
-              "A browser dialog is pending. Read preview_status and use preview_dialog first.",
+              "A browser dialog is pending. Read pinacode_preview_status and use pinacode_preview_dialog first.",
             reason: "dialogPending",
           });
         const generation = tab.control.generation;

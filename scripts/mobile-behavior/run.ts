@@ -95,10 +95,10 @@ const command = Command.make(
       Flag.withDefault(""),
     ),
     deviceConfig: Flag.String("device-config").pipe(
-      Flag.withDescription("The --config path device_open returned for this device."),
+      Flag.withDescription("The --config path pinacode_device_open returned for this device."),
     ),
     deviceSession: Flag.String("device-session").pipe(
-      Flag.withDescription("The --session name device_open returned for this device."),
+      Flag.withDescription("The --session name pinacode_device_open returned for this device."),
     ),
     deviceName: Flag.String("device-name").pipe(
       Flag.withDescription(

@@ -242,7 +242,7 @@ describe("ProviderContinuationService", () => {
           "node-provider-continuation-first",
           "node-provider-continuation-second",
         ]);
-        assert.include(command.text, "task_status");
+        assert.include(command.text, "pinacode_task_status");
       }).pipe(
         Effect.provide(
           layerTest({

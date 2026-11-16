@@ -341,7 +341,7 @@ it.effect.each([
     }),
 );
 
-it.effect("lets a cut blocking delegate_task wake its parent like an async task", () =>
+it.effect("lets a cut blocking pinacode_delegate_task wake its parent like an async task", () =>
   Effect.gen(function* () {
     const base = makeProjection();
     const task = (id: string, completionWake: "settled_only" | "always", status: string) => ({

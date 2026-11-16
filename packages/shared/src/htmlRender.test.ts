@@ -163,11 +163,11 @@ describe("htmlRenderFromToolItem", () => {
 
   it("reads the reference from each provider's result envelope", () => {
     for (const [toolName, output] of [
-      ["mcp__t3-code__html_render", [{ type: "text", text: JSON.stringify(result) }]],
-      ["t3-code.html_render", { structuredContent: result, content: [] }],
-      ["t3-code-thread_1_html_render", JSON.stringify(result)],
-      ["html_render", result],
-      // OpenCode 2 Code Mode reports a script's nested html_render call as one `execute` item.
+      ["mcp__pinacode__pinacode_html_render", [{ type: "text", text: JSON.stringify(result) }]],
+      ["pinacode.pinacode_html_render", { structuredContent: result, content: [] }],
+      ["pinacode-thread_1_pinacode_html_render", JSON.stringify(result)],
+      ["pinacode_html_render", result],
+      // OpenCode 2 Code Mode reports a script's nested pinacode_html_render call as one `execute` item.
       ["execute", JSON.stringify(result)],
     ] as const) {
       expect(htmlRenderFromToolItem({ toolName, output })).toEqual(reference);

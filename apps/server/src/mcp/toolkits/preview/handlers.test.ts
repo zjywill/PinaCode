@@ -27,7 +27,7 @@ import * as PreviewAutomationBroker from "../../PreviewAutomationBroker.ts";
 import { claimPreviewRecording, layerStandard } from "./handlers.ts";
 import { PreviewStandardToolkit } from "./tools.ts";
 
-it.effect("preview_open navigates the opened tab to a dev server in one tool call", () =>
+it.effect("pinacode_preview_open navigates the opened tab to a dev server in one tool call", () =>
   Effect.gen(function* () {
     const scope = yield* McpInvocationContext.McpInvocationContext;
     const broker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
@@ -67,7 +67,7 @@ it.effect("preview_open navigates the opened tab to a dev server in one tool cal
       Effect.provide(McpToolAccess.HandlersLayer.layer(layerStandard)),
     );
     const results = yield* toolkit
-      .handle("preview_open", {
+      .handle("pinacode_preview_open", {
         url: "http://localhost:3000",
         target,
         open: false,
