@@ -1,0 +1,4 @@
+interface:
+  display_name: "发布 PinaCode"
+  short_description: "发布 PinaCode 的 macOS 与 iOS 版本，并在 macOS 发布后清理旧 Release"
+  default_prompt: "使用 $release-pinacode 发布 macOS 和 iOS TestFlight、正式版，并只保留最新 GitHub Release。"
