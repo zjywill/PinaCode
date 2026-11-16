@@ -2456,7 +2456,7 @@ export const layerWsRpc = (
               return { providers: [] };
             }
             if (input.modelCatalogOnly === true) {
-              yield* providerRegistry.refreshModelCatalog;
+              yield* providerRegistry.refreshModelCatalog(input.instanceId);
               return { providers: [] };
             }
             if (input.refreshModels) {

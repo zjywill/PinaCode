@@ -550,9 +550,11 @@ export const probeAcpRegistryConfiguration = Effect.fn("AcpRegistryProbe.probeCo
             : Deferred.await(modelsAdvertised).pipe(
                 Effect.timeoutOption(MODEL_ADVERTISEMENT_GRACE),
               ),
-          Deferred.await(commandsAdvertised).pipe(
-            Effect.timeoutOption(COMMAND_ADVERTISEMENT_GRACE),
-          ),
+          input.model !== undefined
+            ? Effect.void
+            : Deferred.await(commandsAdvertised).pipe(
+                Effect.timeoutOption(COMMAND_ADVERTISEMENT_GRACE),
+              ),
         ],
         { concurrency: "unbounded" },
       );

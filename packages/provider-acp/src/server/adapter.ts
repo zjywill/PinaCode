@@ -7620,6 +7620,13 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
           unsetOptionDefaults: NonNullable<ModelSelection["options"]> = [],
         ) {
           yield* Ref.set(activeSelection, null);
+          yield* (
+            flavor.onSessionConfigurationUpdate?.(
+              yield* runtime.getConfigOptions,
+              yield* runtime.getModeState,
+              (yield* Ref.get(activeSessionSetup))?.sessionSetupResult.models,
+            ) ?? Effect.void
+          );
           yield* validateModelSelection(modelSelection);
           const requestedModel = flavor.resolveModelId?.(modelSelection) ?? modelSelection.model;
           // Invalid params is the agent refusing the value, and the runtime
@@ -7866,7 +7873,6 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               nativeBuildConfigurationBySessionId.delete(startResult.sessionId);
             }
           }
-          yield* validateModelSelection(modelSelection);
           yield* (
             flavor.onSessionConfigurationUpdate?.(
               yield* runtime.getConfigOptions,
@@ -7874,6 +7880,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               (yield* Ref.get(activeSessionSetup))?.sessionSetupResult.models,
             ) ?? Effect.void
           );
+          yield* validateModelSelection(modelSelection);
         });
 
         yield* configureSession(

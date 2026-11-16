@@ -135,18 +135,26 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
     reportFailure: false,
   });
-  const refreshModelCatalog = useEffectEvent(() => {
+  const refreshModelCatalog = (instanceId: ProviderInstanceId) => {
     const environmentId = props.environmentId;
     if (environmentId === null) return;
     // An older server drops the field and probes every provider.
     const config = registry.get(serverEnvironment.configValueAtom(environmentId));
     if (config?.environment.capabilities.modelCatalogRefresh !== true) return;
-    void refreshProviders({ environmentId, input: { modelCatalogOnly: true } });
-  });
+    const entry = props.instanceEntries.find((entry) => entry.instanceId === instanceId);
+    void refreshProviders({
+      environmentId,
+      input: {
+        modelCatalogOnly: true,
+        ...(entry?.snapshot?.supportsModelOptionsProbe ? { instanceId: entry.instanceId } : {}),
+      },
+    });
+  };
+  const refreshModelCatalogOnOpen = useEffectEvent(refreshModelCatalog);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- asks the server for newly released models on every open; a parent, a keybinding or the palette can open the picker, so no one handler sees them all
   useEffect(() => {
-    if (isMenuOpen) refreshModelCatalog();
-  }, [isMenuOpen]);
+    if (isMenuOpen) refreshModelCatalogOnOpen(props.activeInstanceId);
+  }, [isMenuOpen, props.activeInstanceId]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
@@ -182,13 +190,16 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
       input: { instanceId, probeModelOptions: model },
     });
   };
-  const probeOnOpen = useEffectEvent(() => {
-    if (selectedModel) probeModelOptions(activeInstanceId, selectedModel.slug);
-  });
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opening the picker can restore a draft model without a selection event
+  const prefetchModelOptions = useEffectEvent(
+    (instanceId: ProviderInstanceId, model: string | undefined) => {
+      if (model) probeModelOptions(instanceId, model);
+    },
+  );
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- preload the selected model's remote options before the effort picker opens
   useEffect(() => {
-    if (isMenuOpen && activeEntry?.snapshot?.supportsModelOptionsProbe) probeOnOpen();
-  }, [isMenuOpen, activeEntry?.snapshot?.supportsModelOptionsProbe]);
+    if (activeEntry?.snapshot?.supportsModelOptionsProbe)
+      prefetchModelOptions(activeInstanceId, selectedModel?.slug);
+  }, [activeInstanceId, selectedModel?.slug, activeEntry?.snapshot?.supportsModelOptionsProbe]);
   const triggerTitle = selectedModel
     ? getTriggerDisplayModelName(selectedModel, activeEntry?.driverKind)
     : props.model === ANTIGRAVITY_DEFAULT_MODEL
@@ -329,6 +340,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           : (props.getModelDisabledReason?.(instanceId, model) ?? null)
       }
       onInstanceModelChange={handleInstanceModelChange}
+      onInstanceCatalogOpen={refreshModelCatalog}
       {...(docked
         ? {
             docked,

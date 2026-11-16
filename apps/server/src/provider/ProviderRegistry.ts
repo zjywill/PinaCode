@@ -106,8 +106,9 @@ export class ProviderRegistry extends Context.Service<
     /**
      * For an opened model picker: refetch a model manifest older than a few
      * minutes. When it changed, recheck latest CLI versions and probe providers.
+     * An instance id refreshes that driver's dynamic catalog instead.
      */
-    readonly refreshModelCatalog: Effect.Effect<void>;
+    readonly refreshModelCatalog: (instanceId?: ProviderInstanceId) => Effect.Effect<void>;
 
     readonly getProviderMaintenanceCapabilitiesForInstance: (
       instanceId: ProviderInstanceId,
@@ -1244,7 +1245,16 @@ export const layer = Layer.effect(
       );
     });
 
-    const refreshModelCatalog = Effect.fn("ProviderRegistry.refreshModelCatalog")(function* () {
+    const refreshModelCatalog = Effect.fn("ProviderRegistry.refreshModelCatalog")(function* (
+      instanceId?: ProviderInstanceId,
+    ) {
+      if (instanceId !== undefined) {
+        const instance = yield* instanceRegistry.getInstance(instanceId);
+        if (!instance?.enabled || !instance.refreshModels) return;
+        yield* instance.refreshModels();
+        yield* refreshInstance(instanceId);
+        return;
+      }
       const { updatedAt } = yield* manifestService.refreshOnDemand;
       // The first pass can be one that started before the fetch, so allow one more.
       for (let pass = 0; pass < 2; pass++) {
@@ -1269,10 +1279,11 @@ export const layer = Layer.effect(
         refreshWorkspaceSnapshot(input).pipe(Effect.catchCause(recoverRefreshFailure)),
       refreshAfterUpdate,
       invalidateModelCaches,
-      refreshModelCatalog: refreshModelCatalog().pipe(
-        Effect.catchCause(recoverRefreshFailure),
-        Effect.asVoid,
-      ),
+      refreshModelCatalog: (instanceId?: ProviderInstanceId) =>
+        refreshModelCatalog(instanceId).pipe(
+          Effect.catchCause(recoverRefreshFailure),
+          Effect.asVoid,
+        ),
       getProviderMaintenanceCapabilitiesForInstance,
       setProviderMaintenanceActionState,
       get streamChanges() {

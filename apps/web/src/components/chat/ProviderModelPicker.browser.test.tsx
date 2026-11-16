@@ -1,5 +1,6 @@
 import {
   DEFAULT_CLIENT_SETTINGS,
+  EnvironmentId,
   ProviderDriverKind,
   ProviderInstanceId,
   type ModelSelection,
@@ -14,6 +15,86 @@ import { render } from "../../../test/render";
 import { __setClientSettingsForTests } from "../../hooks/useSettings";
 import { deriveProviderInstanceEntries } from "../../providerInstances";
 import { ProviderModelPicker } from "./ProviderModelPicker";
+
+const refreshRequests = vi.hoisted(() => vi.fn(async (_target: unknown) => undefined));
+vi.mock(import("../../state/use-atom-command"), () => ({
+  useAtomCommand: (() => refreshRequests) as never,
+}));
+vi.mock(import("../../state/server"), async (original) => {
+  const actual = await original();
+  const { Atom } = await import("effect/reactivity");
+  const config = Atom.make({ environment: { capabilities: { modelCatalogRefresh: true } } });
+  return {
+    ...actual,
+    serverEnvironment: { ...actual.serverEnvironment, configValueAtom: () => config } as never,
+  };
+});
+
+it("prefetches Dim effort before opening and refreshes only its catalog on open", async () => {
+  refreshRequests.mockClear();
+  const environmentId = EnvironmentId.make("dim-environment");
+  const instanceId = ProviderInstanceId.make("acpRegistry_dimcode_alpha");
+  const entries = deriveProviderInstanceEntries([
+    {
+      instanceId,
+      driver: ProviderDriverKind.make("acpRegistry"),
+      displayName: "DimCode Alpha",
+      enabled: true,
+      installed: true,
+      version: "1.0",
+      status: "ready",
+      auth: { status: "authenticated" },
+      checkedAt: "2026-11-16T00:00:00.000Z",
+      supportsModelOptionsProbe: true,
+      models: [
+        {
+          slug: "deepseek-v4.1-flash",
+          name: "DeepSeek V4.1 Flash",
+          isCustom: false,
+          capabilities: {},
+        },
+      ],
+      slashCommands: [],
+      skills: [],
+    },
+  ]);
+  await using screen = await render(
+    <ProviderModelPicker
+      environmentId={environmentId}
+      activeInstanceId={instanceId}
+      model="deepseek-v4.1-flash"
+      lockedProvider={null}
+      instanceEntries={entries}
+      modelOptionsByInstance={new Map([[instanceId, entries[0]!.models]])}
+      onInstanceModelChange={() => {}}
+    />,
+  );
+  await vi.waitFor(() =>
+    expect(refreshRequests).toHaveBeenCalledExactlyOnceWith({
+      environmentId,
+      input: { instanceId, probeModelOptions: "deepseek-v4.1-flash" },
+    }),
+  );
+  await screen.getByRole("button", { name: "DeepSeek V4.1 Flash", exact: true }).click();
+  await vi.waitFor(() =>
+    expect(refreshRequests).toHaveBeenCalledWith({
+      environmentId,
+      input: { modelCatalogOnly: true, instanceId },
+    }),
+  );
+  await userEvent.keyboard("{Escape}");
+  refreshRequests.mockClear();
+  await screen.getByRole("button", { name: "DeepSeek V4.1 Flash", exact: true }).click();
+  await page.getByRole("button", { name: "DimCode Alpha", exact: true }).click();
+  await vi.waitFor(() =>
+    expect(
+      refreshRequests.mock.calls.filter(
+        ([target]) => (target as { input: { modelCatalogOnly?: boolean } }).input.modelCatalogOnly,
+      ),
+    ).toHaveLength(2),
+  );
+  await userEvent.keyboard("{Escape}");
+});
 
 it("keeps each registry image when adding a model from another ACP agent", async () => {
   const icons = [

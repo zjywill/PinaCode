@@ -664,7 +664,8 @@ export const WsServerRefreshProvidersRpc = Rpc.make(WS_METHODS.serverRefreshProv
     refreshModels: Schema.optional(Schema.Boolean),
     /**
      * A model picker opened: refetch a model manifest older than a few minutes and probe providers
-     * only when it changed. The other fields are ignored and the config stream carries the result.
+     * only when it changed, or refresh the specified instance's dynamic catalog.
+     * The config stream carries the result.
      */
     modelCatalogOnly: Schema.optional(Schema.Boolean),
     probeModelOptions: Schema.optional(TrimmedNonEmptyString),

@@ -772,6 +772,8 @@ export const make = Effect.gen(function* () {
         );
       }
       yield* Effect.forkIn(refresh, scope);
+      // Providers capture their environment at creation, before later fd4 updates can reach them.
+      if (Option.isNone(yield* Ref.get(latest))) yield* Deferred.await(discovered);
       return true;
     }).pipe(Effect.withSpan("desktop.shellEnvironment.installIntoProcess")),
   );

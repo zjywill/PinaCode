@@ -22,6 +22,7 @@ import {
   CommandId,
   AuthOrchestrationOperateScope,
   isManagedDriverAllowed,
+  isDimCodeAlphaCommand,
   ProviderDriverKind,
   ThreadId,
 } from "@t3tools/contracts";
@@ -416,7 +417,7 @@ function AgentsSection({
   const canManageProviders = useEnvironmentScope(environmentId, AuthProvidersManageScope);
   const [terminalSession, setTerminalSession] = useState<AgentTerminalSession | null>(null);
   const [moreOpen, setMoreOpen] = useState<boolean | null>(null);
-  const [addingProvider, setAddingProvider] = useState(false);
+  const [addingProvider, setAddingProvider] = useState<"registry" | "dimcodeAlpha" | null>(null);
   const [codexSetupId, setCodexSetupId] = useState<ProviderInstanceId | null>(null);
   const [cliTerminalFor, setCliTerminalFor] = useState<ProviderInstanceId | null>(null);
 
@@ -430,6 +431,13 @@ function AgentsSection({
   if (moreOpen === null && !checking && found.length === 0) setMoreOpen(true);
   const showMore = moreOpen ?? false;
   const acpAllowed = isManagedDriverAllowed(serverConfig?.managedPolicy, ACP_REGISTRY_DRIVER_KIND);
+  const offerDimCode =
+    acpAllowed &&
+    serverConfig !== null &&
+    !Object.values(serverConfig.settings.providerInstances).some(
+      (instance) =>
+        instance.driver === ACP_REGISTRY_DRIVER_KIND && isDimCodeAlphaCommand(instance.config),
+    );
   const stateOf = (provider: ServerProvider) => welcomeAgentState(provider, serverConfig?.settings);
   const needsInstallOrSignIn = (provider: ServerProvider) => {
     const state = stateOf(provider);
@@ -641,6 +649,30 @@ function AgentsSection({
         </CollapsibleTrigger>
         <CollapsiblePanel>
           <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+            {offerDimCode ? (
+              <div className="flex min-h-9 items-center gap-3">
+                <RowIcon>
+                  <ProviderInstanceIcon
+                    driverKind={ACP_REGISTRY_DRIVER_KIND}
+                    acpRegistryAgentId="dimcode"
+                    displayName="DimCode Alpha"
+                    iconClassName="size-4"
+                  />
+                </RowIcon>
+                <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                  DimCode Alpha
+                </span>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  aria-label="Set up: DimCode Alpha"
+                  disabled={!canManageProviders}
+                  onClick={() => setAddingProvider("dimcodeAlpha")}
+                >
+                  Set up
+                </Button>
+              </div>
+            ) : null}
             {available.map((provider) => (
               <AgentRow
                 key={provider.instanceId}
@@ -663,7 +695,7 @@ function AgentsSection({
                 size="xs"
                 variant="outline"
                 disabled={!canManageProviders}
-                onClick={() => setAddingProvider(true)}
+                onClick={() => setAddingProvider("registry")}
               >
                 Browse
               </Button>
@@ -705,8 +737,11 @@ function AgentsSection({
           open
           environmentId={environmentId}
           environmentLabel={label}
-          showMoreProviders
-          onOpenChange={setAddingProvider}
+          showMoreProviders={addingProvider === "registry"}
+          initialPreset={addingProvider === "dimcodeAlpha" ? "dimcodeAlpha" : undefined}
+          onOpenChange={(open) => {
+            if (!open) setAddingProvider(null);
+          }}
           onCreated={(_instanceId, driver) => {
             void refreshProviders({ environmentId, input: {} });
             // A new Claude Code, Codex, or Pi instance can bring more history to import.
