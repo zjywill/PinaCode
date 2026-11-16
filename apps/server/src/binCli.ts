@@ -70,7 +70,7 @@ const connectUnavailableCommand = Command.make("connect", {
 export const makeCli = ({ cloudEnabled = hasCloudPublicConfig } = {}) =>
   Command.make("pinacode", { ...sharedServerCommandFlags }).pipe(
     Command.withDescription(
-      "Run T3 Code in this terminal and open it in your browser. To use it from your other devices, run `t3 up`.",
+      "Run Pina Code in this terminal and open it in your browser. To use it from your other devices, run `pinacode up`.",
     ),
     Command.withHandler(runDefaultServerCommand),
     Command.withSubcommands([
