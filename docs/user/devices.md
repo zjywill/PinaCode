@@ -2,7 +2,7 @@
 
 The Device panel shows a live iOS Simulator or Android Emulator next to a
 thread, so you can watch an agent verify mobile work and tap the device
-yourself. Agents get the same device through `device_*` tools and the
+yourself. Agents get the same device through `pinacode_device_*` tools and the
 `agent-device` command line, which T3 Code sets up for them.
 
 ## Open a device
@@ -156,11 +156,11 @@ closing it with **Return device to the pool**, or removing the host, returns it
 wiped. The panel keeps a watched device leased up to the host's lease limit.
 You can tap, swipe, type, and press Home, and Back and Recents on Android.
 Rotation, appearance, text size, device tools, and screenshots are not offered
-for Simlock devices; agents can still do them through `device_open`. On iOS 27
+for Simlock devices; agents can still do them through `pinacode_device_open`. On iOS 27
 simulators, typing on your keyboard does nothing; tap the on-screen keyboard
 instead. Workers must run the same agent-device
 version as T3 (see Device tool updates), and agent-device accepts app installs
-for a lease only from the folder it was opened from, which `device_open`
+for a lease only from the folder it was opened from, which `pinacode_device_open`
 names. A device cannot reach development servers on your machine through
 localhost; use an address its worker can reach.
 

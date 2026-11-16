@@ -98,7 +98,7 @@ export type OrchestratorMcpTargetOptions = typeof OrchestratorMcpTargetOptions.T
 export const OrchestratorMcpTarget = Schema.Struct({
   providerInstanceId: Schema.optional(
     ProviderInstanceId.annotate({
-      description: "Provider instance id from `orchestrator_capabilities`.",
+      description: "Provider instance id from `pinacode_orchestrator_capabilities`.",
     }),
   ),
   driverKind: Schema.optional(
@@ -110,13 +110,13 @@ export const OrchestratorMcpTarget = Schema.Struct({
   options: Schema.optional(
     OrchestratorMcpTargetOptions.annotate({
       description:
-        "Options from `orchestrator_capabilities`, such as {effort:'max'}. Given values override inherited. [] or {} clears.",
+        "Options from `pinacode_orchestrator_capabilities`, such as {effort:'max'}. Given values override inherited. [] or {} clears.",
     }),
   ),
   environmentId: Schema.optional(
     EnvironmentId.annotate({
       description:
-        "Linked environment to run in. Provider and model default to yours; others come from `orchestrator_capabilities` with this `environmentId`.",
+        "Linked environment to run in. Provider and model default to yours; others come from `pinacode_orchestrator_capabilities` with this `environmentId`.",
     }),
   ),
   projectId: Schema.optional(
@@ -170,6 +170,12 @@ export type OrchestratorMcpTerminalDelegatedTaskStatus =
 
 export const OrchestratorMcpDelegateTaskInput = Schema.Struct({
   task: OrchestratorMcpPrompt,
+  session: Schema.optional(
+    Schema.Literals(["child", "independent"]).annotate({
+      description:
+        "'independent': a separately listed PinaCode session in its own worktree. Completion wakes you to review. Send fixes to the same childThreadId; every revision wakes you again. Default 'child'.",
+    }),
+  ),
   target: Schema.optional(OrchestratorMcpTarget),
   title: Schema.optional(OrchestratorMcpTitle),
   role: Schema.optional(OrchestratorMcpTaskRole),
@@ -196,7 +202,13 @@ export const OrchestratorMcpDelegateTaskInput = Schema.Struct({
     }),
   ),
   interactionMode: Schema.optional(OrchestratorMcpInteractionMode),
-});
+}).check(
+  Schema.makeFilter((input) =>
+    input.session === "independent" && input.isolation === "shared"
+      ? "Independent sessions require their own worktree."
+      : true,
+  ),
+);
 export type OrchestratorMcpDelegateTaskInput = typeof OrchestratorMcpDelegateTaskInput.Type;
 
 // Set only on results for still-running tasks whose completion will wake the parent.
@@ -215,6 +227,9 @@ export const OrchestratorMcpDelegateTaskResult = Schema.Struct({
   taskId: NodeId,
   /** Null for a task that runs in a linked environment; see `remoteChild`. */
   childThreadId: Schema.NullOr(ThreadId),
+  session: Schema.optional(Schema.Literals(["child", "independent"])),
+  worktreePath: Schema.optional(Schema.NullOr(Schema.String)),
+  branch: Schema.optional(Schema.NullOr(Schema.String)),
   /** The linked environment and thread a remote task runs as. */
   remoteChild: Schema.optional(
     Schema.Struct({ environmentId: EnvironmentId, threadId: ThreadId, label: Schema.String }),
@@ -240,7 +255,7 @@ export const OrchestratorMcpDelegateTaskResult = Schema.Struct({
   resultContextTransferId: Schema.NullOr(ContextTransferId),
   hasPendingQuestion: Schema.Boolean.annotate({
     description:
-      "A question blocks the child and ends a wait. Answer via `t3_pending_request` on `childThreadId`, or the user does.",
+      "A question blocks the child and ends a wait. Answer via `pinacode_pending_request` on `childThreadId`, or the user does.",
   }),
   pendingApproval: Schema.NullOr(
     Schema.Struct({ requestId: RuntimeRequestId, kind: ProviderRequestKind, runId: RunId }),
@@ -406,7 +421,7 @@ export const OrchestratorMcpThreadListItem = Schema.Struct({
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
   linkedPullRequest: Schema.NullOr(ThreadLinkedPullRequest),
-  /** Up to 5 open linked pull requests, watched first; list_thread_pull_requests pages all of them. */
+  /** Up to 5 open linked pull requests, watched first; pinacode_list_thread_pull_requests pages all of them. */
   pullRequests: Schema.optional(Schema.Array(OrchestratorMcpThreadPullRequest)),
   pullRequestCount: Schema.optional(NonNegativeInt),
   openPullRequestCount: Schema.optional(NonNegativeInt),
@@ -421,7 +436,7 @@ export const OrchestratorMcpThreadListItem = Schema.Struct({
   /** Absent from linked environments that predate it. */
   pendingBackgroundTasks: Schema.optional(Schema.Array(OrchestratorMcpThreadBackgroundTask)),
   parentThreadId: Schema.NullOr(ThreadId),
-  relationshipToParent: Schema.NullOr(Schema.Literals(["fork", "subagent"])),
+  relationshipToParent: Schema.NullOr(Schema.Literals(["fork", "subagent", "delegation"])),
   /** The linked environment's thread that delegated this one; absent otherwise. */
   delegatedFrom: Schema.optional(OrchestrationV2DelegatedFrom),
   itemCount: NonNegativeInt,
@@ -471,7 +486,7 @@ export const OrchestratorMcpThreadDetail = Schema.Struct({
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
   linkedPullRequest: Schema.NullOr(ThreadLinkedPullRequest),
-  /** Up to 5 open linked pull requests, watched first, on the first page only; list_thread_pull_requests pages all of them. */
+  /** Up to 5 open linked pull requests, watched first, on the first page only; pinacode_list_thread_pull_requests pages all of them. */
   pullRequests: Schema.optional(Schema.Array(OrchestratorMcpThreadPullRequest)),
   pullRequestCount: Schema.optional(NonNegativeInt),
   openPullRequestCount: Schema.optional(NonNegativeInt),
@@ -480,7 +495,7 @@ export const OrchestratorMcpThreadDetail = Schema.Struct({
   branch: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
   parentThreadId: Schema.NullOr(ThreadId),
-  relationshipToParent: Schema.NullOr(Schema.Literals(["fork", "subagent"])),
+  relationshipToParent: Schema.NullOr(Schema.Literals(["fork", "subagent", "delegation"])),
   /** The linked environment's thread that delegated this one; absent otherwise. */
   delegatedFrom: Schema.optional(OrchestrationV2DelegatedFrom),
   runCount: NonNegativeInt,
@@ -727,7 +742,7 @@ export const OrchestratorMcpScheduleTaskInput = Schema.Struct({
 });
 export type OrchestratorMcpScheduleTaskInput = typeof OrchestratorMcpScheduleTaskInput.Type;
 
-/** `schedule_task` creates a task, or updates one when `scheduledTaskId` is given. */
+/** `pinacode_schedule_task` creates a task, or updates one when `scheduledTaskId` is given. */
 export const OrchestratorMcpSaveScheduledTaskInput = Schema.Struct({
   ...OrchestratorMcpScheduleTaskInput.fields,
   scheduledTaskId: Schema.optional(ScheduledTaskId),
@@ -888,7 +903,7 @@ export const OrchestratorMcpEnvironmentLinkResult = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("linked"),
     environmentId: EnvironmentId.annotate({
-      description: "Pass it as environmentId to act there; t3_environment_links lists it.",
+      description: "Pass it as environmentId to act there; pinacode_environment_links lists it.",
     }),
     label: Schema.String,
     access: AuthMcpClientAccess.annotate({ description: "The access the user chose." }),
@@ -910,7 +925,7 @@ export type OrchestratorMcpEnvironmentLinkResult = typeof OrchestratorMcpEnviron
 
 export const OrchestratorMcpEnvironmentUnlinkInput = Schema.Struct({
   environmentId: EnvironmentId.annotate({
-    description: "The linked environment to forget, from t3_environment_links.",
+    description: "The linked environment to forget, from pinacode_environment_links.",
   }),
 });
 export type OrchestratorMcpEnvironmentUnlinkInput =

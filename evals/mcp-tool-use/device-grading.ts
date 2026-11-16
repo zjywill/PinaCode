@@ -55,12 +55,12 @@ const openTargets = (previous: DeviceRun["calls"]) => {
   const sessions = new Map<string, ReturnType<typeof inputTarget>>();
   for (const prior of previous) {
     if (prior.failed !== false) continue;
-    if (prior.tool === "device_open") {
+    if (prior.tool === "pinacode_device_open") {
       const target = resultTarget(prior) ?? inputTarget(prior);
       const key = `${target.hostId}/${target.deviceId}`;
       sessions.delete(key);
       sessions.set(key, target);
-    } else if (prior.tool === "device_close") {
+    } else if (prior.tool === "pinacode_device_close") {
       const host = inputString(prior.input, "hostId"),
         id = inputString(prior.input, "deviceId");
       for (const [key, target] of sessions)
@@ -77,10 +77,10 @@ const flagValue = (words: ReadonlyArray<string>, flag: string) => {
     if (word.startsWith(`${flag}=`)) return word.slice(flag.length + 1);
   }
 };
-/** Each successful device_open's launcher, with the device and session it targets. */
+/** Each successful pinacode_device_open's launcher, with the device and session it targets. */
 const launcherOpens = (previous: DeviceRun["calls"]) =>
   previous.flatMap((call) => {
-    if (call.tool !== "device_open" || call.failed !== false) return [];
+    if (call.tool !== "pinacode_device_open" || call.failed !== false) return [];
     try {
       const { device, agentDevice }: Record<string, unknown> = JSON.parse(call.output ?? "");
       if (
@@ -831,12 +831,12 @@ export function gradeDevice(expect: typeof DeviceExpect.Type | undefined, run: D
   const add = (check: string, pass: boolean) => checks.push({ check, pass });
   if (expect.briefs !== undefined) {
     const briefs = run.calls.filter((call) =>
-      ["delegate_task", "t3_thread_launch"].includes(call.tool),
+      ["pinacode_delegate_task", "pinacode_thread_launch"].includes(call.tool),
     );
     add("device briefs count", briefs.length >= expect.briefs);
     for (const [i, call] of briefs.entries()) {
       const route = briefRoute(
-        inputString(call.input, call.tool === "delegate_task" ? "task" : "message"),
+        inputString(call.input, call.tool === "pinacode_delegate_task" ? "task" : "message"),
       );
       add(`device brief ${i + 1} ${call.tool} ${route}`, route === "managed");
     }
@@ -923,14 +923,14 @@ export function gradeDevice(expect: typeof DeviceExpect.Type | undefined, run: D
   };
   const recovered =
     expect.reportOrCapture &&
-    (run.calls.some((call) => call.tool === "device_screenshot" && usableImage(call)) ||
+    (run.calls.some((call) => call.tool === "pinacode_device_screenshot" && usableImage(call)) ||
       shell.some((entry) => successfulScreenshots(entry).length > 0));
   if (expect.noShutdown)
     add(
       "callsMustNot shutdown occupied device",
       !run.calls.some(
         (call, index) =>
-          call.tool === "device_close" &&
+          call.tool === "pinacode_device_close" &&
           record(call.input) &&
           call.input.shutdown === true &&
           openTargets(run.calls.slice(0, index)).some(
@@ -957,7 +957,7 @@ export function gradeDevice(expect: typeof DeviceExpect.Type | undefined, run: D
   if (expect.maxCaptureAttempts !== undefined)
     add(
       `maxCalls device captures <= ${expect.maxCaptureAttempts}`,
-      run.calls.filter((call) => call.tool === "device_screenshot").length +
+      run.calls.filter((call) => call.tool === "pinacode_device_screenshot").length +
         allActions.filter((action) => action.managed && action.args[0] === "screenshot").length <=
         expect.maxCaptureAttempts,
     );
@@ -969,13 +969,17 @@ export function gradeDevice(expect: typeof DeviceExpect.Type | undefined, run: D
     let opened = false,
       captured = false;
     for (const [index, call] of run.calls.entries()) {
-      if (call.tool === "device_open" && call.failed === false && matches(inputTarget(call)))
+      if (
+        call.tool === "pinacode_device_open" &&
+        call.failed === false &&
+        matches(inputTarget(call))
+      )
         opened = true;
       const appReady = !target.app || (call.failed === false && appSessions.size > 0);
       if (
         opened &&
         appReady &&
-        call.tool === "device_screenshot" &&
+        call.tool === "pinacode_device_screenshot" &&
         matches(screenshotTarget(call, run.calls.slice(0, index))) &&
         (!target.app || usableImage(call))
       )
@@ -1059,7 +1063,7 @@ export function gradeDevice(expect: typeof DeviceExpect.Type | undefined, run: D
       // agent-device prints one error per failed command, even when a later command succeeds.
       const errors = (call.output ?? "").match(new RegExp(AGENT_DEVICE_ERROR, "g"))?.length ?? 0;
       let discoveryFailed = false;
-      if (call.tool === "device_list") {
+      if (call.tool === "pinacode_device_list") {
         try {
           const statuses: unknown = JSON.parse(call.output ?? "").hostStatuses;
           discoveryFailed =
@@ -1068,9 +1072,9 @@ export function gradeDevice(expect: typeof DeviceExpect.Type | undefined, run: D
         } catch {}
       }
       const attempts =
-        call.tool === "device_list"
+        call.tool === "pinacode_device_list"
           ? Number(!!call.failed || discoveryFailed)
-          : /^device_(?:open|screenshot|close)$/.test(call.tool)
+          : /^pinacode_device_(?:open|screenshot|close)$/.test(call.tool)
             ? Number(!!call.failed)
             : call.failed && device
               ? Math.max(1, Math.min(errors, device))

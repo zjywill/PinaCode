@@ -44,7 +44,7 @@ describe("Codex runtime context", () => {
 });
 
 describe("Codex orchestration context", () => {
-  it("routes subagents native first, delegate_task for the rest", () => {
+  it("routes subagents native first, pinacode_delegate_task for the rest", () => {
     const orchestration = Object.entries(buildCodexAdditionalContext({ model: "gpt-6.1-sol" }))
       .filter(([key]) => key.startsWith("t3_code_orchestration_"))
       .map(([, entry]) => entry.value)
@@ -54,12 +54,16 @@ describe("Codex orchestration context", () => {
     NodeAssert.ok(orchestration.includes("`run_in_background:false`"));
     NodeAssert.ok(orchestration.includes("A native type on another provider's model"));
     NodeAssert.ok(
-      orchestration.includes("Background agent: `delegate_task`, never a background `Agent`."),
+      orchestration.includes(
+        "Background agent: `pinacode_delegate_task`, never a background `Agent`.",
+      ),
     );
     NodeAssert.ok(
-      orchestration.includes("Every new delegate review or re-check is a new `delegate_task`"),
+      orchestration.includes(
+        "Every new delegate review or re-check is a new `pinacode_delegate_task`",
+      ),
     );
-    NodeAssert.ok(orchestration.includes("never a `t3_thread_send`"));
+    NodeAssert.ok(orchestration.includes("never a `pinacode_thread_send`"));
     NodeAssert.ok(!orchestration.includes("inheritedOptions"));
     NodeAssert.ok(!orchestration.includes("Prefer native"));
     // The ACP terminal fallback is ACP-only; Codex agents never need it.
@@ -75,7 +79,7 @@ describe("Codex device context", () => {
 
     NodeAssert.ok(tools(true).includes(T3_CODE_DEVICE_TOOL_INSTRUCTIONS));
     NodeAssert.ok(!tools(true).includes("ToolSearch"));
-    NodeAssert.ok(!tools(false).includes("## T3 Code devices"));
+    NodeAssert.ok(!tools(false).includes("## PinaCode devices"));
   });
 });
 

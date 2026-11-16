@@ -27,9 +27,9 @@ const dependencies = [
 
 const DeviceToolFailure = Schema.Union([DeviceToolError, OrchestratorMcpFailure]);
 
-const DeviceListTool = Tool.make("device_list", {
+const DeviceListTool = Tool.make("pinacode_device_list", {
   description:
-    "List iOS Simulators and Android Emulators on every device host, what each host can run, and what is open in this thread's Device panel. Call before `device_open` when you do not know a device id.",
+    "List iOS Simulators and Android Emulators on every device host, what each host can run, and what is open in this thread's Device panel. Call before `pinacode_device_open` when you do not know a device id.",
   // An empty struct serializes as `anyOf [object, array]`, which some
   // providers reject and then drop every tool on the server with it.
   parameters: Schema.Struct({
@@ -48,9 +48,9 @@ const DeviceListTool = Tool.make("device_list", {
   .annotate(Tool.OpenWorld, false)
   .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 
-const DeviceOpenTool = Tool.make("device_open", {
+const DeviceOpenTool = Tool.make("pinacode_device_open", {
   description:
-    "Open a simulator or emulator for this thread. Pass `deviceId` and `hostId` from `device_list`. Boots it if needed and shows it in the user's Device panel. Returns the `agent-device` CLI call pinned to that device. Drive the device with that CLI.",
+    "Open a simulator or emulator for this thread. Pass `deviceId` and `hostId` from `pinacode_device_list`. Boots it if needed and shows it in the user's Device panel. Returns the `agent-device` CLI call pinned to that device. Drive the device with that CLI.",
   parameters: DeviceToolOpenInput,
   success: DeviceToolOpenResult,
   failure: DeviceToolFailure,
@@ -70,7 +70,7 @@ const DeviceOpenTool = Tool.make("device_open", {
   .annotate(Tool.OpenWorld, true)
   .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 
-export const DeviceScreenshotTool = Tool.make("device_screenshot", {
+export const DeviceScreenshotTool = Tool.make("pinacode_device_screenshot", {
   description:
     "Get a PNG of an open device's screen. For taps and text, use the `agent-device` CLI.",
   parameters: DeviceToolTargetInput,
@@ -85,7 +85,7 @@ export const DeviceScreenshotTool = Tool.make("device_screenshot", {
   .annotate(Tool.OpenWorld, true)
   .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromOutsideClients);
 
-const DeviceCloseTool = Tool.make("device_close", {
+const DeviceCloseTool = Tool.make("pinacode_device_close", {
   description:
     "Remove a device from this thread's Device panel. `shutdown=true` also turns it off.",
   parameters: DeviceToolCloseInput,

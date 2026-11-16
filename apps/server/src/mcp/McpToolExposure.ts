@@ -1,13 +1,13 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
-export const TOOL_SEARCH = "tool_search";
+export const TOOL_SEARCH = "pinacode_tool_search";
 
 /** What a deferring client lists before it searches. Pi's extension declares the same three. */
 const DIRECT_TOOLS: ReadonlySet<string> = new Set([
-  "orchestrator_capabilities",
-  "delegate_task",
-  "task_status",
+  "pinacode_orchestrator_capabilities",
+  "pinacode_delegate_task",
+  "pinacode_task_status",
   TOOL_SEARCH,
 ]);
 

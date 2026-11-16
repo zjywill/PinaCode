@@ -1209,7 +1209,7 @@ const CITATION_REQUEST = {
 } satisfies NonNullable<TimelineProps["citationRequest"]>;
 
 describe("MessagesTimeline citations", () => {
-  it("offers Cite for text an agent sent with send_to_user", async () => {
+  it("offers Cite for text an agent sent with pinacode_send_to_user", async () => {
     const text = "The draft the next question refers to";
     await using screen = await renderTimeline(
       [

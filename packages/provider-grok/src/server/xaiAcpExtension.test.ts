@@ -376,25 +376,28 @@ describe("XAiAcpExtension", () => {
 
     const rendered = grokCall(
       "call-85597c6c-6fb8-4c9c-a6a8-12c4a74ebc96-1",
-      "t3-code__html_render",
+      "pinacode__pinacode_html_render",
       { path: "a.html" },
       {
         status: "completed",
         rawOutput: {
           type: "MCP",
-          tool_name: "html_render",
-          server_name: "t3-code",
+          tool_name: "pinacode_html_render",
+          server_name: "pinacode",
           output: { OkayOutput: JSON.stringify({ htmlRender: page, message: "Shown" }) },
         },
       },
     );
     expect(extractMcpToolCallIdentity(rendered)).toEqual({
-      server: "t3-code",
-      tool: "html_render",
+      server: "pinacode",
+      tool: "pinacode_html_render",
     });
     expect(rendered.data.rawInput).toMatchObject({ arguments: { path: "a.html" } });
     expect(
-      htmlRenderFromToolItem({ toolName: "t3-code.html_render", output: rendered.data.rawOutput }),
+      htmlRenderFromToolItem({
+        toolName: "pinacode.pinacode_html_render",
+        output: rendered.data.rawOutput,
+      }),
     ).toEqual(page);
 
     const failed = grokCall(

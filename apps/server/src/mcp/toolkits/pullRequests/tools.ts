@@ -74,7 +74,7 @@ export class PullRequestThreadRequiredError extends Schema.TaggedError<PullReque
   {},
 ) {
   override get message(): string {
-    return "Pass threadId: this MCP client is not running inside a T3 thread.";
+    return "Pass threadId: this MCP client is not running inside a PinaCode thread.";
   }
 }
 
@@ -110,7 +110,7 @@ export class PullRequestProjectNotFoundError extends Schema.TaggedError<PullRequ
   { repository: Schema.String },
 ) {
   override get message(): string {
-    return `No project in this environment is a checkout of ${this.repository}, so its pull requests cannot be read here. Add one with t3_project_create.`;
+    return `No project in this environment is a checkout of ${this.repository}, so its pull requests cannot be read here. Add one with pinacode_project_create.`;
   }
 }
 
@@ -241,9 +241,9 @@ export const ListThreadPullRequestsResult = Schema.Struct({
 });
 export type ListThreadPullRequestsResult = typeof ListThreadPullRequestsResult.Type;
 
-const LinkPullRequestTool = Tool.make("link_pull_request", {
+const LinkPullRequestTool = Tool.make("pinacode_link_pull_request", {
   description:
-    "Link a PR to this thread. T3 shows its status and settles the thread on merge. For several PRs, use `link_pull_requests`.",
+    "Link a PR to this thread. PinaCode shows its status and settles the thread on merge. For several PRs, use `pinacode_link_pull_requests`.",
   parameters: PullRequestTargetInput,
   success: LinkPullRequestResult,
   failure: PullRequestToolError,
@@ -255,9 +255,9 @@ const LinkPullRequestTool = Tool.make("link_pull_request", {
   .annotate(Tool.Idempotent, true)
   .annotate(Tool.OpenWorld, false);
 
-const LinkPullRequestsTool = Tool.make("link_pull_requests", {
+const LinkPullRequestsTool = Tool.make("pinacode_link_pull_requests", {
   description:
-    "Link several PRs to a thread. Use it instead of one `link_pull_request` per PR. URLs that are not PRs come back in `invalidUrls`.",
+    "Link several PRs to a thread. Use it instead of one `pinacode_link_pull_request` per PR. URLs that are not PRs come back in `invalidUrls`.",
   parameters: Schema.Struct({
     environmentId: OrchestratorMcpEnvironmentTarget,
     threadId: Schema.optional(ThreadId.annotate({ description: "Thread. Default: this thread." })),
@@ -273,7 +273,7 @@ const LinkPullRequestsTool = Tool.make("link_pull_requests", {
   .annotate(Tool.Idempotent, true)
   .annotate(Tool.OpenWorld, false);
 
-const UnlinkPullRequestTool = Tool.make("unlink_pull_request", {
+const UnlinkPullRequestTool = Tool.make("pinacode_unlink_pull_request", {
   description:
     "Remove a PR link from this thread. Succeeds with `wasLinked=false` when it was not linked.",
   parameters: PullRequestTargetInput,
@@ -287,9 +287,9 @@ const UnlinkPullRequestTool = Tool.make("unlink_pull_request", {
   .annotate(Tool.Idempotent, true)
   .annotate(Tool.OpenWorld, false);
 
-const UnlinkPullRequestsTool = Tool.make("unlink_pull_requests", {
+const UnlinkPullRequestsTool = Tool.make("pinacode_unlink_pull_requests", {
   description:
-    "Unlink a thread's PRs whose last known state is in `states`. Use it instead of one `unlink_pull_request` per PR. PRs with no known state stay linked.",
+    "Unlink a thread's PRs whose last known state is in `states`. Use it instead of one `pinacode_unlink_pull_request` per PR. PRs with no known state stay linked.",
   parameters: Schema.Struct({
     environmentId: OrchestratorMcpEnvironmentTarget,
     threadId: Schema.optional(ThreadId.annotate({ description: "Thread. Default: this thread." })),
@@ -305,7 +305,7 @@ const UnlinkPullRequestsTool = Tool.make("unlink_pull_requests", {
   .annotate(Tool.Idempotent, true)
   .annotate(Tool.OpenWorld, false);
 
-const ListThreadPullRequestsTool = Tool.make("list_thread_pull_requests", {
+const ListThreadPullRequestsTool = Tool.make("pinacode_list_thread_pull_requests", {
   description:
     "List a thread's PRs, with last known state and stack order (bottom to top). Not an end-of-work check.",
   parameters: Schema.Struct({
@@ -324,9 +324,9 @@ const ListThreadPullRequestsTool = Tool.make("list_thread_pull_requests", {
   .annotate(Tool.Idempotent, true)
   .annotate(Tool.OpenWorld, false);
 
-const WatchPullRequestTool = Tool.make("watch_pull_request", {
+const WatchPullRequestTool = Tool.make("pinacode_watch_pull_request", {
   description:
-    "Watch an open PR for this thread, linking it first if needed. T3 wakes you on failed checks, passed required checks, new comments or reviews, or conflicts. Handle old comments first. Only later ones wake you. After this call, end your turn. The watch stays on after each wake, so do not call this again on a wake. A wake is not a merge decision. Check readiness yourself.",
+    "Watch an open PR for this thread, linking it first if needed. PinaCode wakes you on failed checks, passed required checks, new comments or reviews, or conflicts. Handle old comments first. Only later ones wake you. After this call, end your turn. The watch stays on after each wake, so do not call this again on a wake. A wake is not a merge decision. Check readiness yourself.",
   parameters: PullRequestTargetInput,
   success: WatchPullRequestResult,
   failure: PullRequestToolError,
@@ -339,7 +339,7 @@ const WatchPullRequestTool = Tool.make("watch_pull_request", {
   .annotate(Tool.OpenWorld, false)
   .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromSubagents);
 
-const UnwatchPullRequestTool = Tool.make("unwatch_pull_request", {
+const UnwatchPullRequestTool = Tool.make("pinacode_unwatch_pull_request", {
   description: "Stop watching a PR for this thread. It stays linked.",
   parameters: PullRequestTargetInput,
   success: WatchPullRequestResult,
@@ -384,9 +384,9 @@ export const ReadPullRequestGuideResult = Schema.Struct({
 });
 export type ReadPullRequestGuideResult = typeof ReadPullRequestGuideResult.Type;
 
-const WritePullRequestGuidesTool = Tool.make("write_pull_request_guides", {
+const WritePullRequestGuidesTool = Tool.make("pinacode_write_pull_request_guides", {
   description:
-    "Write review guides for up to 20 PRs (the tour in the PR Guide tab). Returns once runs start. Each run takes minutes in a temporary checkout. A run for the same head is joined. Read with `read_pull_request_guide`. Fails while guides are off.",
+    "Write review guides for up to 20 PRs (the tour in the PR Guide tab). Returns once runs start. Each run takes minutes in a temporary checkout. A run for the same head is joined. Read with `pinacode_read_pull_request_guide`. Fails while guides are off.",
   parameters: Schema.Struct({
     environmentId: OrchestratorMcpEnvironmentTarget,
     pullRequests: Schema.Array(GuideTarget).check(Schema.isMinLength(1), Schema.isMaxLength(20)),
@@ -401,7 +401,7 @@ const WritePullRequestGuidesTool = Tool.make("write_pull_request_guides", {
   .annotate(Tool.Idempotent, false)
   .annotate(Tool.OpenWorld, true);
 
-const ReadPullRequestGuideTool = Tool.make("read_pull_request_guide", {
+const ReadPullRequestGuideTool = Tool.make("pinacode_read_pull_request_guide", {
   description:
     "Read a PR's stored review guide and run state. `guide` is null when none exists. Never starts a run.",
   parameters: Schema.Struct({

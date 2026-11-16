@@ -112,7 +112,7 @@ requires matching durable run, provider thread, session, and native resume ident
 Queued runs never started, so recovery holds them and continues the run they wait
 behind. A settled run qualifies only when the restart cancels work the agent waits on
 (a subagent, a background task, or a shell or monitor the agent marked with
-`t3_background_wait`) and its session was live, so stale records from an older crash
+`pinacode_background_wait`) and its session was live, so stale records from an older crash
 never wake it. Its continuation prompt is the note of what will not report back. An
 unmarked shell or monitor does not wake a settled run: most are dev servers and their
 watchdogs that nobody waits on, so that note waits for the next user message.
@@ -147,7 +147,7 @@ command and message IDs prevent duplicate submissions after an outbox retry. Cod
 resumes without adding provider prompt text unless the turn lost background work;
 other adapters receive the continuation message through their normal turn path.
 
-Delegated tasks (`delegate_task` child threads) are reconciled as their own threads,
+Delegated tasks (`pinacode_delegate_task` child threads) are reconciled as their own threads,
 never as the parent's background work. The orchestrator settles child results and
 completion deliveries in a startup pass after reconciliation, because the terminal-run
 listener ignores reconciliation's cancellations. A cancelled child whose restart

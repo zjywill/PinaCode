@@ -920,9 +920,9 @@ function assertReinjectedInstructions(
   request: string,
 ) {
   const text = blocks[0]?.text ?? "";
-  assert.include(text, "T3 Code interaction mode: Default");
-  assert.include(text, "## T3 Code browser");
-  assert.include(text, "T3 Code orchestration");
+  assert.include(text, "PinaCode interaction mode: Default");
+  assert.include(text, "## PinaCode browser");
+  assert.include(text, "PinaCode orchestration");
   assert.include(text, `<user_request>\n${request}\n</user_request>`);
   assert.include(blocks[1]?.text ?? "", "<runtime_info>");
 }
@@ -1424,7 +1424,7 @@ describe("AcpAdapterV2", () => {
       assert.deepEqual(promptRuntimes, [1, 2], "the next turn runs on a fresh runtime");
       // The fresh runtime has no record of what reached the agent, so it sends T3's notes again.
       assert.include(promptTexts[1] ?? "", "<runtime_info>");
-      assert.include(promptTexts[1] ?? "", "T3 Code interaction mode: Default");
+      assert.include(promptTexts[1] ?? "", "PinaCode interaction mode: Default");
       assert.equal(watchedSessions.length, 2);
       assert.equal(watchedSessions[0], watchedSessions[1]);
     }).pipe(Effect.provide(layerTest)),
@@ -2423,9 +2423,9 @@ describe("AcpAdapterV2", () => {
         assert.notInclude(whitespaceCommand.prompt, "<t3_code_instructions>");
         const firstDefault = yield* runTurn(2, defaultPolicy, "First default request.");
         assert.equal(firstDefault.textBlockCount, 2);
-        assert.include(firstDefault.prompt, "T3 Code interaction mode: Default");
-        assert.include(firstDefault.prompt, "## T3 Code browser");
-        assert.include(firstDefault.prompt, "T3 Code orchestration");
+        assert.include(firstDefault.prompt, "PinaCode interaction mode: Default");
+        assert.include(firstDefault.prompt, "## PinaCode browser");
+        assert.include(firstDefault.prompt, "PinaCode orchestration");
         assert.include(firstDefault.prompt, "<runtime_info>");
         assert.notInclude(
           firstDefault.methods,
@@ -2438,14 +2438,14 @@ describe("AcpAdapterV2", () => {
 
         const planPolicy = policy("plan");
         const firstPlan = yield* runTurn(4, planPolicy, "Plan this change.");
-        assert.include(firstPlan.prompt, "T3 Code interaction mode: Plan");
+        assert.include(firstPlan.prompt, "PinaCode interaction mode: Plan");
         assert.deepEqual(firstPlan.modeSets, [planModeId]);
         assert.include(
           (yield* runTurn(5, planPolicy, "Continue planning.")).prompt,
           "Continue planning.",
         );
         const restoredBuild = yield* runTurn(6, defaultPolicy, "Implement the change.");
-        assert.include(restoredBuild.prompt, "T3 Code interaction mode: Default");
+        assert.include(restoredBuild.prompt, "PinaCode interaction mode: Default");
         assert.deepEqual(
           restoredBuild.modeSets,
           [buildModeId],
@@ -2817,8 +2817,8 @@ describe("AcpAdapterV2", () => {
                         title: "Wait for the child",
                         status: "in_progress",
                         rawInput: {
-                          server: "t3-code",
-                          tool: "t3_thread_wait",
+                          server: "pinacode",
+                          tool: "pinacode_thread_wait",
                           arguments: { threadId: "child" },
                         },
                         _meta: { is_mcp_tool_call: true },
@@ -3618,7 +3618,10 @@ describe("AcpAdapterV2", () => {
                   assert.isDefined(handler);
                   assert.isDefined(createTerminal);
                   const fallbackTerminal = yield* createTerminal(
-                    { sessionId: "mock-session-1", command: "true acp-mcp-call task_status {}" },
+                    {
+                      sessionId: "mock-session-1",
+                      command: "true acp-mcp-call pinacode_task_status {}",
+                    },
                     { requestId: "child-mcp-terminal", method: "terminal/create" },
                   );
                   const updates = [
@@ -3849,7 +3852,7 @@ describe("AcpAdapterV2", () => {
           (item) =>
             item.threadId === task?.childThreadId &&
             item.type === "dynamic_tool" &&
-            item.toolName === "t3-code.task_status",
+            item.toolName === "pinacode.pinacode_task_status",
         ),
       );
       const childMcp = items.find(
@@ -5455,7 +5458,7 @@ describe("AcpAdapterV2", () => {
         mcpServers: [
           {
             type: "stdio",
-            name: "t3-code",
+            name: "pinacode",
             command: process.execPath,
             args: [
               process.argv[1] === undefined ? "t3" : NodePath.resolve(process.argv[1]),
@@ -6379,7 +6382,7 @@ describe("AcpAdapterV2", () => {
         }),
       );
       const replacementPrompt = yield* Deferred.await(replacementPromptText);
-      assert.include(replacementPrompt, "T3 Code interaction mode: Default");
+      assert.include(replacementPrompt, "PinaCode interaction mode: Default");
       assert.include(replacementPrompt, "<runtime_info>");
     }).pipe(Effect.provide(layerTest)),
   );

@@ -876,8 +876,8 @@ describe("CursorAdapterV2", () => {
         );
         const sent = sentMessages.at(-1)!;
         return {
-          orchestration: sent.includes("## T3 Code orchestration"),
-          devices: sent.includes("## T3 Code devices"),
+          orchestration: sent.includes("## PinaCode orchestration"),
+          devices: sent.includes("## PinaCode devices"),
         };
       });
       const told = (orchestration: boolean, devices: boolean) => ({ orchestration, devices });
@@ -2469,7 +2469,7 @@ describe("CursorAdapterV2", () => {
     };
 
     assert.deepEqual(cursorMcpServers(mcpSession), {
-      "t3-code": {
+      pinacode: {
         type: "http",
         url: "http://127.0.0.1:43123/mcp",
         headers: {

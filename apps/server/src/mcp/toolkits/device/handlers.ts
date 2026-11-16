@@ -41,7 +41,7 @@ export function agentDeviceQuickStart(
   const platformNotes =
     host?.kind === "simlock"
       ? [
-          "This device is leased from a Simlock pool (alpha in T3 Code). The lease returns it to the pool, wiped, when it ends, so call device_close with shutdown: true when you are done. It starts with no apps installed.",
+          "This device is leased from a Simlock pool (alpha in PinaCode). The lease returns it to the pool, wiped, when it ends, so call pinacode_device_close with shutdown: true when you are done. It starts with no apps installed.",
           host.installDirectory
             ? `agent-device accepts install for this lease only when run from ${host.installDirectory}.`
             : "",
@@ -49,7 +49,7 @@ export function agentDeviceQuickStart(
           .filter(Boolean)
           .join(" ")
       : host?.kind === "eas"
-        ? "This is an Expo Simulators session in the cloud. It bills the Expo account per minute until it stops, so call device_close with shutdown: true when you are done. It starts with no apps installed: install-from-source <url> installs a build from a URL (iOS needs a .tar.gz containing a .app), and install uploads one from this machine."
+        ? "This is an Expo Simulators session in the cloud. It bills the Expo account per minute until it stops, so call pinacode_device_close with shutdown: true when you are done. It starts with no apps installed: install-from-source <url> installs a build from a URL (iOS needs a .tar.gz containing a .app), and install uploads one from this machine."
         : device.platform === "ios"
           ? "First use builds an XCTest runner and can take a couple of minutes; later commands are fast."
           : "The Android snapshot helper installs itself on first use.";
@@ -59,9 +59,9 @@ export function agentDeviceQuickStart(
       ? `Drive it with ${executable}. It is bound to this device and session, so it needs no --platform, --udid, --serial, --config or --session flags. Use this exact path; login shells may reset PATH.`
       : `Drive it with ${executable}. Use this exact path; login shells may reset PATH. Always pass ${target}.`,
     // Screenshots and input need the session agent-device's open starts, and an iOS snapshot also
-    // needs its app. device_open does not run open itself: on iOS that can start a minutes-long
+    // needs its app. pinacode_device_open does not run open itself: on iOS that can start a minutes-long
     // XCTest runner build.
-    "Every app launch, deep link, tap, text entry, alert, setting, screenshot and recording on this device goes through it. Run open <bundle-or-package-id> (apps lists them) before snapshots, CLI screenshots or input; it starts the session they need. Use device_screenshot just to look.",
+    "Every app launch, deep link, tap, text entry, alert, setting, screenshot and recording on this device goes through it. Run open <bundle-or-package-id> (apps lists them) before snapshots, CLI screenshots or input; it starts the session they need. Use pinacode_device_screenshot just to look.",
     `  ${run("open <bundle-or-package-id> --relaunch")}  # restarts the app; Expo dev clients connect to their Metro, --metro-port <port> picks it`,
     `  ${run("open <bundle-or-package-id> <deep-link-url>")}`,
     `  ${run("snapshot -i")}  # accessibility tree with @eN refs`,
@@ -69,15 +69,15 @@ export function agentDeviceQuickStart(
     `  ${run('fill @e5 "text" --settle')}`,
     `  ${run("alert accept")}`,
     `  ${run("settings appearance dark")}  # also text-size, permission grant <name>`,
-    `  ${run("screenshot /tmp/shot.png")}  # ${device.platform === "ios" ? "iOS saves 1x points; add --pixel-density <n> (3 on most iPhones) for device resolution, " : ""}or call device_screenshot to look`,
+    `  ${run("screenshot /tmp/shot.png")}  # ${device.platform === "ios" ? "iOS saves 1x points; add --pixel-density <n> (3 on most iPhones) for device resolution, " : ""}or call pinacode_device_screenshot to look`,
     `  ${run("record start --scope device /tmp/run.mp4")}  # then record stop`,
     `  ${run("install <app> <path-to-.app-or-.apk>")}`,
     `Prefer snapshot refs over coordinates. Run ${executable} help <command> for flags and ${executable} help workflow for guides.`,
     "Do not use simctl, idb, adb or ssh for those actions. They stay fine for builds, installs, code sync, Metro, port forwards, logs, test runners and what this command cannot do; come back to it for every UI action and screenshot so the user can watch.",
-    "Each device_open returns its own command; opening another device does not retarget this one.",
+    "Each pinacode_device_open returns its own command; opening another device does not retarget this one.",
     ...(target === ""
       ? [
-          "The command is removed when the device closes or T3 Code restarts. If it is missing, call device_open again.",
+          "The command is removed when the device closes or PinaCode restarts. If it is missing, call pinacode_device_open again.",
         ]
       : []),
     platformNotes,
@@ -181,7 +181,7 @@ const pickDevice = Effect.fn("handlers.pickDevice")(function* (
       reason: [
         `No device ${deviceId} on ${target === undefined ? "any host" : hostName(target)}.`,
         ...failures,
-        "Call device_list for current ids.",
+        "Call pinacode_device_list for current ids.",
       ].join(" "),
     });
   }
@@ -198,8 +198,8 @@ const pickDevice = Effect.fn("handlers.pickDevice")(function* (
         failure !== undefined
           ? failure.detail
           : input.platform === undefined
-            ? "No simulators or emulators were found. Call device_list to see why."
-            : `No ${input.platform} devices were found on host ${hostId}. Call device_list to see why.`,
+            ? "No simulators or emulators were found. Call pinacode_device_list to see why."
+            : `No ${input.platform} devices were found on host ${hostId}. Call pinacode_device_list to see why.`,
     });
   }
   const platforms = new Set(candidates.map((device) => device.platform));
@@ -214,7 +214,7 @@ const pickDevice = Effect.fn("handlers.pickDevice")(function* (
 const toolError = (error: DeviceError | DeviceToolUnavailableError) => error;
 
 const handlers = {
-  device_list: McpToolAccess.readsAsCaller((input) =>
+  pinacode_device_list: McpToolAccess.readsAsCaller((input) =>
     Effect.gen(function* () {
       const scope = yield* requireDeviceAccess;
       const devices = yield* DeviceService.DeviceService;
@@ -241,7 +241,7 @@ const handlers = {
       };
     }).pipe(Effect.mapError(toolError)),
   ),
-  device_open: McpToolAccess.actsAsCaller((input) =>
+  pinacode_device_open: McpToolAccess.actsAsCaller((input) =>
     Effect.gen(function* () {
       const scope = yield* requireDeviceAccess;
       const devices = yield* DeviceService.DeviceService;
@@ -294,7 +294,7 @@ const handlers = {
       if (Option.isNone(launcher)) {
         return yield* new DeviceToolUnavailableError({
           reason:
-            "The device was closed while device_open was preparing it. Call device_open again only if you still need it.",
+            "The device was closed while pinacode_device_open was preparing it. Call pinacode_device_open again only if you still need it.",
         });
       }
       const command = launcher.value;
@@ -317,7 +317,7 @@ const handlers = {
       };
     }).pipe(Effect.mapError(toolError)),
   ),
-  device_screenshot: McpToolAccess.readsAsCaller((input) =>
+  pinacode_device_screenshot: McpToolAccess.readsAsCaller((input) =>
     Effect.gen(function* () {
       const scope = yield* requireDeviceAccess;
       const devices = yield* DeviceService.DeviceService;
@@ -340,8 +340,8 @@ const handlers = {
         return yield* new DeviceToolUnavailableError({
           reason:
             input.deviceId === undefined
-              ? "No device is open in this thread. Call device_open first."
-              : `Device ${input.deviceId} is not open in this thread. Call device_open first.`,
+              ? "No device is open in this thread. Call pinacode_device_open first."
+              : `Device ${input.deviceId} is not open in this thread. Call pinacode_device_open first.`,
         });
       }
       const shot = yield* devices.screenshot(target);
@@ -355,7 +355,7 @@ const handlers = {
       };
     }).pipe(Effect.mapError(toolError)),
   ),
-  device_close: McpToolAccess.actsAsCaller((input) =>
+  pinacode_device_close: McpToolAccess.actsAsCaller((input) =>
     Effect.gen(function* () {
       const scope = yield* requireDeviceAccess;
       const devices = yield* DeviceService.DeviceService;
@@ -394,10 +394,10 @@ export function pngDimensions(png: Uint8Array): { width: number; height: number 
     : { width: 0, height: 0 };
 }
 
-const { device_screenshot, ...standardHandlers } = handlers;
+const { pinacode_device_screenshot, ...standardHandlers } = handlers;
 
 export const layerStandard = McpToolAccess.toLayer(DeviceStandardToolkit, standardHandlers);
 
 export const layerScreenshot = McpToolAccess.toLayer(DeviceScreenshotToolkit, {
-  device_screenshot,
+  pinacode_device_screenshot,
 });

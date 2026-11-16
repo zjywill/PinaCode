@@ -66,7 +66,7 @@ parameters only pick targets; see
 [threadAccess](../../apps/server/src/mcp/threadAccess.ts).
 
 These clients have no calling thread, so `/mcp` does not offer them tools that
-act as one, such as `request_secret` or `delegate_task`. Hiding is only
+act as one, such as `pinacode_request_secret` or `pinacode_delegate_task`. Hiding is only
 discovery: the handlers still refuse such a call with
 `thread_credential_required`. A secret card belongs to a thread's run, so an
 outside agent that needs a secret starts a thread and lets that agent ask.

@@ -115,7 +115,7 @@ receiving environment knows a session is a peer link because the linking side
 registers its OAuth client with the `t3code-peer-link` software id, and the
 marker is signed into the session. Threads that session launches carry it, with
 the access it was paired with, as an immutable `linkOrigin`, and so do the
-subagents, forks and `create_threads` they derive. The rules live in
+subagents, forks and `pinacode_create_threads` they derive. The rules live in
 [`mcp/linkOrigin.ts`](../../apps/server/src/mcp/linkOrigin.ts) and run in the
 shared access declarations, not tool by tool:
 

@@ -77,7 +77,7 @@ const layerTest = Layer.mergeAll(
   Layer.provideMerge(layerOffers),
 );
 
-/** A parent thread whose run is live, as when its agent calls delegate_task. */
+/** A parent thread whose run is live, as when its agent calls pinacode_delegate_task. */
 const seedLiveParent = (name: string) =>
   Effect.gen(function* () {
     const orchestrator = yield* Orchestrator.OrchestratorV2;
@@ -403,7 +403,7 @@ it.layer(layerTest)("a delegated task in a linked environment", (it) => {
       const task = projection.subagents.find((candidate) => candidate.id === taskId);
       assert.equal(task?.status, "completed");
       assert.equal(task?.result, "All 412 tests pass on the box.");
-      // The live parent run claimed it, so task_status acknowledges it as for a local child.
+      // The live parent run claimed it, so pinacode_task_status acknowledges it as for a local child.
       assert.equal(task?.completionDelivery?.state, "claimed");
       // Nothing is left for the follower to pick up after a restart.
       assert.deepEqual(yield* openFor, []);

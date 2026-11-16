@@ -741,7 +741,7 @@ export const make = Effect.gen(function* () {
     Effect.catchCause(logSkipped("pull request refresh after link update skipped", {})),
   );
 
-  // An agent that opens a pull request from a shell gets it linked as link_pull_request would.
+  // An agent that opens a pull request from a shell gets it linked as pinacode_link_pull_request would.
   const linkCreatedChangeRequests = Effect.fn("PullRequestSyncReactor.linkCreatedChangeRequests")(
     function* (threadId: ThreadId, item: CommandExecution) {
       if (isOrchestrationV2WorkActive(item.status)) return;

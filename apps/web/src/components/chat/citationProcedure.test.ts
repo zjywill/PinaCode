@@ -181,7 +181,7 @@ describe("resolveCitationPhase", () => {
     });
   });
 
-  it("finds text an agent sent with send_to_user by its item id", () => {
+  it("finds text an agent sent with pinacode_send_to_user by its item id", () => {
     const sent: TimelineEntry = {
       kind: "sent-message",
       id: messageId,

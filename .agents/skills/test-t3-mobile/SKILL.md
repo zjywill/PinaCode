@@ -7,10 +7,10 @@ description: Test T3 Code's native iOS and Android app through its Device panel 
 
 ## Open the device
 
-Call `device_list`, then `device_open` with the selected host and device IDs.
+Call `pinacode_device_list`, then `pinacode_device_open` with the selected host and device IDs.
 T3 boots the device and shows its live stream in the Device panel. Follow its
 returned `quickStart`, using the exact `agentDevice.command` and all `targetArgs`
-on every operation. Use `device_screenshot` to inspect the screen.
+on every operation. Use `pinacode_device_screenshot` to inspect the screen.
 
 If T3 device tools or the selected device are unavailable, report the blocker
 and stop verification. Do not install or switch to another automation system.
@@ -45,7 +45,7 @@ includes that step unless the user prohibits it.
 For a device you opened in an agent-device session elsewhere (a device pool,
 cloud, or remote host), run `vp run mobile:install <ios|android> --session <s>
 --config <file>` from the directory you opened the session in, passing the
-`--config` file from `device_open`'s `targetArgs`. Without it, a device pool's
+`--config` file from `pinacode_device_open`'s `targetArgs`. Without it, a device pool's
 gateway refuses the install, wrongly saying agent-device is too old. It installs
 the cached build into that session (`--abi arm64-v8a` for an ARM Android device;
 pool Android emulators are x86_64, the default; `--metro <url>` also opens it
@@ -80,5 +80,5 @@ on Android. For a remote backend, use its reachable origin.
 
 Confirm the intended projects appear, exercise the affected flow, and capture
 evidence. Retain the app and environment while iterating. At teardown, remove
-the disposable connection, close the AgentDevice session, call `device_close`,
+the disposable connection, close the AgentDevice session, call `pinacode_device_close`,
 and stop only your backend and Metro processes.

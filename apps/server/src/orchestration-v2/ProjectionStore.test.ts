@@ -1539,7 +1539,7 @@ it.effect("SQL shells flag only an active turn blocked solely on T3 thread waits
       id: TurnItemId.make("item:thread-wait:active"),
       runId: run.id,
       type: "dynamic_tool" as const,
-      toolName: "mcp__t3_code__t3_thread_wait",
+      toolName: "mcp__pinacode__pinacode_thread_wait",
       input: { threadId: "child-thread" },
       status: "running" as const,
     };
@@ -1553,7 +1553,7 @@ it.effect("SQL shells flag only an active turn blocked solely on T3 thread waits
     const foreign = {
       ...wait,
       id: TurnItemId.make("item:thread-wait:foreign"),
-      toolName: "weather.t3_thread_wait",
+      toolName: "weather.pinacode_thread_wait",
     };
     yield* updateItem(foreign);
     yield* assertBlocked(false);
@@ -1635,7 +1635,7 @@ it.effect("SQL shells flag only an active turn blocked solely on T3 thread waits
     const delegation = {
       ...wait,
       id: TurnItemId.make("item:thread-wait:delegation"),
-      toolName: "t3-code-thread_opencode2-adapter_delegate_task",
+      toolName: "pinacode-thread_opencode2-adapter_pinacode_delegate_task",
       input: { task: "Review", mode: "async" },
     };
     yield* updateItem(delegation);
@@ -4587,13 +4587,13 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
           payload: item,
         });
       for (const inline of [
-        { toolName: "t3-code.delegate_task" },
-        { toolName: "mcp__t3_code__delegate_task" },
+        { toolName: "pinacode.pinacode_delegate_task" },
+        { toolName: "mcp__pinacode__pinacode_delegate_task" },
         { toolName: "mcp__docs__search", output: { next: "Delegate-Task" } },
         { toolName: "view_image", viewedImagePath: "/repo/screenshot.png" },
         { toolName: "mcp__docs__chart", output: { [MCP_APP_OUTPUT_KEY]: { uri: "ui://chart" } } },
-        { toolName: "mcp__t3-code__send_to_user" },
-        // OpenCode Code Mode reports a nested send_to_user call as one `execute` item.
+        { toolName: "mcp__pinacode__pinacode_send_to_user" },
+        // OpenCode Code Mode reports a nested pinacode_send_to_user call as one `execute` item.
         { toolName: "execute", output: JSON.stringify({ sentMessage: "Draft" }) },
       ]) {
         yield* writeSecondItem({
@@ -4641,7 +4641,7 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
       }
       // Until its run is scanned, a cursor on inline output is hidden inside a work group.
       yield* sql`UPDATE orchestration_v2_projection_turn_items SET type = 'dynamic_tool',
-        payload_json = json_set(payload_json, '$.type', 'dynamic_tool', '$.toolName', 't3-code.delegate_task'),
+        payload_json = json_set(payload_json, '$.type', 'dynamic_tool', '$.toolName', 'pinacode.pinacode_delegate_task'),
         inline_work_output = 1 WHERE thread_id = ${threadId} AND ordinal = 4`;
       const sharedRunId = "run:bounded-sql-history:1";
       // A work page of rows that have no run leaves their inline output out too.
@@ -4703,7 +4703,7 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
             '$.runId', CASE WHEN ordinal <= 700 THEN 'run:bounded-sql-history:300' ELSE ${sharedRunId} END)
         WHERE thread_id = ${threadId} AND ordinal >= 100`;
       yield* sql`UPDATE orchestration_v2_projection_turn_items SET type = 'dynamic_tool',
-        payload_json = json_set(payload_json, '$.type', 'dynamic_tool', '$.toolName', 't3-code.delegate_task'),
+        payload_json = json_set(payload_json, '$.type', 'dynamic_tool', '$.toolName', 'pinacode.pinacode_delegate_task'),
         inline_work_output = 1 WHERE thread_id = ${threadId} AND ordinal = 720`;
       const beforeMissingCursor = yield* historyPage(
         threadId,

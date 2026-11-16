@@ -129,7 +129,7 @@ tags, so their models stay out. Handoff settings come from closed enums and
 booleans in tool arguments; prompts, titles, and ids are never read. Thread ids
 are used only to look up the threads on each side and never leave the server,
 which is also why tool events carry no per-thread sequence. A handoff to several
-threads, such as `create_threads`, records one `mcp.tool.invoked` per target, each
+threads, such as `pinacode_create_threads`, records one `mcp.tool.invoked` per target, each
 repeating the call's outcome and duration, so event counts are not call counts.
 
 ## Delivery

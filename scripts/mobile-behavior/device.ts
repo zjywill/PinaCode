@@ -97,7 +97,7 @@ export interface AxNode {
 }
 
 export interface DeviceOptions {
-  /** `agent-device` executable and the target args `device_open` returned. */
+  /** `agent-device` executable and the target args `pinacode_device_open` returned. */
   readonly agentDevice: string;
   readonly targetArgs: ReadonlyArray<string>;
   readonly metro: string;

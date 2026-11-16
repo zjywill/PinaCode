@@ -483,7 +483,7 @@ it.effect("a file request moves its value to an owner-only file, once", () =>
             assert.equal((yield* fs.stat(file)).mode & 0o777, 0o600);
             assert.equal((yield* fs.stat(path.dirname(file))).mode & 0o777, 0o700);
           }
-          // A retried request_secret gets the same file; the value is never a ref again.
+          // A retried pinacode_request_secret gets the same file; the value is never a ref again.
           assert.equal(yield* service.saveToFile({ threadId, turnItemId }), file);
           const ref = SecretRef.make(`secret-ref:${path.basename(file)}`);
           const reused = yield* service.consume({ ref, projectId }).pipe(Effect.flip);

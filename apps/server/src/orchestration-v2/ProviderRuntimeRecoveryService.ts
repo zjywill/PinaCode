@@ -109,7 +109,7 @@ function isNonterminalTurnItemStatus(status: string): boolean {
 }
 
 /**
- * A delegate_task child. Its own thread is reconciled and continued on its own
+ * A pinacode_delegate_task child. Its own thread is reconciled and continued on its own
  * (here, or in the linked environment it runs in) and reports back through
  * the app, so it is not provider background work.
  */

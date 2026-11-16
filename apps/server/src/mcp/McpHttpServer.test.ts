@@ -186,14 +186,18 @@ const callTool = (name: string, args: Record<string, unknown>) =>
       );
   });
 
-const callSnapshot = (args: Record<string, unknown>) => callTool("preview_snapshot", args);
+const callSnapshot = (args: Record<string, unknown>) => callTool("pinacode_preview_snapshot", args);
 
 it.effect.each([
-  { input: {}, open: false, message: "No device is open in this thread. Call device_open first." },
+  {
+    input: {},
+    open: false,
+    message: "No device is open in this thread. Call pinacode_device_open first.",
+  },
   {
     input: { deviceId: "missing" },
     open: false,
-    message: "Device missing is not open in this thread. Call device_open first.",
+    message: "Device missing is not open in this thread. Call pinacode_device_open first.",
   },
   {
     input: {},
@@ -206,7 +210,7 @@ it.effect.each([
     open: true,
     rejected: true,
     message:
-      "Device screenshot failed: The device hub could not complete the request. Call device_list to check the device state, and device_open if it needs to be reopened.",
+      "Device screenshot failed: The device hub could not complete the request. Call pinacode_device_list to check the device state, and pinacode_device_open if it needs to be reopened.",
   },
 ])(
   "preserves actionable screenshot failure text: $message",
@@ -214,14 +218,16 @@ it.effect.each([
     Effect.gen(function* () {
       const server = yield* McpServer.McpServer;
       const traced = recordSpans();
-      const result = yield* server.callTool({ name: "device_screenshot", arguments: input }).pipe(
-        Effect.provideService(McpInvocationContext.McpInvocationContext, {
-          ...invocation,
-          capabilities: new Set(["device"] as const),
-        }),
-        Effect.provideService(McpSchema.McpServerClient, client),
-        Effect.withTracer(traced.tracer),
-      );
+      const result = yield* server
+        .callTool({ name: "pinacode_device_screenshot", arguments: input })
+        .pipe(
+          Effect.provideService(McpInvocationContext.McpInvocationContext, {
+            ...invocation,
+            capabilities: new Set(["device"] as const),
+          }),
+          Effect.provideService(McpSchema.McpServerClient, client),
+          Effect.withTracer(traced.tracer),
+        );
       expect(result.isError).toBe(true);
       expect(result.content).toEqual([{ type: "text", text: message }]);
       expect(result.structuredContent).toMatchObject({
@@ -234,7 +240,11 @@ it.effect.each([
           .filter((span) => span.name.startsWith("mcp.tool."))
           .map((span) => Object.fromEntries(span.attributes)),
       ).toEqual([
-        { "rpc.system": "mcp", "rpc.method": "tools/call", "mcp.tool.name": "device_screenshot" },
+        {
+          "rpc.system": "mcp",
+          "rpc.method": "tools/call",
+          "mcp.tool.name": "pinacode_device_screenshot",
+        },
       ]);
     }).pipe(
       Effect.provide(
@@ -295,15 +305,15 @@ it.effect("rejects a metadata-only response when the screenshot is saved", () =>
 
 const layerRecordingTools = (calls: Array<unknown>) => {
   const RecordingToolkit = Toolkit.make(
-    OrchestratorToolkit.tools.delegate_task,
-    OrchestratorToolkit.tools.t3_thread_list,
-    OrchestratorToolkit.tools.t3_thread_read,
-    OrchestratorToolkit.tools.t3_thread_wait,
-    ProjectToolkit.tools.t3_project_list,
-    ProjectToolkit.tools.t3_project_update,
-    ThreadToolkit.tools.t3_queue,
-    PreviewControlsToolkit.tools.t3_preview_list,
-    ProjectToolkit.tools.t3_thread_launch,
+    OrchestratorToolkit.tools.pinacode_delegate_task,
+    OrchestratorToolkit.tools.pinacode_thread_list,
+    OrchestratorToolkit.tools.pinacode_thread_read,
+    OrchestratorToolkit.tools.pinacode_thread_wait,
+    ProjectToolkit.tools.pinacode_project_list,
+    ProjectToolkit.tools.pinacode_project_update,
+    ThreadToolkit.tools.pinacode_queue,
+    PreviewControlsToolkit.tools.pinacode_preview_list,
+    ProjectToolkit.tools.pinacode_thread_launch,
   );
   const record = McpToolAccess.reads((params: unknown) =>
     Effect.sync(() => calls.push(params)).pipe(
@@ -315,15 +325,15 @@ const layerRecordingTools = (calls: Array<unknown>) => {
   return McpHttpServer.toolkitRegistration(
     RecordingToolkit,
     McpToolAccess.toLayer(RecordingToolkit, {
-      delegate_task: record,
-      t3_thread_list: record,
-      t3_thread_read: record,
-      t3_thread_wait: record,
-      t3_project_list: record,
-      t3_project_update: record,
-      t3_queue: record,
-      t3_preview_list: record,
-      t3_thread_launch: record,
+      pinacode_delegate_task: record,
+      pinacode_thread_list: record,
+      pinacode_thread_read: record,
+      pinacode_thread_wait: record,
+      pinacode_project_list: record,
+      pinacode_project_update: record,
+      pinacode_queue: record,
+      pinacode_preview_list: record,
+      pinacode_thread_launch: record,
     }),
   ).pipe(
     Layer.provideMerge(McpHttpServer.layerInProcessMcpServer),
@@ -379,7 +389,7 @@ it.effect.each([{}, { includeImage: false }])(
         yield* Effect.yieldNow;
 
         const snapshot = yield* server
-          .callTool({ name: "preview_snapshot", arguments: input })
+          .callTool({ name: "pinacode_preview_snapshot", arguments: input })
           .pipe(
             Effect.provideService(McpInvocationContext.McpInvocationContext, invocation),
             Effect.provideService(McpSchema.McpServerClient, client),
@@ -467,7 +477,7 @@ it.effect.each([
       for (const call of [1, 2, 3, 4, 5, 6]) {
         const snapshot = yield* server
           .callTool({
-            name: "preview_snapshot",
+            name: "pinacode_preview_snapshot",
             arguments: { ...input, tabId: alternateTabId },
           })
           .pipe(
@@ -479,7 +489,9 @@ it.effect.each([
         expect(snapshot.isError).toBe(false);
         expect(snapshot.structuredContent).toEqual({
           ...boundedMetadata,
-          omitted: ["accessibilityTree (use interactiveElements locators or preview_evaluate)"],
+          omitted: [
+            "accessibilityTree (use interactiveElements locators or pinacode_preview_evaluate)",
+          ],
         });
         const [identity, text, ...rest] = snapshot.content;
         expect(identity?.type === "text" ? decodeJsonText(identity.text) : null).toEqual({
@@ -489,7 +501,7 @@ it.effect.each([
         expect(rest).toEqual([
           {
             type: "text",
-            text: "Snapshot text was bounded. Omitted: accessibilityTree (use interactiveElements locators or preview_evaluate).",
+            text: "Snapshot text was bounded. Omitted: accessibilityTree (use interactiveElements locators or pinacode_preview_evaluate).",
           },
           ...(images
             ? [
@@ -505,7 +517,7 @@ it.effect.each([
 
       const nextDefault = yield* server
         .callTool({
-          name: "preview_snapshot",
+          name: "pinacode_preview_snapshot",
           arguments: { tabId: alternateTabId },
         })
         .pipe(
@@ -550,7 +562,7 @@ it.effect("saves the uncapped screenshot while the agent sees the capped one", (
 
       const snapshot = yield* server
         .callTool({
-          name: "preview_snapshot",
+          name: "pinacode_preview_snapshot",
           arguments: { tabId: alternateTabId, save: true, includeImage: true },
         })
         .pipe(
@@ -602,13 +614,16 @@ it.effect("refuses preview tools to a client outside a thread before they run", 
       client: { sessionId: "session-1", label: "Claude Code", access: "read-only" as const },
     };
     const click = yield* server
-      .callTool({ name: "preview_act", arguments: { action: "click", locator: "text=Send" } })
+      .callTool({
+        name: "pinacode_preview_act",
+        arguments: { action: "click", locator: "text=Send" },
+      })
       .pipe(
         Effect.flip,
         Effect.provideService(McpInvocationContext.McpInvocationContext, readOnly),
         Effect.provideService(McpSchema.McpServerClient, client),
       );
-    expect(click.message).toContain("Tool 'preview_act' not found");
+    expect(click.message).toContain("Tool 'pinacode_preview_act' not found");
   }).pipe(Effect.provide(layerTest)),
 );
 
@@ -619,21 +634,22 @@ it.effect("advertises the compact input schema for every registered tool", () =>
 
     expect(server.tools.length).toBe(Object.keys(tools).length);
     for (const { tool } of server.tools) {
+      expect(tool.name).toMatch(/^pinacode_/);
       expect(tool.inputSchema, tool.name).toEqual(advertisedJsonSchema(tools[tool.name]!));
     }
   }).pipe(Effect.provide(layerTest)),
 );
 
-it.effect("checks each preview_act action against that action's own input", () =>
+it.effect("checks each pinacode_preview_act action against that action's own input", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const inputs = yield* serveSnapshots("mcp-act-client", {});
 
-      const missingKey = yield* callTool("preview_act", { action: "press" });
+      const missingKey = yield* callTool("pinacode_preview_act", { action: "press" });
       expect(missingKey.isError).toBe(true);
       expect(inputs).toEqual([]);
 
-      const click = yield* callTool("preview_act", {
+      const click = yield* callTool("pinacode_preview_act", {
         action: "click",
         locator: "text=Send",
         key: "Enter",
@@ -641,7 +657,7 @@ it.effect("checks each preview_act action against that action's own input", () =
       expect(click.isError).toBe(false);
       expect(inputs[0]).toEqual({ locator: "text=Send" });
 
-      yield* callTool("preview_act", { action: "type", selector: "#name", text: "Ada" });
+      yield* callTool("pinacode_preview_act", { action: "type", selector: "#name", text: "Ada" });
       expect(inputs.at(-2)).toEqual({ selector: "#name", text: "Ada" });
     }),
   ).pipe(Effect.provide(layerTest)),
@@ -667,11 +683,15 @@ it.effect("decodes null optional arguments the way it decodes omitted ones", () 
   const calls: Array<unknown> = [];
   return Effect.gen(function* () {
     const thread = { threadId: "thread-null-arguments" };
-    yield* callTool("t3_thread_read", thread);
-    yield* callTool("t3_thread_read", { ...thread, afterPosition: null, view: null });
-    yield* callTool("delegate_task", { task: "Inspect", target: {} });
-    yield* callTool("delegate_task", { task: "Inspect", title: null, target: { model: null } });
-    yield* callTool("t3_project_update", { projectId: "project-1", projectIcon: null });
+    yield* callTool("pinacode_thread_read", thread);
+    yield* callTool("pinacode_thread_read", { ...thread, afterPosition: null, view: null });
+    yield* callTool("pinacode_delegate_task", { task: "Inspect", target: {} });
+    yield* callTool("pinacode_delegate_task", {
+      task: "Inspect",
+      title: null,
+      target: { model: null },
+    });
+    yield* callTool("pinacode_project_update", { projectId: "project-1", projectIcon: null });
 
     expect(calls).toHaveLength(5);
     expect(calls[1]).toEqual(calls[0]);
@@ -684,10 +704,10 @@ it.effect("rejects arguments a tool does not declare instead of dropping them", 
   const calls: Array<unknown> = [];
   return Effect.gen(function* () {
     const launch = yield* Effect.flip(
-      callTool("t3_thread_launch", { title: "Repro", scratch: true, prompt: "say hi" }),
+      callTool("pinacode_thread_launch", { title: "Repro", scratch: true, prompt: "say hi" }),
     );
     const wait = yield* Effect.flip(
-      callTool("t3_thread_wait", { threadId: "thread-excess-arguments", timeout: 5_000 }),
+      callTool("pinacode_thread_wait", { threadId: "thread-excess-arguments", timeout: 5_000 }),
     );
 
     expect(calls).toEqual([]);
@@ -700,7 +720,7 @@ it.effect("accepts a nested key the merged advertised schema shows", () => {
   const calls: Array<unknown> = [];
   return Effect.gen(function* () {
     yield* Effect.exit(
-      callTool("t3_thread_launch", {
+      callTool("pinacode_thread_launch", {
         title: "Root",
         projectId: "project-1",
         message: "say hi",
@@ -713,25 +733,30 @@ it.effect("accepts a nested key the merged advertised schema shows", () => {
 });
 
 it.effect(
-  "clamps t3_thread_read page sizes above their maximum instead of rejecting the call",
+  "clamps pinacode_thread_read page sizes above their maximum instead of rejecting the call",
   () => {
     const calls: Array<unknown> = [];
     return Effect.gen(function* () {
       const thread = { threadId: "thread-clamped-arguments" };
       // Codex never shows the model these bounds, so an over-large page must still read.
-      yield* callTool("t3_thread_read", {
+      yield* callTool("pinacode_thread_read", {
         ...thread,
         limit: 150,
         runLimit: 80,
         maxCharsPerItem: 60_000,
       });
-      yield* callTool("t3_thread_read", {
+      yield* callTool("pinacode_thread_read", {
         ...thread,
         limit: 100,
         runLimit: 50,
         maxCharsPerItem: 20_000,
       });
-      yield* callTool("t3_thread_read", { ...thread, limit: 7, runLimit: 1, maxCharsPerItem: 1 });
+      yield* callTool("pinacode_thread_read", {
+        ...thread,
+        limit: 7,
+        runLimit: 1,
+        maxCharsPerItem: 1,
+      });
 
       expect(calls).toEqual([
         { ...thread, limit: 100, runLimit: 50, maxCharsPerItem: 20_000 },
@@ -743,12 +768,12 @@ it.effect(
 );
 
 it.effect.each(["limit", "runLimit", "maxCharsPerItem"])(
-  "still rejects a t3_thread_read %s below its minimum",
+  "still rejects a pinacode_thread_read %s below its minimum",
   (field) => {
     const calls: Array<unknown> = [];
     return Effect.gen(function* () {
       // Zero is a different request than one item, so it fails rather than answering another question.
-      const rejected = yield* callTool("t3_thread_read", {
+      const rejected = yield* callTool("pinacode_thread_read", {
         threadId: "thread-below-minimum",
         [field]: 0,
       }).pipe(Effect.flip);
@@ -760,10 +785,10 @@ it.effect.each(["limit", "runLimit", "maxCharsPerItem"])(
 );
 
 const clampedListLimits = [
-  { tool: "t3_thread_list", input: { allProjects: true }, maximum: 100 },
-  { tool: "t3_project_list", input: {}, maximum: 100 },
-  { tool: "t3_queue", input: { action: "list" }, maximum: 100 },
-  { tool: "t3_preview_list", input: {}, maximum: 50 },
+  { tool: "pinacode_thread_list", input: { allProjects: true }, maximum: 100 },
+  { tool: "pinacode_project_list", input: {}, maximum: 100 },
+  { tool: "pinacode_queue", input: { action: "list" }, maximum: 100 },
+  { tool: "pinacode_preview_list", input: {}, maximum: 50 },
 ];
 
 it.effect.each(clampedListLimits)(
@@ -782,11 +807,11 @@ it.effect.each(clampedListLimits)(
   },
 );
 
-it("keeps cross-tool routing out of the delegate_task description", () => {
-  const description = OrchestratorToolkit.tools.delegate_task.description ?? "";
-  expect(description).toContain("Start one child agent with only `task`");
+it("keeps cross-tool routing out of the pinacode_delegate_task description", () => {
+  const description = OrchestratorToolkit.tools.pinacode_delegate_task.description ?? "";
+  expect(description).toContain("Start a PinaCode agent with only `task`");
   // Review rounds, follow-ups, and polling are routed in the system text.
-  expect(description).not.toContain("t3_thread_send");
+  expect(description).not.toContain("pinacode_thread_send");
   expect(description).not.toContain("Do not poll");
   expect(description).not.toContain("Prefer native");
 });
@@ -799,19 +824,19 @@ it.effect(
       const names = server.tools.map(({ tool }) => tool.name);
       expect(names).toEqual(
         expect.arrayContaining([
-          "link_pull_request",
-          "unlink_pull_request",
-          "list_thread_pull_requests",
+          "pinacode_link_pull_request",
+          "pinacode_unlink_pull_request",
+          "pinacode_list_thread_pull_requests",
         ]),
       );
-      const linkTool = server.tools.find(({ tool }) => tool.name === "link_pull_request");
+      const linkTool = server.tools.find(({ tool }) => tool.name === "pinacode_link_pull_request");
       expect(linkTool?.tool.annotations?.idempotentHint).toBe(true);
       expect(linkTool?.tool.annotations?.openWorldHint).toBe(false);
       expect(linkTool?.tool.description).toContain("Link a PR to this thread");
       expect(linkTool?.tool.description).toContain("settles the thread on merge");
 
       const denied = yield* server
-        .callTool({ name: "list_thread_pull_requests", arguments: {} })
+        .callTool({ name: "pinacode_list_thread_pull_requests", arguments: {} })
         .pipe(
           Effect.provideService(McpInvocationContext.McpInvocationContext, invocation),
           Effect.provideService(McpSchema.McpServerClient, client),
@@ -1542,7 +1567,7 @@ it.effect("gives outside clients an upload URL on the origin their request reach
                 id: 2,
                 method: "tools/call",
                 params: {
-                  name: "t3_attachment_prepare_upload",
+                  name: "pinacode_attachment_prepare_upload",
                   arguments: {
                     upload: {
                       type: "image",
@@ -1777,11 +1802,15 @@ it.effect("lists pull request watch tools only to threads that are not delegated
       const parentTools = yield* listedTools("parentToken");
       const childTools = yield* listedTools("childToken");
       expect(parentTools).toEqual(
-        expect.arrayContaining(["link_pull_request", "watch_pull_request", "unwatch_pull_request"]),
+        expect.arrayContaining([
+          "pinacode_link_pull_request",
+          "pinacode_watch_pull_request",
+          "pinacode_unwatch_pull_request",
+        ]),
       );
-      expect(childTools).toContain("link_pull_request");
-      expect(childTools).not.toContain("watch_pull_request");
-      expect(childTools).not.toContain("unwatch_pull_request");
+      expect(childTools).toContain("pinacode_link_pull_request");
+      expect(childTools).not.toContain("pinacode_watch_pull_request");
+      expect(childTools).not.toContain("pinacode_unwatch_pull_request");
     }),
   ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );
@@ -1931,128 +1960,146 @@ it.effect(
     ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );
 
-it.effect("lists optional tools to a deferring client only after tool_search loads them", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const scopeFor = (token: string): McpInvocationContext.McpThreadInvocationScope => ({
-        environmentId,
-        requestNamespace: token,
-        thread: {
-          threadId: ThreadId.make(`thread-${token}`),
-          providerSessionId: token,
-          providerInstanceId: ProviderInstanceId.make("copilot"),
-        },
-        client: undefined,
-        capabilities: new Set(["orchestration"]),
-        issuedAt: 1,
-      });
-      const scopes = new Map([
-        ["deferringToken", scopeFor("deferringToken")],
-        ["otherToken", scopeFor("otherToken")],
-      ]);
-      const tool = (name: string, description: string) =>
-        Tool.make(name, {
-          description,
-          success: Schema.Struct({}),
-          failure: OrchestratorMcpFailure,
-          failureMode: "return",
+it.effect(
+  "lists optional tools to a deferring client only after pinacode_tool_search loads them",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const scopeFor = (token: string): McpInvocationContext.McpThreadInvocationScope => ({
+          environmentId,
+          requestNamespace: token,
+          thread: {
+            threadId: ThreadId.make(`thread-${token}`),
+            providerSessionId: token,
+            providerInstanceId: ProviderInstanceId.make("copilot"),
+          },
+          client: undefined,
+          capabilities: new Set(["orchestration"]),
+          issuedAt: 1,
         });
-      const OptionalToolkit = Toolkit.make(
-        tool("delegate_task", "Delegates a task."),
-        tool("preview_open", "Opens a browser preview."),
-        tool("schedule_task", "Schedules a task."),
-      );
-      const reads = McpToolAccess.reads(() => Effect.succeed({}));
-      const serverLayer = McpHttpServer.layerMcpTransport(
-        Layer.mergeAll(
-          McpHttpServer.toolkitRegistration(
-            OptionalToolkit,
-            McpToolAccess.toLayer(OptionalToolkit, {
-              delegate_task: reads,
-              preview_open: reads,
-              schedule_task: reads,
+        const scopes = new Map([
+          ["deferringToken", scopeFor("deferringToken")],
+          ["otherToken", scopeFor("otherToken")],
+        ]);
+        const tool = (name: string, description: string) =>
+          Tool.make(name, {
+            description,
+            success: Schema.Struct({}),
+            failure: OrchestratorMcpFailure,
+            failureMode: "return",
+          });
+        const OptionalToolkit = Toolkit.make(
+          tool("pinacode_delegate_task", "Delegates a task."),
+          tool("pinacode_preview_open", "Opens a browser preview."),
+          tool("pinacode_schedule_task", "Schedules a task."),
+        );
+        const reads = McpToolAccess.reads(() => Effect.succeed({}));
+        const serverLayer = McpHttpServer.layerMcpTransport(
+          Layer.mergeAll(
+            McpHttpServer.toolkitRegistration(
+              OptionalToolkit,
+              McpToolAccess.toLayer(OptionalToolkit, {
+                pinacode_delegate_task: reads,
+                pinacode_preview_open: reads,
+                pinacode_schedule_task: reads,
+              }),
+            ),
+            McpHttpServer.layerToolSearch,
+          ),
+        ).pipe(
+          Layer.provide(ServerSettings.layerTest()),
+          Layer.provide(McpToolAccessTestkit.liveThreadsLayer),
+          Layer.provide(
+            Layer.mock(McpSessionRegistry.McpSessionRegistry)({
+              resolve: (token) => Effect.succeed(scopes.get(token)),
             }),
           ),
-          McpHttpServer.layerToolSearch,
-        ),
-      ).pipe(
-        Layer.provide(ServerSettings.layerTest()),
-        Layer.provide(McpToolAccessTestkit.liveThreadsLayer),
-        Layer.provide(
-          Layer.mock(McpSessionRegistry.McpSessionRegistry)({
-            resolve: (token) => Effect.succeed(scopes.get(token)),
-          }),
-        ),
-      );
-      yield* HttpRouter.serve(serverLayer, { disableListenLog: true, disableLogger: true }).pipe(
-        Layer.build,
-      );
-      const httpClient = yield* HttpClient.HttpClient;
-      const session = (token: string, deferred: boolean) =>
-        Effect.gen(function* () {
-          const headers = {
-            accept: "application/json, text/event-stream",
-            authorization: `Bearer ${token}`,
-            ...(deferred ? { "t3-tool-exposure": "deferred" } : {}),
-          };
-          const initialize = yield* httpClient.post("/mcp", {
-            headers,
-            body: HttpBody.text(
-              `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1.0.0"}}}`,
-              "application/json",
-            ),
+        );
+        yield* HttpRouter.serve(serverLayer, { disableListenLog: true, disableLogger: true }).pipe(
+          Layer.build,
+        );
+        const httpClient = yield* HttpClient.HttpClient;
+        const session = (token: string, deferred: boolean) =>
+          Effect.gen(function* () {
+            const headers = {
+              accept: "application/json, text/event-stream",
+              authorization: `Bearer ${token}`,
+              ...(deferred ? { "t3-tool-exposure": "deferred" } : {}),
+            };
+            const initialize = yield* httpClient.post("/mcp", {
+              headers,
+              body: HttpBody.text(
+                `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1.0.0"}}}`,
+                "application/json",
+              ),
+            });
+            const rpc = (method: string, params: object) =>
+              httpClient
+                .post("/mcp", {
+                  headers: {
+                    ...headers,
+                    "mcp-session-id": initialize.headers["mcp-session-id"]!,
+                    "mcp-protocol-version": "2025-06-18",
+                  },
+                  body: HttpBody.text(
+                    JSON.stringify({ jsonrpc: "2.0", id: 2, method, params }),
+                    "application/json",
+                  ),
+                })
+                .pipe(
+                  Effect.flatMap((response) => response.text),
+                  // pinacode_tool_search answers over SSE, after its list_changed notification.
+                  Effect.map((text): unknown =>
+                    text
+                      .split("\n")
+                      .filter((line) => line.startsWith("data: ") || line.startsWith("{"))
+                      .map((line) => JSON.parse(line.replace(/^data: /u, "")) as { id?: number })
+                      .find((message) => message.id === 2),
+                  ),
+                );
+            return {
+              listed: rpc("tools/list", {}).pipe(
+                Effect.map((body) =>
+                  (body as { result: { tools: ReadonlyArray<{ name: string }> } }).result.tools
+                    .map((listed) => listed.name)
+                    .sort(),
+                ),
+              ),
+              call: (name: string, args: object) =>
+                rpc("tools/call", { name, arguments: args }).pipe(
+                  Effect.map(
+                    (body) => (body as { result: { structuredContent?: unknown } }).result,
+                  ),
+                ),
+            };
           });
-          const rpc = (method: string, params: object) =>
-            httpClient
-              .post("/mcp", {
-                headers: {
-                  ...headers,
-                  "mcp-session-id": initialize.headers["mcp-session-id"]!,
-                  "mcp-protocol-version": "2025-06-18",
-                },
-                body: HttpBody.text(
-                  JSON.stringify({ jsonrpc: "2.0", id: 2, method, params }),
-                  "application/json",
-                ),
-              })
-              .pipe(
-                Effect.flatMap((response) => response.text),
-                // tool_search answers over SSE, after its list_changed notification.
-                Effect.map((text): unknown =>
-                  text
-                    .split("\n")
-                    .filter((line) => line.startsWith("data: ") || line.startsWith("{"))
-                    .map((line) => JSON.parse(line.replace(/^data: /u, "")) as { id?: number })
-                    .find((message) => message.id === 2),
-                ),
-              );
-          return {
-            listed: rpc("tools/list", {}).pipe(
-              Effect.map((body) =>
-                (body as { result: { tools: ReadonlyArray<{ name: string }> } }).result.tools
-                  .map((listed) => listed.name)
-                  .sort(),
-              ),
-            ),
-            call: (name: string, args: object) =>
-              rpc("tools/call", { name, arguments: args }).pipe(
-                Effect.map((body) => (body as { result: { structuredContent?: unknown } }).result),
-              ),
-          };
+
+        const deferring = yield* session("deferringToken", true);
+        const other = yield* session("otherToken", false);
+        expect(yield* deferring.listed).toEqual(["pinacode_delegate_task", "pinacode_tool_search"]);
+        expect(yield* other.listed).toEqual([
+          "pinacode_delegate_task",
+          "pinacode_preview_open",
+          "pinacode_schedule_task",
+        ]);
+        // Unlisted tools stay callable.
+        expect((yield* deferring.call("pinacode_schedule_task", {})).structuredContent).toEqual({});
+
+        expect(
+          (yield* deferring.call("pinacode_tool_search", { query: "browser" })).structuredContent,
+        ).toEqual({
+          tools: [{ name: "pinacode_preview_open", description: "Opens a browser preview." }],
         });
-
-      const deferring = yield* session("deferringToken", true);
-      const other = yield* session("otherToken", false);
-      expect(yield* deferring.listed).toEqual(["delegate_task", "tool_search"]);
-      expect(yield* other.listed).toEqual(["delegate_task", "preview_open", "schedule_task"]);
-      // Unlisted tools stay callable.
-      expect((yield* deferring.call("schedule_task", {})).structuredContent).toEqual({});
-
-      expect(
-        (yield* deferring.call("tool_search", { query: "browser" })).structuredContent,
-      ).toEqual({ tools: [{ name: "preview_open", description: "Opens a browser preview." }] });
-      expect(yield* deferring.listed).toEqual(["delegate_task", "preview_open", "tool_search"]);
-      expect(yield* other.listed).toEqual(["delegate_task", "preview_open", "schedule_task"]);
-    }),
-  ).pipe(Effect.provide(NodeHttpServer.layerTest)),
+        expect(yield* deferring.listed).toEqual([
+          "pinacode_delegate_task",
+          "pinacode_preview_open",
+          "pinacode_tool_search",
+        ]);
+        expect(yield* other.listed).toEqual([
+          "pinacode_delegate_task",
+          "pinacode_preview_open",
+          "pinacode_schedule_task",
+        ]);
+      }),
+    ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );

@@ -278,7 +278,7 @@ const make = Effect.gen(function* () {
   ) => McpToolAccess.writesThreads((params: P) => [params.threadId], handle);
 
   return {
-    link_pull_request: writesThread((input) =>
+    pinacode_link_pull_request: writesThread((input) =>
       Effect.gen(function* () {
         const thread = yield* requireThread(PullRequestLinkFailedError, input.threadId);
         const next =
@@ -311,7 +311,7 @@ const make = Effect.gen(function* () {
         return { ...target, alreadyLinked, ...next };
       }),
     ),
-    link_pull_requests: writesThread((input) =>
+    pinacode_link_pull_requests: writesThread((input) =>
       Effect.gen(function* () {
         const thread = yield* requireThread(PullRequestLinkFailedError, input.threadId);
         const targets: Array<ResolvedTarget> = [];
@@ -360,7 +360,7 @@ const make = Effect.gen(function* () {
         };
       }),
     ),
-    unlink_pull_request: writesThread((input) =>
+    pinacode_unlink_pull_request: writesThread((input) =>
       Effect.gen(function* () {
         const thread = yield* requireThread(PullRequestUnlinkFailedError, input.threadId);
         const project = yield* projectOf(thread, PullRequestUnlinkFailedError);
@@ -398,7 +398,7 @@ const make = Effect.gen(function* () {
         };
       }),
     ),
-    unlink_pull_requests: writesThread((input) =>
+    pinacode_unlink_pull_requests: writesThread((input) =>
       Effect.gen(function* () {
         const thread = yield* requireThread(PullRequestUnlinkFailedError, input.threadId);
         const visible = visibleThreadPullRequests(threadPullRequestsOf(thread));
@@ -434,14 +434,14 @@ const make = Effect.gen(function* () {
         };
       }),
     ),
-    list_thread_pull_requests: McpToolAccess.reads((input) =>
+    pinacode_list_thread_pull_requests: McpToolAccess.reads((input) =>
       requireThread(PullRequestListFailedError, input.threadId).pipe(
         Effect.map((thread) => listThreadPullRequests(thread, input.cursor, input.states)),
       ),
     ),
-    watch_pull_request: writesThread((input) => setWatching(input, true)),
-    unwatch_pull_request: writesThread((input) => setWatching(input, false)),
-    write_pull_request_guides: McpToolAccess.writesWithCapability((input) =>
+    pinacode_watch_pull_request: writesThread((input) => setWatching(input, true)),
+    pinacode_unwatch_pull_request: writesThread((input) => setWatching(input, false)),
+    pinacode_write_pull_request_guides: McpToolAccess.writesWithCapability((input) =>
       Effect.gen(function* () {
         const located = yield* locateAll(input.pullRequests);
         const guides = yield* Effect.forEach(
@@ -493,7 +493,7 @@ const make = Effect.gen(function* () {
         return { guides };
       }),
     ),
-    read_pull_request_guide: McpToolAccess.reads((input) =>
+    pinacode_read_pull_request_guide: McpToolAccess.reads((input) =>
       Effect.gen(function* () {
         const [entry] = yield* locateAll([input]);
         if (entry !== undefined && entry.target === null) {

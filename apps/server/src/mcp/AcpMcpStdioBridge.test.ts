@@ -78,7 +78,7 @@ describe("AcpMcpStdioBridge", () => {
     });
     using output = vi.spyOn(process.stdout, "write").mockReturnValue(true);
 
-    await runAcpMcpCliFastPath("acp-mcp-call", ["task_status", '{"taskId":"task-1"}']);
+    await runAcpMcpCliFastPath("acp-mcp-call", ["pinacode_task_status", '{"taskId":"task-1"}']);
 
     expect(output).toHaveBeenCalledExactlyOnceWith(
       `${JSON.stringify({ ...result, content: [explanation, image] })}\n`,
@@ -378,10 +378,10 @@ describe("AcpMcpStdioBridge", () => {
       const fiber = yield* mcpToolSession({
         endpoint: "http://127.0.0.1:1/mcp",
         authorization: "Bearer bridge-test",
-        clientName: "t3-code-acp-cli",
+        clientName: "pinacode-acp-cli",
         fetchImplementation: pendingFetch(started),
       }).pipe(
-        Effect.flatMap((session) => session.call("orchestrator_capabilities", {})),
+        Effect.flatMap((session) => session.call("pinacode_orchestrator_capabilities", {})),
         Effect.scoped,
         Effect.forkChild,
       );
@@ -398,7 +398,7 @@ describe("AcpMcpStdioBridge", () => {
       const result = yield* mcpToolSession({
         endpoint: "http://127.0.0.1:1/mcp",
         authorization: "Bearer bridge-test",
-        clientName: "t3-code-acp-cli",
+        clientName: "pinacode-acp-cli",
         fetchImplementation: async (_url, init) => {
           if (init?.method === "DELETE") return new Response(null, { status: 204 });
           const message = JSON.parse(String(init?.body)) as (typeof sent)[number];
@@ -418,7 +418,7 @@ describe("AcpMcpStdioBridge", () => {
           );
         },
       }).pipe(
-        Effect.flatMap((session) => session.call("orchestrator_capabilities", {})),
+        Effect.flatMap((session) => session.call("pinacode_orchestrator_capabilities", {})),
         Effect.scoped,
       );
 

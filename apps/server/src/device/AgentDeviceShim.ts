@@ -8,7 +8,7 @@ import * as Path from "effect/Path";
 const SHIM_DIR = "device/bin";
 const TARGETS_DIR = "device/targets";
 const STALE_RUNTIME =
-  "This agent-device command is out of date because T3 Code moved or updated its runtime. Call device_open again for a fresh one.";
+  "This agent-device command is out of date because T3 Code moved or updated its runtime. Call pinacode_device_open again for a fresh one.";
 
 const quoteShell = (value: string) => "'" + value.replaceAll("'", "'\"'\"'") + "'";
 
@@ -188,7 +188,7 @@ if (!informational) for (let index = 0; index + 1 < bound.length; index += 2) if
 const command = end < 0 ? options : [...options, ...args.slice(end)];
 const hasValue = flag => { const index = options.indexOf(flag); return options.some(arg => arg.startsWith(flag + "=") && arg.length > flag.length + 1) || (index >= 0 && !!options[index + 1] && !options[index + 1].startsWith("--")); };
 if (!informational && !skip.includes("--session") && !(hasValue("--config") && hasValue("--session"))) {
-  console.error("Call device_open first and run the agent-device command it returns.");
+  console.error("Call pinacode_device_open first and run the agent-device command it returns.");
   process.exit(1);
 }
 if (!existsSync(entry)) {
@@ -210,7 +210,7 @@ if (local) {
     process.exit(1);
   }
   if (failure) {
-    console.error("T3 Code's device connection at " + local.host + " is not reachable from this shell (connect " + failure + "). Call device_open again to reconnect; if that succeeds and this repeats, this shell runs in a network sandbox, so run the command with network access, outside the sandbox.");
+    console.error("T3 Code's device connection at " + local.host + " is not reachable from this shell (connect " + failure + "). Call pinacode_device_open again to reconnect; if that succeeds and this repeats, this shell runs in a network sandbox, so run the command with network access, outside the sandbox.");
     process.exit(1);
   }
 }

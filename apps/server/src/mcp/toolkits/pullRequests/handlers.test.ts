@@ -228,7 +228,7 @@ describe("pull request toolkit handlers", () => {
     Effect.gen(function* () {
       const harness = yield* makeHarness();
       const error = yield* harness
-        .call("list_thread_pull_requests", {}, ["preview"])
+        .call("pinacode_list_thread_pull_requests", {}, ["preview"])
         .pipe(Effect.flip);
       expect(error).toMatchObject({
         _tag: "McpCapabilityUnavailableError",
@@ -246,10 +246,10 @@ describe("pull request toolkit handlers", () => {
         thread: { ...makeThread([]), id: ThreadId.make(`mcp:${bareId}`) },
       });
       const error = yield* harness
-        .call("link_pull_request", { threadId: bareId, number: 123 })
+        .call("pinacode_link_pull_request", { threadId: bareId, number: 123 })
         .pipe(Effect.flip);
       expect(error.message).toBe(
-        `Thread ${bareId} was not found. Did you mean \`mcp:${bareId}\`? Thread ids belong to one environment: for a thread on a linked one, find it with \`t3_environment_links\` and pass its \`environmentId\` to a tool that takes one.`,
+        `Thread ${bareId} was not found. Did you mean \`mcp:${bareId}\`? Thread ids belong to one environment: for a thread on a linked one, find it with \`pinacode_environment_links\` and pass its \`environmentId\` to a tool that takes one.`,
       );
       expect(error).toMatchObject({ _tag: "OrchestratorMcpFailure", code: "thread_not_found" });
       expect(yield* Ref.get(harness.commands)).toEqual([]);
@@ -259,7 +259,7 @@ describe("pull request toolkit handlers", () => {
   it.effect("links by URL with source agent on the token's thread", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();
-      const result = yield* harness.call("link_pull_request", {
+      const result = yield* harness.call("pinacode_link_pull_request", {
         url: "https://github.com/T3Tools/T3Code/pull/123/files",
       });
       expect(result).toEqual({
@@ -294,7 +294,7 @@ describe("pull request toolkit handlers", () => {
           },
         },
       });
-      const result = yield* harness.call("link_pull_request", {
+      const result = yield* harness.call("pinacode_link_pull_request", {
         url: "https://github.com/t3tools/t3code/pull/124",
       });
       expect(result).toMatchObject({ number: 124, next: CHILD_PULL_REQUEST_REPORT_NEXT });
@@ -311,7 +311,7 @@ describe("pull request toolkit handlers", () => {
             { url: `https://${host}/PingDotGG/T3Code/pulls/21353` },
           ]) {
             const harness = yield* makeHarness({ project });
-            const result = yield* harness.call("link_pull_request", target);
+            const result = yield* harness.call("pinacode_link_pull_request", target);
             const url = `https://${host}/pingdotgg/t3code/pulls/21353`;
             expect(result).toMatchObject({
               host,
@@ -348,19 +348,19 @@ describe("pull request toolkit handlers", () => {
           displayName: "group/sub/project",
         }),
       });
-      const result = yield* harness.call("link_pull_request", {
+      const result = yield* harness.call("pinacode_link_pull_request", {
         repository: "group/sub/project",
         number: 42,
       });
       expect(result.url).toBe("https://gitlab.com/group/sub/project/-/merge_requests/42");
       expect(result.host).toBe("gitlab.com");
-      const other = yield* harness.call("link_pull_request", {
+      const other = yield* harness.call("pinacode_link_pull_request", {
         host: "gitlab.example.test",
         repository: "team/repo",
         number: 7,
       });
       expect(other.url).toBe("https://gitlab.example.test/team/repo/-/merge_requests/7");
-      const onGitHub = yield* harness.call("link_pull_request", {
+      const onGitHub = yield* harness.call("pinacode_link_pull_request", {
         host: "github.com",
         repository: "acme/web",
         number: 9,
@@ -384,12 +384,15 @@ describe("pull request toolkit handlers", () => {
         }),
       });
       const error = yield* harness
-        .call("link_pull_request", { repository: "tfs/Collection/Project/_git/Repo", number: 124 })
+        .call("pinacode_link_pull_request", {
+          repository: "tfs/Collection/Project/_git/Repo",
+          number: 124,
+        })
         .pipe(Effect.flip);
       expect(error).toMatchObject({ _tag: "PullRequestUrlUnavailableError" });
 
       const supplied = "https://scm.example.test/tfs/Collection/Project/_git/Repo/pullrequest/123";
-      const fromUrl = yield* harness.call("link_pull_request", { url: supplied });
+      const fromUrl = yield* harness.call("pinacode_link_pull_request", { url: supplied });
       expect(fromUrl).toEqual({
         host: "scm.example.test",
         repository: "tfs/collection/project/_git/repo",
@@ -410,7 +413,7 @@ describe("pull request toolkit handlers", () => {
         reject: (command) =>
           command.type === "thread.pull-request.link" ? "already linked" : null,
       });
-      const result = yield* harness.call("link_pull_request", {
+      const result = yield* harness.call("pinacode_link_pull_request", {
         url: "https://github.com/t3tools/t3code/pull/123",
       });
       expect(result.alreadyLinked).toBe(true);
@@ -426,7 +429,7 @@ describe("pull request toolkit handlers", () => {
             ? "not linked"
             : null,
       });
-      const linked = yield* harness.call("unlink_pull_request", {
+      const linked = yield* harness.call("pinacode_unlink_pull_request", {
         repository: "t3tools/t3code",
         number: 5,
       });
@@ -436,7 +439,7 @@ describe("pull request toolkit handlers", () => {
         number: 5,
         wasLinked: true,
       });
-      const missing = yield* harness.call("unlink_pull_request", {
+      const missing = yield* harness.call("pinacode_unlink_pull_request", {
         url: "https://github.com/t3tools/t3code/pull/9",
       });
       expect(missing.wasLinked).toBe(false);
@@ -451,7 +454,7 @@ describe("pull request toolkit handlers", () => {
       const harness = yield* makeHarness({
         thread: makeThread([makeLink(9, { source: "stack-dismissed" })]),
       });
-      const result = yield* harness.call("unlink_pull_request", {
+      const result = yield* harness.call("pinacode_unlink_pull_request", {
         repository: "t3tools/t3code",
         number: 9,
       });
@@ -466,7 +469,7 @@ describe("pull request toolkit handlers", () => {
         thread: makeThread([makeLink(1), { ...makeLink(2), source: "stack-dismissed" }]),
       });
       const url = (number: number) => `https://github.com/t3tools/t3code/pull/${number}`;
-      const result = yield* harness.call("link_pull_requests", {
+      const result = yield* harness.call("pinacode_link_pull_requests", {
         urls: [url(1), url(2), url(3), url(3), "https://example.com/not-a-pr"],
       });
       expect(result).toEqual({
@@ -497,7 +500,7 @@ describe("pull request toolkit handlers", () => {
           { ...withState(5, "merged"), source: "stack-dismissed" },
         ]),
       });
-      const result = yield* harness.call("unlink_pull_requests", {
+      const result = yield* harness.call("pinacode_unlink_pull_requests", {
         states: ["closed", "merged"],
       });
       expect(result).toEqual({
@@ -538,7 +541,7 @@ describe("pull request toolkit handlers", () => {
           makeLink(10),
         ]),
       });
-      const result = yield* harness.call("list_thread_pull_requests", {});
+      const result = yield* harness.call("pinacode_list_thread_pull_requests", {});
       expect(result.pullRequests.map((entry) => entry.number)).toEqual([1, 2, 3, 10]);
       expect(result.pullRequests[2]).toEqual({
         host: "github.com",
@@ -685,7 +688,7 @@ describe("pull request guide tools", () => {
           id: ProjectId.make("project-web"),
         };
         const harness = yield* makeHarness({ projects: [makeProject(), other] });
-        const result = yield* harness.call("write_pull_request_guides", {
+        const result = yield* harness.call("pinacode_write_pull_request_guides", {
           pullRequests: [
             { url: "https://github.com/acme/web/pull/7" },
             { repository: "t3tools/t3code", number: 12 },
@@ -712,7 +715,7 @@ describe("pull request guide tools", () => {
   it.effect("reports an unreadable entry on its own and still writes the rest of the batch", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();
-      const result = yield* harness.call("write_pull_request_guides", {
+      const result = yield* harness.call("pinacode_write_pull_request_guides", {
         pullRequests: [
           { url: "https://example.com/not-a-pull-request" },
           { repository: "t3tools/t3code" },
@@ -743,7 +746,7 @@ describe("pull request guide tools", () => {
           name: "api",
         });
         const harness = yield* makeHarness({ project: api });
-        const result = yield* harness.call("read_pull_request_guide", {
+        const result = yield* harness.call("pinacode_read_pull_request_guide", {
           url: "https://bitbucket.org/acme/web/pull-requests/123",
         });
         expect(result).toMatchObject({
@@ -774,7 +777,7 @@ describe("pull request guide tools", () => {
         id: ProjectId.make("project-azure"),
       };
       const harness = yield* makeHarness({ projects: [makeProject(), azure] });
-      const result = yield* harness.call("write_pull_request_guides", {
+      const result = yield* harness.call("pinacode_write_pull_request_guides", {
         pullRequests: [{ host: "dev.azure.com", repository: "org/project/_git/web", number: 9 }],
       });
       expect(result.guides.map((guide) => guide.outcome)).toEqual(["started"]);

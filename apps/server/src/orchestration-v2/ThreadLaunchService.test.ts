@@ -1,3 +1,6 @@
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { checkpointWorkspace } from "@t3tools/provider-testing/replayWorkspace";
 import * as DocumentText from "../provider/DocumentText.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as WorktreeSetupTracker from "../project/WorktreeSetupTracker.ts";
@@ -123,6 +126,7 @@ const claudeAdapter = {
 } as ProviderAdapter.ProviderAdapterV2["Service"];
 
 interface HarnessOptions {
+  readonly workspaceRoot?: string;
   readonly closeTerminal?: TerminalManager.TerminalManager["Service"]["close"];
   readonly adapters?: ReadonlyArray<ProviderAdapter.ProviderAdapterV2["Service"]>;
   readonly managedFolders?: Layer.Layer<ManagedProjectFolders.ManagedProjectFolders>;
@@ -142,6 +146,10 @@ interface HarnessOptions {
 }
 
 function makeHarness(options: HarnessOptions = {}) {
+  const launchProject = {
+    ...project,
+    workspaceRoot: options.workspaceRoot ?? project.workspaceRoot,
+  };
   const layerDatabase = SqlitePersistence.layerMemory;
   const layerRegistry = ProviderAdapterRegistry.layerFromAdapters(options.adapters ?? [adapter]);
   const layerOrchestrator = ProviderReplayHarness.layerWithRegistry(
@@ -201,19 +209,19 @@ function makeHarness(options: HarnessOptions = {}) {
       getById: (id) =>
         Effect.succeed(
           id === projectId
-            ? Option.some(project)
+            ? Option.some(launchProject)
             : id === otherProjectId
               ? Option.some(otherProject)
               : Option.none(),
         ),
-      getByWorkspaceRoot: () => Effect.succeedSome(project),
+      getByWorkspaceRoot: () => Effect.succeedSome(launchProject),
       workspaceScanDirectory: () => Effect.die("unused"),
       snapshot: Effect.die("unused"),
       getShell: () => Effect.die("unused"),
       listShells: () => Effect.die("unused"),
     }),
     Layer.mock(GitWorkflow.GitWorkflowService)({
-      repositoryRoot: () => Effect.succeed(project.workspaceRoot),
+      repositoryRoot: () => Effect.succeed(launchProject.workspaceRoot),
       createWorktree,
       renameBranch,
       fetchWorktreeBaseCommit:
@@ -270,7 +278,7 @@ function makeHarness(options: HarnessOptions = {}) {
           ? Option.some({
               projectId,
               title: project.title,
-              workspaceRoot: project.workspaceRoot,
+              workspaceRoot: launchProject.workspaceRoot,
               defaultModelSelection: project.defaultModelSelection,
               defaultThreadEnvMode: null,
               hasCustomTitle: false,
@@ -3215,3 +3223,108 @@ it.effect("replays an accepted send after the project disables the instance", ()
     }
   }).pipe(Effect.provide(Layer.mergeAll(harness.layer, layerFiles)));
 });
+
+it.live("prepares three independent delegated sessions in real isolated Git worktrees", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const cwd = yield* checkpointWorkspace("pinacode-independent-review", {
+        "issue.txt": "base\n",
+      });
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      let ordinal = 0;
+      const harness = makeHarness({
+        workspaceRoot: cwd,
+        hasCommit: () => Effect.succeed(true),
+        createWorktree: Effect.fn("test.createIndependentWorktree")(function* (input) {
+          const worktreePath = `${cwd}/worktrees/issue-${++ordinal}`;
+          const exitCode = yield* spawner
+            .exitCode(
+              ChildProcess.make("git", [
+                "-C",
+                cwd,
+                "worktree",
+                "add",
+                "-b",
+                input.newRefName!,
+                worktreePath,
+                input.refName,
+              ]),
+            )
+            .pipe(Effect.orDie);
+          assert.equal(Number(exitCode), 0);
+          return { worktree: { path: worktreePath, refName: input.newRefName! } };
+        }),
+      });
+      yield* Effect.gen(function* () {
+        const launches = yield* ThreadLaunch.ThreadLaunchService;
+        const threads = yield* ThreadManagement.ThreadManagementService;
+        const fs = yield* FileSystem.FileSystem;
+        const parent = yield* launches.launch(
+          launchInput({
+            command: "real-review-parent",
+            thread: "real-review-parent",
+            message: "Coordinate three issues",
+          }),
+        );
+        const parentRun = parent.projection.runs[0]!;
+        const paths = [];
+        for (const issue of [1, 2, 3]) {
+          const commandId = CommandId.make(`real-review-issue-${issue}`);
+          const created = yield* threads.dispatch({
+            type: "delegated_task.request",
+            commandId,
+            createdBy: "agent",
+            creationSource: "mcp",
+            parentThreadId: parent.threadId,
+            parentRunId: parentRun.id,
+            parentNodeId: parentRun.rootNodeId!,
+            session: "independent",
+            task: `Fix issue ${issue}`,
+            modelSelection,
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            workspaceStrategy: { type: "worktree", baseRef: "HEAD", startFromOrigin: false },
+            completionWake: "always",
+          });
+          const child = created.storedEvents.find((event) => event.event.type === "thread.created")!
+            .event.threadId!;
+          const run = (yield* threads.getThreadProjection(child)).runs[0]!;
+          const afterSequence = yield* threads.getThreadEventSequence(child);
+          yield* launches.prepareRun({ commandId, threadId: child, runId: run.id });
+          yield* threads
+            .streamStoredEventsFrom({ threadId: child, afterSequence, eventType: "run.updated" })
+            .pipe(
+              Stream.filter(
+                (stored) =>
+                  stored.event.type === "run.updated" &&
+                  stored.event.payload.id === run.id &&
+                  stored.event.payload.status !== "preparing",
+              ),
+              Stream.runHead,
+            );
+          const ready = yield* threads.getThreadProjection(child);
+          assert.notEqual(
+            ready.runs[0]!.status,
+            "failed",
+            JSON.stringify(ready.turnItems.filter((item) => item.type === "error")),
+          );
+          assert.equal(ready.thread.lineage.relationshipToParent, "delegation");
+          assert.isNotNull(ready.thread.worktreePath);
+          const worktreePath = ready.thread.worktreePath!;
+          assert.equal(yield* fs.readFileString(`${worktreePath}/issue.txt`), "base\n");
+          yield* fs.writeFileString(`${worktreePath}/issue.txt`, `issue ${issue}\n`);
+          paths.push(worktreePath);
+        }
+        assert.equal(new Set(paths).size, 3);
+        assert.equal(yield* fs.readFileString(`${cwd}/issue.txt`), "base\n");
+        for (const [index, path] of paths.entries()) {
+          assert.equal(yield* fs.readFileString(`${path}/issue.txt`), `issue ${index + 1}\n`);
+        }
+        assert.lengthOf(
+          yield* threads.listProjectThreads({ projectId, includeSubagents: false }),
+          4,
+        );
+      }).pipe(Effect.provide(harness.layer));
+    }),
+  ).pipe(Effect.provide(NodeServices.layer)),
+);

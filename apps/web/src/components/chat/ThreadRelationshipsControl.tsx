@@ -202,6 +202,9 @@ function ThreadLineageGroup<Row extends LineageRow>(props: {
 
 function relationshipLabel(edge: ThreadRelationshipEdge, currentThreadId: ThreadId) {
   if (edge.kind === "transfer") return "Context transfer";
+  if (edge.kind === "delegation") {
+    return edge.sourceThreadId === currentThreadId ? "Independent agent" : "Coordinator";
+  }
   if (edge.kind === "subagent") {
     return edge.sourceThreadId === currentThreadId ? "Subagent" : "Parent agent";
   }

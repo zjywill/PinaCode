@@ -17,7 +17,7 @@ import {
 } from "./mcpApp.ts";
 import { resolveT3McpToolId } from "./t3McpToolPresentation.ts";
 
-export const SEND_TO_USER_TOOL_NAME = "send_to_user";
+export const SEND_TO_USER_TOOL_NAME = "pinacode_send_to_user";
 // 4,000 UTF-16 units stay inside MAX_PARSED_BYTES even as 3-byte characters.
 export const SEND_TO_USER_MAX_LENGTH = 4_000;
 
@@ -216,7 +216,7 @@ export function htmlRenderFromToolItem(item: {
   return output?.isError ? undefined : output?.htmlRender;
 }
 
-/** The text `send_to_user` showed the user, which clients render as the agent's own words. */
+/** The text `pinacode_send_to_user` showed the user, which clients render as the agent's own words. */
 export function sentMessageFromToolItem(item: {
   readonly toolName: string | null | undefined;
   readonly output?: unknown;
@@ -231,12 +231,12 @@ export function sentMessageFromToolItem(item: {
   return output?.isError ? undefined : output?.sentMessage;
 }
 
-/** The thread-owned file `preview_recording_stop` stored for the agent. */
+/** The thread-owned file `pinacode_preview_recording_stop` stored for the agent. */
 export function previewRecordingIdFromToolItem(item: {
   readonly toolName: string | null | undefined;
   readonly output?: unknown;
 }): string | undefined {
-  if (resolveT3McpToolId(item.toolName) !== "preview_recording_stop") return undefined;
+  if (resolveT3McpToolId(item.toolName) !== "pinacode_preview_recording_stop") return undefined;
   const budget: ResultReadBudget = {
     remainingBytes: MAX_PARSED_BYTES,
     remainingNodes: MAX_ENVELOPE_NODES,

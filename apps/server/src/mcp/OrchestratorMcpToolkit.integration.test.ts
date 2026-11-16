@@ -353,7 +353,7 @@ describe("orchestrator MCP toolkit", () => {
             );
 
         const delegationStartSequence = yield* orchestrator.getThreadEventSequence(parentThreadId);
-        const delegatedCall = yield* invoke("delegate_task", {
+        const delegatedCall = yield* invoke("pinacode_delegate_task", {
           task: delegatedPrompt,
           target: {
             providerInstanceId: codexInstanceId,
@@ -387,7 +387,7 @@ describe("orchestrator MCP toolkit", () => {
               }),
             ),
           );
-        const delegatedStatusCall = yield* invoke("task_status", {
+        const delegatedStatusCall = yield* invoke("pinacode_task_status", {
           taskId: delegatedStart.taskId,
         });
         const delegated = yield* decodeDelegateTaskResult(
@@ -413,7 +413,7 @@ describe("orchestrator MCP toolkit", () => {
         const followupStartSequence = yield* orchestrator.getThreadEventSequence(
           localChild(delegated.childThreadId),
         );
-        const runningFollowupCall = yield* invoke("t3_thread_send", {
+        const runningFollowupCall = yield* invoke("pinacode_thread_send", {
           threadId: localChild(delegated.childThreadId),
           message: cancellationPrompt,
           clientRequestId: "delegated-child-replay-running-1",
@@ -441,7 +441,7 @@ describe("orchestrator MCP toolkit", () => {
             ),
           );
 
-        const queuedFollowupCall = yield* invoke("t3_thread_send", {
+        const queuedFollowupCall = yield* invoke("pinacode_thread_send", {
           threadId: localChild(delegated.childThreadId),
           message: queuedFollowupPrompt,
           mode: "queue",
@@ -484,7 +484,7 @@ describe("orchestrator MCP toolkit", () => {
           ),
         ).toBe(true);
 
-        const pendingStatusCall = yield* invoke("task_status", {
+        const pendingStatusCall = yield* invoke("pinacode_task_status", {
           taskId: delegated.taskId,
         });
         const pendingStatus = yield* decodeDelegateTaskResult(
@@ -505,7 +505,7 @@ describe("orchestrator MCP toolkit", () => {
         const finalSequence = yield* orchestrator.getThreadEventSequence(
           localChild(delegated.childThreadId),
         );
-        const interruptCall = yield* invoke("t3_thread_interrupt", {
+        const interruptCall = yield* invoke("pinacode_thread_interrupt", {
           threadId: localChild(delegated.childThreadId),
           runId: runningFollowup.runId,
           reason: "Allow the queued replay follow-up to run.",
@@ -596,7 +596,7 @@ describe("orchestrator MCP toolkit", () => {
           finishedParent.subagents.find((task) => task.id === followupTasks[1]!.id)
             ?.completionDelivery?.state,
         ).toBe("claimed");
-        const finalStatusCall = yield* invoke("task_status", {
+        const finalStatusCall = yield* invoke("pinacode_task_status", {
           taskId: delegated.taskId,
         });
         const finalStatus = yield* decodeDelegateTaskResult(finalStatusCall.structuredContent).pipe(
@@ -664,7 +664,7 @@ describe("orchestrator MCP toolkit", () => {
           },
         });
         const wait = yield* invoke(
-          "t3_thread_wait",
+          "pinacode_thread_wait",
           { threadId: delegated.childThreadId, runId: queuedFollowup.runId },
           { ...invocation, thread: undefined },
         ).pipe(Effect.withTracer(tracer));
@@ -679,7 +679,7 @@ describe("orchestrator MCP toolkit", () => {
         expect(messageReads).toEqual([]);
         expect(transferReads).toHaveLength(0);
         const settledWait = yield* invoke(
-          "t3_thread_wait",
+          "pinacode_thread_wait",
           {
             threadId: delegated.childThreadId,
             runId: queuedFollowup.runId,
@@ -701,7 +701,7 @@ describe("orchestrator MCP toolkit", () => {
           messageReads.filter((query) => !query.includes("$.notification.source.kind")),
         ).toHaveLength(1);
         const parentlessRead = yield* invoke(
-          "t3_thread_read",
+          "pinacode_thread_read",
           {
             threadId: delegated.childThreadId,
             limit: 100,
@@ -717,7 +717,7 @@ describe("orchestrator MCP toolkit", () => {
             ?.completionDelivery?.state,
         ).toBe("claimed");
 
-        const read = yield* invoke("t3_thread_read", {
+        const read = yield* invoke("pinacode_thread_read", {
           threadId: delegated.childThreadId,
           limit: 100,
           ...(result === "😀" ? { maxCharsPerItem: 1 } : {}),
@@ -728,7 +728,7 @@ describe("orchestrator MCP toolkit", () => {
         const finalItem = firstPage.items.find((item) => item.text === result.slice(0, 500));
         expect(finalItem).toBeDefined();
         if (result.length > 500) {
-          yield* invoke("t3_thread_read", {
+          yield* invoke("pinacode_thread_read", {
             threadId: delegated.childThreadId,
             itemId: finalItem!.itemId,
             textOffset: result.length,
@@ -744,7 +744,7 @@ describe("orchestrator MCP toolkit", () => {
             beforeContinuation.subagents.find((task) => task.id === queuedFollowup.taskId)
               ?.completionDelivery?.state,
           ).toBe("claimed");
-          const continuation = yield* invoke("t3_thread_read", {
+          const continuation = yield* invoke("pinacode_thread_read", {
             threadId: delegated.childThreadId,
             itemId: finalItem!.itemId,
             textOffset: nextTextOffset,
@@ -775,7 +775,7 @@ describe("orchestrator MCP toolkit", () => {
 
         const messageReadsBeforeCapabilities = messageReads.length;
         const tableReadsBeforeCapabilities = projectionTableReads.length;
-        const capabilities = yield* invoke("orchestrator_capabilities", {}).pipe(
+        const capabilities = yield* invoke("pinacode_orchestrator_capabilities", {}).pipe(
           Effect.withTracer(tracer),
         );
         expect(capabilities.isError).not.toBe(true);
@@ -787,9 +787,9 @@ describe("orchestrator MCP toolkit", () => {
         const runReadsBeforeStatus = runReads.length;
         const transferReadsBeforeStatus = transferReads.length;
         const threadRecordReadsBeforeStatus = threadRecordReads.length;
-        const statusAgain = yield* invoke("task_status", { taskId: delegated.taskId }).pipe(
-          Effect.withTracer(tracer),
-        );
+        const statusAgain = yield* invoke("pinacode_task_status", {
+          taskId: delegated.taskId,
+        }).pipe(Effect.withTracer(tracer));
         expect(statusAgain.isError).not.toBe(true);
         // A task wait reads result transfers and runs from the child; the parent's stay unread.
         expect(runReads).toHaveLength(runReadsBeforeStatus + 1);

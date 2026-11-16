@@ -108,7 +108,7 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
   );
 }
 
-/** Text an agent sent with `send_to_user`, shown as its own words. */
+/** Text an agent sent with `pinacode_send_to_user`, shown as its own words. */
 export function SentMessageTimelineRow({
   row,
 }: {

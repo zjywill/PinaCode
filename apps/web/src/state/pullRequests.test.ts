@@ -319,7 +319,9 @@ describe("pull request list answers across a reload", () => {
           detail: null,
         },
       ],
-      errors: [{ projectId: ProjectId.make("project-1"), projectTitle: "t3code", message: "boom" }],
+      errors: [
+        { projectId: ProjectId.make("project-1"), projectTitle: "pinacode", message: "boom" },
+      ],
       truncated: true,
       nextCursors: { "pingdotgg/t3code": "cursor-1" },
     }) as PullRequestListResult;

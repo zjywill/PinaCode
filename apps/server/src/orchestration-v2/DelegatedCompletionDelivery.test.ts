@@ -8,7 +8,9 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it, vi } from "@effect/vitest";
 import {
   CheckpointId,
+  isListedThreadLineage,
   CommandId,
+  EnvironmentId,
   EventId,
   MessageId,
   type ModelSelection,
@@ -29,6 +31,7 @@ import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import * as TestClock from "effect/testing/TestClock";
@@ -329,21 +332,21 @@ const seedParentWithTerminalTask = (input: {
   });
 
 it.layer(layerTest)("delegated completion delivery repairs", (it) => {
-  it.effect(
-    "interrupting a completion wake disposes both cohorts without reviving them on late results",
-    () =>
+  it.effect.each(["child", "independent"] as const)(
+    "interrupting a completion wake disposes %s cohorts without reviving them on late results",
+    (session) =>
       Effect.gen(function* () {
         const orchestrator = yield* Orchestrator.OrchestratorV2;
         const sink = yield* EventSink.EventSinkV2;
         const now = yield* DateTime.now;
-        const threadId = ThreadId.make("stop-wake-parent");
-        const originRunId = RunId.make("stop-wake-origin");
-        const incomingTaskId = NodeId.make("stop-wake-incoming");
+        const threadId = ThreadId.make(`stop-wake-parent-${session}`);
+        const originRunId = RunId.make(`stop-wake-origin-${session}`);
+        const incomingTaskId = NodeId.make(`stop-wake-incoming-${session}`);
         yield* seedParentWithTerminalTask({
           threadId,
-          projectId: ProjectId.make("stop-wake-project"),
+          projectId: ProjectId.make(`stop-wake-project-${session}`),
           runId: originRunId,
-          rootNodeId: NodeId.make("stop-wake-origin-root"),
+          rootNodeId: NodeId.make(`stop-wake-origin-root-${session}`),
           taskId: incomingTaskId,
           deliveryState: "claimed",
           deliveryTaskIds: [incomingTaskId],
@@ -364,7 +367,7 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
           type: "message.dispatch",
           createdBy: "agent",
           creationSource: "server",
-          commandId: CommandId.make("stop-wake-start"),
+          commandId: CommandId.make(`stop-wake-start-${session}`),
           threadId,
           messageId: delivery.messageId,
           text: "Delegated task completed",
@@ -385,11 +388,21 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
           type: "delegated_task.request",
           createdBy: "agent",
           creationSource: "mcp",
-          commandId: CommandId.make("stop-wake-delegate"),
+          commandId: CommandId.make(`stop-wake-delegate-${session}`),
           parentThreadId: threadId,
           parentRunId: wake.id,
           parentNodeId: wake.rootNodeId!,
           task: "Do the next round",
+          session,
+          ...(session === "independent"
+            ? {
+                workspaceStrategy: {
+                  type: "worktree" as const,
+                  baseRef: "HEAD",
+                  startFromOrigin: false,
+                },
+              }
+            : {}),
           modelSelection,
           runtimeMode: "full-access",
           interactionMode: "default",
@@ -400,7 +413,7 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
         )!;
         yield* orchestrator.dispatch({
           type: "run.interrupt",
-          commandId: CommandId.make("stop-wake-interrupt"),
+          commandId: CommandId.make(`stop-wake-interrupt-${session}`),
           threadId,
           runId: wake.id,
         });
@@ -426,9 +439,9 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
           type: "message.dispatch",
           createdBy: "user",
           creationSource: "web",
-          commandId: CommandId.make("stop-wake-newer-work"),
+          commandId: CommandId.make(`stop-wake-newer-work-${session}`),
           threadId,
-          messageId: MessageId.make("stop-wake-newer-work"),
+          messageId: MessageId.make(`stop-wake-newer-work-${session}`),
           text: "Start unrelated work",
           attachments: [],
           modelSelection,
@@ -705,7 +718,7 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
       assert.deepEqual(message?.delegatedCompletion?.taskIds, [firstTaskId, secondTaskId]);
       assert.include(message?.text ?? "", String(firstTaskId));
       assert.include(message?.text ?? "", String(secondTaskId));
-      assert.include(message?.text ?? "", "task_status");
+      assert.include(message?.text ?? "", "pinacode_task_status");
       assert.include(message?.text ?? "", "child finished");
     }),
   );
@@ -837,7 +850,7 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
       inlineFirst: true,
       inlineSecond: false,
     },
-  ])("uses task_status for $name beyond the inline budget", (testCase) =>
+  ])("uses pinacode_task_status for $name beyond the inline budget", (testCase) =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;
       const sink = yield* EventSink.EventSinkV2;
@@ -871,7 +884,20 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
           runId,
           nodeId: id,
           occurredAt: now,
-          payload: { ...task, id, result, status, title: "Inspect regression" },
+          payload: {
+            ...task,
+            id,
+            result,
+            status,
+            title: "Inspect regression",
+            remoteChild: {
+              environmentId: EnvironmentId.make("remote-review-env"),
+              threadId: ThreadId.make(`remote:${id}`),
+              label: "Review server",
+              title: "Remote review",
+              stoppedThere: false,
+            },
+          },
         })),
       });
       yield* orchestrator.dispatch({
@@ -894,12 +920,15 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
       const message = projection.messages.find((candidate) => candidate.id === messageId)!;
       assert.equal(message.text.includes(testCase.first), testCase.inlineFirst);
       assert.equal(message.text.includes(testCase.second), testCase.inlineSecond);
+      for (const id of [firstTaskId, secondTaskId]) {
+        assert.include(message.text, `t3-thread://v2/remote-review-env/remote:${id}`);
+      }
       const deferredTaskId = testCase.inlineFirst ? secondTaskId : firstTaskId;
       assert.include(
         message.text,
         `Delegated task ${deferredTaskId} (Inspect regression) [${testCase.inlineFirst ? "cancelled" : "failed"}]`,
       );
-      assert.include(message.text, `Use task_status with taskId ${deferredTaskId}`);
+      assert.include(message.text, `Use pinacode_task_status with taskId ${deferredTaskId}`);
       assert.deepEqual(message.delegatedCompletion?.taskIds, [firstTaskId, secondTaskId]);
       assert.equal(
         projection.subagents.find((candidate) => candidate.id === deferredTaskId)?.result,
@@ -2780,7 +2809,7 @@ it.layer(Layer.merge(layerTest, ProviderContinuationRequests.layer))(
         }),
     );
 
-    // The child's follow-up run sends `t3_thread_send` to its own thread before it ends.
+    // The child's follow-up run sends `pinacode_thread_send` to its own thread before it ends.
     const startSelfQueuedFollowup = (name: string) =>
       Effect.gen(function* () {
         const orchestrator = yield* Orchestrator.OrchestratorV2;
@@ -3600,7 +3629,7 @@ it.layer(Layer.merge(layerTest, ProviderContinuationRequests.layer))(
             observedByRunId: parentRunId,
           });
           if (outcome === "after-cancel") {
-            // A follow-up is its own task, even after task_cancel reached the original.
+            // A follow-up is its own task, even after pinacode_task_cancel reached the original.
             const settled = (yield* orchestrator.getThreadProjection(
               parentThreadId,
             )).subagents.find((task) => task.id === child.taskId)!;
@@ -3730,7 +3759,7 @@ it.layer(Layer.merge(layerTest, ProviderContinuationRequests.layer))(
             });
           }
           if (outcome === "cancelled") {
-            // task_cancel reaches the follow-up after its turn ended, while background work runs.
+            // pinacode_task_cancel reaches the follow-up after its turn ended, while background work runs.
             yield* eventSink.write({
               commandId: reconcileCommandId("followup-waiting"),
               events: [
@@ -5098,7 +5127,7 @@ it.layer(layerTest)("delegated tasks across a server restart", (it) => {
           now,
         });
         // Skip the live terminal listener to model a committed failure whose
-        // publication was interrupted. task_cancel then disposed its delivery.
+        // publication was interrupted. pinacode_task_cancel then disposed its delivery.
         yield* eventSink.write({
           commandId: reconcileCommandId("unpublished-failure"),
           events: [
@@ -5433,6 +5462,251 @@ it.layer(layerTest)("delegated tasks across a server restart", (it) => {
         );
         assert.equal(finished?.status, "completed");
         assert.notEqual(finished?.completionDelivery?.state, "disposed");
+      }),
+  );
+});
+
+it.layer(layerContinuationWorkerTest)("independent review sessions", (it) => {
+  it.effect(
+    "reviews three isolated sessions and returns revisions to the original session until accepted",
+    () =>
+      Effect.gen(function* () {
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
+        const sink = yield* EventSink.EventSinkV2;
+        const now = yield* DateTime.now;
+        const parentThreadId = ThreadId.make("independent-review-parent");
+        const parentRunId = RunId.make("independent-review-origin");
+        const rootNodeId = NodeId.make("independent-review-root");
+        yield* seedParentWithTerminalTask({
+          threadId: parentThreadId,
+          projectId: ProjectId.make("independent-review-project"),
+          runId: parentRunId,
+          rootNodeId,
+          taskId: NodeId.make("independent-review-seed"),
+          deliveryState: "acknowledged",
+          now,
+        });
+        yield* sink.write({
+          events: [
+            {
+              id: EventId.make("independent-review-root-event"),
+              type: "node.updated",
+              threadId: parentThreadId,
+              runId: parentRunId,
+              nodeId: rootNodeId,
+              occurredAt: now,
+              payload: {
+                id: rootNodeId,
+                threadId: parentThreadId,
+                runId: parentRunId,
+                parentNodeId: null,
+                rootNodeId,
+                kind: "root_turn",
+                status: "running",
+                countsForRun: true,
+                providerThreadId: null,
+                providerTurnId: null,
+                nativeItemRef: null,
+                runtimeRequestId: null,
+                checkpointScopeId: null,
+                startedAt: now,
+                completedAt: null,
+              },
+            },
+          ],
+        });
+        const children: Array<{ threadId: ThreadId; runId: RunId; worktreePath: string }> = [];
+        for (const issue of [1, 2, 3]) {
+          const command = {
+            type: "delegated_task.request" as const,
+            createdBy: "agent" as const,
+            creationSource: "mcp" as const,
+            commandId: CommandId.make(`independent-launch-${issue}`),
+            parentThreadId,
+            parentRunId,
+            parentNodeId: rootNodeId,
+            task: `Fix issue ${issue}`,
+            session: "independent" as const,
+            modelSelection,
+            runtimeMode: "full-access" as const,
+            interactionMode: "default" as const,
+            completionWake: "always" as const,
+            workspaceStrategy: {
+              type: "worktree" as const,
+              baseRef: "HEAD",
+              startFromOrigin: false,
+            },
+          };
+          const launched = yield* orchestrator.dispatch(command);
+          const event = launched.storedEvents.find(
+            (stored) => stored.event.type === "thread.created",
+          )!;
+          assert.equal(event.event.type, "thread.created");
+          if (event.event.type !== "thread.created") return;
+          const childThreadId = event.event.threadId;
+          const child = yield* orchestrator.getThreadProjection(childThreadId);
+          assert.equal(child.thread.lineage.relationshipToParent, "delegation");
+          assert.isTrue(isListedThreadLineage(child.thread.lineage));
+          assert.equal(child.thread.lineage.rootThreadId, childThreadId);
+          assert.lengthOf(child.runs, 1);
+          assert.equal(child.runs[0]!.status, "preparing");
+          const worktreePath = `/workspace/independent-worktrees/issue-${issue}`;
+          yield* orchestrator.dispatch({
+            type: "thread.metadata.update",
+            commandId: CommandId.make(`independent-bind-${issue}`),
+            threadId: childThreadId,
+            branch: `fix/issue-${issue}`,
+            worktreePath,
+          });
+          yield* orchestrator.dispatch({
+            type: "prepared-run.release",
+            commandId: CommandId.make(`independent-ready-${issue}`),
+            threadId: childThreadId,
+            runId: child.runs[0]!.id,
+          });
+          const retry = yield* orchestrator.dispatch({ ...command, workspaceStrategy: undefined });
+          assert.isTrue(retry.replayed);
+          children.push({ threadId: childThreadId, runId: child.runs[0]!.id, worktreePath });
+        }
+        assert.equal(new Set(children.map((child) => child.threadId)).size, 3);
+        assert.equal(new Set(children.map((child) => child.worktreePath)).size, 3);
+        const finish = Effect.fn("test.finishIndependentRun")(function* (
+          threadId: ThreadId,
+          runId: RunId,
+          text: string,
+        ) {
+          const projection = yield* orchestrator.getThreadProjection(threadId);
+          const run = projection.runs.find((candidate) => candidate.id === runId)!;
+          yield* sink.write({
+            events: [
+              {
+                id: EventId.make(`independent-answer-${runId}`),
+                type: "message.updated",
+                threadId,
+                runId,
+                occurredAt: now,
+                payload: {
+                  id: MessageId.make(`independent-answer-${runId}`),
+                  threadId,
+                  runId,
+                  nodeId: run.rootNodeId,
+                  role: "assistant",
+                  text,
+                  attachments: [],
+                  streaming: false,
+                  createdBy: "agent",
+                  creationSource: "provider",
+                  createdAt: now,
+                  updatedAt: now,
+                },
+              },
+              {
+                ...runEvent({ threadId, runId, ordinal: run.ordinal, status: "completed", now }),
+                payload: { ...run, status: "completed", startedAt: now, completedAt: now },
+              },
+            ],
+          });
+        });
+        yield* finish(parentThreadId, parentRunId, "Waiting for three independent sessions.");
+        const listed = yield* orchestrator.getShellSnapshot();
+        for (const child of children) {
+          assert.equal(
+            listed.threads.find((thread) => thread.id === child.threadId)?.lineage
+              .relationshipToParent,
+            "delegation",
+          );
+        }
+        const review = Effect.fn("test.awaitIndependentReview")(function* (
+          child: (typeof children)[number],
+          round: number,
+        ) {
+          const afterSequence = yield* sink.latestSequence();
+          yield* finish(
+            child.threadId,
+            child.runId,
+            round === 0 ? "Implementation ready for review." : `Revision ${round} ready.`,
+          );
+          // Recovery exercises the same durable completion path after a server restart.
+          yield* orchestrator.recoverDelegatedTasks;
+          const event = yield* sink
+            .stream({ afterSequence, threadId: parentThreadId, eventType: "run.created" })
+            .pipe(
+              Stream.runHead,
+              Effect.flatMap(
+                Option.match({
+                  onNone: () => Effect.die("Coordinator did not wake"),
+                  onSome: Effect.succeed,
+                }),
+              ),
+            );
+          if (event.event.type !== "run.created") return yield* Effect.die("Expected review run");
+          const run = event.event.payload;
+          const parent = yield* orchestrator.getThreadProjection(parentThreadId);
+          assert.include(
+            parent.messages.find((message) => message.id === run.userMessageId)?.text ?? "",
+            `t3-thread://v1/${child.threadId}`,
+          );
+          const task = parent.subagents.find(
+            (task) =>
+              task.childThreadId === child.threadId &&
+              task.result !== null &&
+              task.completionDelivery?.state !== "acknowledged",
+          )!;
+          assert.isDefined(task);
+          assert.equal(task.status, "completed");
+          yield* orchestrator.dispatch({
+            type: "delegated_task.completion-delivery.acknowledge",
+            commandId: CommandId.make(`independent-ack-${child.threadId}-${round}`),
+            parentThreadId,
+            taskId: task.id,
+            observedByRunId: run.id,
+          });
+          return run;
+        });
+        for (const [index, child] of children.entries()) {
+          let reviewRun = yield* review(child, 0);
+          if (index === 1) {
+            for (const round of [1, 2]) {
+              const messageId = MessageId.make(`independent-fix-${round}`);
+              yield* orchestrator.dispatch({
+                type: "message.dispatch",
+                createdBy: "agent",
+                creationSource: "mcp",
+                commandId: CommandId.make(`independent-fix-${round}`),
+                threadId: child.threadId,
+                senderThreadId: parentThreadId,
+                messageId,
+                text: `Fix review finding ${round}, rerun the regression test.`,
+                attachments: [],
+                dispatchMode: { type: "start_immediately" },
+              });
+              const revised = yield* orchestrator.getThreadProjection(child.threadId);
+              const run = revised.runs.find((run) => run.userMessageId === messageId)!;
+              assert.isDefined(run.delegatedTaskId);
+              assert.deepEqual(run.modelSelection, modelSelection);
+              assert.equal(revised.thread.worktreePath, child.worktreePath);
+              yield* finish(
+                parentThreadId,
+                reviewRun.id,
+                "Changes requested; waiting for the original session.",
+              );
+              reviewRun = yield* review({ ...child, runId: run.id }, round);
+            }
+          }
+          yield* finish(parentThreadId, reviewRun.id, `Issue ${index + 1} reviewed and accepted.`);
+        }
+        yield* orchestrator.recoverDelegatedTasks;
+        const accepted = yield* orchestrator.getThreadProjection(parentThreadId);
+        assert.lengthOf(
+          accepted.subagents.filter((task) => task.childThreadId !== null),
+          5,
+        );
+        assert.isTrue(accepted.subagents.every((task) => task.result !== null));
+        assert.lengthOf(accepted.runs, 6);
+        assert.lengthOf(
+          accepted.messages.filter((message) => message.text.includes("reviewed and accepted")),
+          3,
+        );
       }),
   );
 });

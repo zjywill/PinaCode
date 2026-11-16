@@ -311,7 +311,7 @@ const resolveDevice = Effect.fn("nativeClient.resolveDevice")(function* (
       return yield* booted.length === 0
         ? new NativeClientError({
             message:
-              "No iOS simulator is booted. Open one with device_open, or boot one: xcrun simctl boot <udid>",
+              "No iOS simulator is booted. Open one with pinacode_device_open, or boot one: xcrun simctl boot <udid>",
           })
         : choose(booted, "Several iOS simulators are booted. Pick one:");
     }
@@ -341,7 +341,7 @@ const resolveDevice = Effect.fn("nativeClient.resolveDevice")(function* (
     return yield* ready.length === 0
       ? new NativeClientError({
           message:
-            "No Android emulator or phone is connected. Open one with device_open, or start an emulator.",
+            "No Android emulator or phone is connected. Open one with pinacode_device_open, or start an emulator.",
         })
       : choose(ready, "Several Android devices are connected. Pick one:");
   const selected = device[0];
@@ -1244,7 +1244,7 @@ const main = Command.make(
     ),
     config: Flag.String("config").pipe(
       Flag.withDescription(
-        "With --session, the agent-device config the session was opened with (T3 Code's device_open returns it in targetArgs). Needed for a device pool behind a gateway.",
+        "With --session, the agent-device config the session was opened with (T3 Code's pinacode_device_open returns it in targetArgs). Needed for a device pool behind a gateway.",
       ),
       Flag.optional,
     ),

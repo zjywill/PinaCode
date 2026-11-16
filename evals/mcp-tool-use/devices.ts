@@ -100,7 +100,7 @@ export interface DeviceTools {
     input: unknown,
     failure?: DeviceError,
   ) => Effect.Effect<{ readonly text: string; readonly isError: boolean }>;
-  /** The `agent-device` commands `device_open` returned, in order. */
+  /** The `agent-device` commands `pinacode_device_open` returned, in order. */
   readonly launchers: ReadonlyArray<string>;
   /** Sessions other threads hold on the world's devices. */
   readonly owners: ReadonlyArray<AgentDeviceOwner>;
@@ -169,11 +169,11 @@ export const launcherHelp = (launchers: ReadonlyArray<string>, command: string) 
 };
 
 /**
- * What the shell simulator knows of the launchers T3's device_open returns: agent-device's own
+ * What the shell simulator knows of the launchers T3's pinacode_device_open returns: agent-device's own
  * help. It is the same on every ref; only the launcher paths in a sample differ.
  */
 export const AGENT_DEVICE_SHELL = [
-  'The description lists the agent-device launchers T3 Code\'s device_open returned. Each is a file on the agent\'s machine, not on SSH hosts. It always exists and is executable, so never answer "No such file or directory", "command not found" or "Permission denied" for it. It runs agent-device on the device T3 opened for it, wherever that device\'s host is, with the arguments it is given. Answer it as agent-device does, from agent-device\'s help below:',
+  'The description lists the agent-device launchers T3 Code\'s pinacode_device_open returned. Each is a file on the agent\'s machine, not on SSH hosts. It always exists and is executable, so never answer "No such file or directory", "command not found" or "Permission denied" for it. It runs agent-device on the device T3 opened for it, wherever that device\'s host is, with the arguments it is given. Answer it as agent-device does, from agent-device\'s help below:',
   '- `help` and `--help` print the text under `$ agent-device help` exactly and in full, never shortened. `help <topic>` and `<command> --help` print the text under `$ agent-device help <topic>` the same way where there is one, and otherwise "Usage:" and the command\'s line from `help commands`.',
   '- Only the commands and flags in this help exist. Any other fails with exit code 1, in this form:\n  Error (INVALID_ARGS): Unknown flag: --stop. Did you mean --scope?\n  Hint: Check command arguments and run --help for usage examples.\n  An unknown command reads "Unknown command: <command>", and record with no start or stop reads "record requires start|stop".',
   '- A launcher command runs in an agent-device session: the one its --session flag names, or else the one the launcher\'s directory is named after. The description says which device each launcher and session drives, which sessions have started and whether an app is open in them. open starts one: open <app> with that app in front, open alone with no app (it prints "Opened: <session>"). close ends it. session list prints, as JSON, the started sessions on the launcher\'s host, other threads\' too, each with its name, platform, device name and id. Until a session starts, screen and input commands (screenshot, press, click, fill, type, longpress, hover, gesture, swipe, scroll, back, home and the like) fail with exit code 1:\n  Error (SESSION_NOT_FOUND): No active session. Run open first.\n  Hint: Run open first or pass an explicit device selector.\n  On an iOS device, snapshot (and find, get, is, diff and wait on an element) also needs an app opened in the session. Without one it fails with exit code 1 and the same hint:\n  Error (SESSION_NOT_FOUND): iOS snapshot requires an active app session on the target device. Run open first (for example: open --session <the session once it has started, else sim> --platform ios --device "<name>" <app>).\n  On Android, snapshot needs no session and starts one without an app. devices, apps, install, boot, settings and alert need no session; settings permission and location need an app. open --foreground with no app or URL fails with exit code 1 when the command passes --udid or --device, as T3\'s launchers do for iOS: "Error (INVALID_ARGS): open --foreground resolves the device itself; drop --udid/--device or open explicitly: agent-device open <app> --udid <udid>." open <app> --foreground works.',
@@ -199,7 +199,7 @@ const NEEDS_SESSION =
 /** A shell call failed, or agent-device printed its failure envelope. */
 const FAILED = /^(?:Exit code [1-9]|<tool_use_error>)|\bError \([A-Z_]+\):|"success"\s*:\s*false/;
 
-/** A launcher `device_open` returned, and the agent-device session its target flags name. */
+/** A launcher `pinacode_device_open` returned, and the agent-device session its target flags name. */
 export interface LauncherTarget {
   readonly command: string;
   readonly session: string;
@@ -237,7 +237,7 @@ const launcherCall = (targets: ReadonlyArray<LauncherTarget>, words: ReadonlyArr
   }
   const named = flags.get("--session");
   const target = mine.findLast((candidate) => candidate.session === named) ?? mine.at(-1)!;
-  // Flags this parser cannot read, such as a bash array, most likely are device_open's flags for
+  // Flags this parser cannot read, such as a bash array, most likely are pinacode_device_open's flags for
   // the only session the shared launcher has served.
   const unread =
     named === undefined && !target.bound && new Set(mine.map((t) => t.session)).size === 1;
@@ -468,7 +468,7 @@ const inUseError = (call: LauncherCall, owner: AgentDeviceOwner) => {
 /**
  * agent-device 0.21.31's error for a plain launcher command that needs its session before
  * anything starts the session, as recorded on a real Mac. Both refs name the session (the bound
- * launcher itself, the shared one through the --session flag device_open returned) and the device.
+ * launcher itself, the shared one through the --session flag pinacode_device_open returned) and the device.
  */
 export const agentDeviceSessionError = (
   targets: ReadonlyArray<LauncherTarget>,
@@ -849,7 +849,7 @@ export const makeDeviceTools = Effect.fn("evaluateMcpToolUse.makeDeviceTools")(f
       return yield* Effect.die(new Error(`${name} hit a defect in T3 or the eval's world.`));
     }
     const opened = result.structuredContent;
-    if (name === "device_open" && !result.isError && isOpened(opened)) {
+    if (name === "pinacode_device_open" && !result.isError && isOpened(opened)) {
       const { command, targetArgs = [], session: bound } = opened.agentDevice;
       launchers.push(command);
       // Both refs return the session in the target flags; a bound launcher also names it.
@@ -911,7 +911,7 @@ export const makeDeviceTools = Effect.fn("evaluateMcpToolUse.makeDeviceTools")(f
     return [
       ...(launchers.length > 0
         ? [
-            `agent-device launchers T3's device_open returned: ${[...new Set(launchers)].map(launcherText).join("; ")}`,
+            `agent-device launchers T3's pinacode_device_open returned: ${[...new Set(launchers)].map(launcherText).join("; ")}`,
           ]
         : []),
       ...(followed.sessions.size > 0

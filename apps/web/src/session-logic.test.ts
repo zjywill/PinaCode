@@ -1318,7 +1318,7 @@ describe("HTML renders in the timeline", () => {
     ...base("render", 2),
     status,
     type: "dynamic_tool",
-    toolName: "mcp__t3-code__html_render",
+    toolName: "mcp__pinacode__pinacode_html_render",
     input: { title: "Chart", height: 420 },
     ...(output === undefined ? {} : { output }),
   });
@@ -1400,7 +1400,7 @@ describe("HTML renders in the timeline", () => {
       ...base("render", 2),
       status,
       type: "dynamic_tool",
-      toolName: "mcp__t3-code__send_to_user",
+      toolName: "mcp__pinacode__pinacode_send_to_user",
       input: { message: sentMessage },
       ...(output === undefined ? {} : { output }),
     });
@@ -2011,7 +2011,7 @@ it("renders automatic completion as a work entry instead of a user bubble", () =
             creationSource: "server" as const,
             inputIntent: "turn_start" as const,
             attachments: [],
-            text: "Delegated task node:task-1 reached a terminal state. Use task_status with taskId node:task-1 to read the result.",
+            text: "Delegated task node:task-1 reached a terminal state. Use pinacode_task_status with taskId node:task-1 to read the result.",
           },
         },
       ],

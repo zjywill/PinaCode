@@ -117,7 +117,7 @@ type PricedModel = keyof typeof PRICES;
 const PROXY_SHELL_MODELS = ["gpt-6-luna", "gpt-6.1-terra"] as const;
 type ShellModel = PricedModel | (typeof PROXY_SHELL_MODELS)[number];
 const isPricedModel = (model: ShellModel): model is PricedModel => model in PRICES;
-const T3_PREFIX = "mcp__t3-code__";
+const T3_PREFIX = "mcp__pinacode__";
 const RUNTIME_MARKER = "<runtime_info>";
 const TOOL_LOADED = "Tool loaded.";
 
@@ -162,7 +162,7 @@ export type SampleRun = {
   readonly linked?: ReadonlyArray<string>;
   /** The thread's working directory, which chat resolves relative file pills against. */
   readonly cwd?: string;
-  /** The `agent-device` commands T3's device_open returned, prior turns included. */
+  /** The `agent-device` commands T3's pinacode_device_open returned, prior turns included. */
   readonly launchers?: ReadonlyArray<string>;
 };
 
@@ -172,7 +172,7 @@ const PriorToolCall = Schema.Struct({
   tool: Schema.String,
   input: Schema.Unknown,
   /**
-   * For a device tool or t3_background_wait, `"default"` runs the call on the world's devices or
+   * For a device tool or pinacode_background_wait, `"default"` runs the call on the world's devices or
    * background tasks for T3's result.
    */
   result: Schema.Unknown,
@@ -190,7 +190,7 @@ const McpToolUseCall = Schema.Struct({
 });
 type McpToolUseCall = typeof McpToolUseCall.Type;
 
-/** Grading rules. Tool names are bare: `delegate_task`, `Bash`, `Agent`. */
+/** Grading rules. Tool names are bare: `pinacode_delegate_task`, `Bash`, `Agent`. */
 const McpToolUseExpect = Schema.Struct({
   /** Each entry needs one matching call. */
   calls: Schema.optional(Schema.Array(McpToolUseCall)),
@@ -204,8 +204,8 @@ const McpToolUseExpect = Schema.Struct({
   minCalls: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
   maxCalls: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
   /**
-   * One `args`-style value per new top-level thread the agent asks for, by `t3_thread_launch` or a
-   * `create_threads` entry. Each matches a different thread's request; no other thread is asked for.
+   * One `args`-style value per new top-level thread the agent asks for, by `pinacode_thread_launch` or a
+   * `pinacode_create_threads` entry. Each matches a different thread's request; no other thread is asked for.
    */
   newThreads: Schema.optional(Schema.Array(Schema.Unknown)),
   /** The last step with tool calls includes this tool, then the turn ends. */
@@ -230,7 +230,7 @@ const McpToolUseExpect = Schema.Struct({
   device: Schema.optional(DeviceExpect),
   /**
    * Secret checks: chat asks in text and question tools, where fixture values went, and how the
-   * files request_secret returned were read. See `SecretExpect` in secret-grading.ts.
+   * files pinacode_request_secret returned were read. See `SecretExpect` in secret-grading.ts.
    */
   secret: Schema.optional(SecretExpect),
   /** File pills in the final answer resolve against the thread cwd to `world.files` entries. */
@@ -281,7 +281,7 @@ const McpToolUseWorld = Schema.StructWithRest(
     deviceOwners: Schema.optional(Schema.Record(Schema.String, Schema.String)),
     /**
      * Task IDs of the background commands and Monitors still running on the agent's Claude
-     * session. With them, T3's own t3_background_wait handler answers from this world.
+     * session. With them, T3's own pinacode_background_wait handler answers from this world.
      */
     backgroundTasks: Schema.optional(Schema.Array(Schema.String)),
     /** PRs already linked to the thread, with the state T3 last saw. */
@@ -309,7 +309,7 @@ export const McpToolUseCase = Schema.Struct({
     harness: Schema.optional(Schema.Literals(["claude", "codex"])),
     /** The Linked environments beta is on, so T3 lists its link tools. */
     linkedEnvironments: Schema.optional(Schema.Boolean),
-    /** delegate_task `role` for a delegated child. T3 builds the child's first message from it. */
+    /** pinacode_delegate_task `role` for a delegated child. T3 builds the child's first message from it. */
     delegateRole: Schema.optional(OrchestratorMcpTaskRole),
     context: Schema.optional(Schema.String),
     priorTurns: Schema.optional(
@@ -412,7 +412,7 @@ const toolResult = (id: string, content: unknown): Block => ({
 });
 const texts = (content: typeof Content.Type) =>
   typeof content === "string" ? [content] : content.flatMap((block) => block.text ?? []);
-const isT3Name = (name: string) => name.startsWith(T3_PREFIX) || name.startsWith("mcp__t3_code__");
+const isT3Name = (name: string) => name.startsWith(T3_PREFIX) || name.startsWith("mcp__pinacode__");
 const hasTool = (tools: ReadonlyArray<ApiTool>, name: string) =>
   tools.some((tool) => tool.name === name);
 
@@ -500,17 +500,17 @@ const alwaysLoaded = new Set(
     })
     .map((tool) => `${T3_PREFIX}${tool.name}`),
 );
-// Refs whose request_secret takes `value` save a secret the user already pasted, with no card.
+// Refs whose pinacode_request_secret takes `value` save a secret the user already pasted, with no card.
 export const savesPastedSecrets = t3Tools.some(
   (tool) =>
-    tool.name === `${T3_PREFIX}request_secret` &&
+    tool.name === `${T3_PREFIX}pinacode_request_secret` &&
     isRecord(tool.input_schema) &&
     isRecord(tool.input_schema.properties) &&
     "value" in tool.input_schema.properties,
 );
-/** A request_secret call that hands T3 a pasted secret, on a ref that takes one. */
+/** A pinacode_request_secret call that hands T3 a pasted secret, on a ref that takes one. */
 const pastedSecret = (name: string, input: Readonly<Record<string, unknown>>) =>
-  savesPastedSecrets && name === "request_secret" && typeof input.value === "string";
+  savesPastedSecrets && name === "pinacode_request_secret" && typeof input.value === "string";
 // T3 does not offer these to a delegated child, so its harness never lists them.
 const hiddenFromSubagents = enabledWhen(McpInvocationContext.hiddenFromSubagents);
 // The Linked environments beta starts off, and T3 lists its tools only while it is on.
@@ -537,7 +537,7 @@ const claudeQueryOptions = (model: Model, device = true, browser = true) => {
     nativeThreadId: "mcp-tool-use-eval",
     resume: false,
     cwd: null,
-    mcpServers: { "t3-code": { type: "http", url: "http://127.0.0.1/mcp" } },
+    mcpServers: { pinacode: { type: "http", url: "http://127.0.0.1/mcp" } },
     deviceToolsAvailable: device,
     browserToolsAvailable: browser,
   };
@@ -812,7 +812,7 @@ const codexCall = (name: string, input: unknown) => {
           : `python3 -c ${JSON.stringify(`from pathlib import Path; p=Path(${JSON.stringify(file)}); p.write_text(p.read_text().replace(${JSON.stringify(args.old_string)}, ${JSON.stringify(args.new_string)}))`)}`;
     return `text(await tools.exec_command(${JSON.stringify({ cmd: command })}));`;
   }
-  return `text(await tools.${name.replace("mcp__t3-code__", "mcp__t3_code__")}(${JSON.stringify(input)}));`;
+  return `text(await tools.${name.replace("mcp__pinacode__", "mcp__pinacode__")}(${JSON.stringify(input)}));`;
 };
 const codexMessages = (messages: ReadonlyArray<ApiMessage>): Array<Block> =>
   messages.flatMap((message) =>
@@ -866,7 +866,7 @@ type Sample = {
   nextTask: number;
   /** Threads the agent launched in this sample, by id, so reading one shows its own brief. */
   readonly threads: Map<string, { readonly title: string; readonly brief: string }>;
-  /** Files T3's request_secret saved in this sample, in call order. */
+  /** Files T3's pinacode_request_secret saved in this sample, in call order. */
   readonly secretFiles: Array<string>;
   secretRequests: number;
   /** T3's device tools, once `withDevices` builds them for a world with devices. */
@@ -875,7 +875,7 @@ type Sample = {
   readonly priorResults: Map<unknown, string>;
   /** Prior calls whose T3 result is an error, so the agent sees it as one. */
   readonly priorErrors: Set<unknown>;
-  /** T3's t3_background_wait, once `withBackgroundWait` builds it for `world.backgroundTasks`. */
+  /** T3's pinacode_background_wait, once `withBackgroundWait` builds it for `world.backgroundTasks`. */
   backgroundWait?: BackgroundWait;
   /** Calls so far per mocked tool, for mocks that answer in sequence. */
   readonly mockCalls: Map<string, number>;
@@ -892,9 +892,10 @@ export const makeSample = (testCase: McpToolUseCase, base: Base): Sample => {
       ({ number }) => pullRequest(repo, { number }).url,
     ),
     ...priorCalls.flatMap((call) =>
-      ["link_pull_request", "watch_pull_request"].includes(call.tool) && isRecord(call.input)
+      ["pinacode_link_pull_request", "pinacode_watch_pull_request"].includes(call.tool) &&
+      isRecord(call.input)
         ? [pullRequest(repo, call.input).url]
-        : call.tool === "link_pull_requests" &&
+        : call.tool === "pinacode_link_pull_requests" &&
             isRecord(call.input) &&
             Array.isArray(call.input.urls)
           ? call.input.urls
@@ -939,7 +940,7 @@ const nextMock = (sample: Sample, name: string, mock: unknown) => {
 /**
  * Builds T3's device tools for a world with devices. Prior device calls whose result is "default"
  * run first, in order and without the case's mocks, so their results and sessions are T3's. As in
- * the real flow, device_open starts no agent-device session: one starts at a launcher `open` in the
+ * the real flow, pinacode_device_open starts no agent-device session: one starts at a launcher `open` in the
  * sample's shell history, prior turns included, or where `world.agentDeviceSessions` declares it.
  */
 export const withDevices = Effect.fn("evaluateMcpToolUse.withDevices")(function* (sample: Sample) {
@@ -956,7 +957,7 @@ export const withDevices = Effect.fn("evaluateMcpToolUse.withDevices")(function*
 });
 
 /**
- * Builds T3's t3_background_wait for a world with background tasks, and answers prior waits whose
+ * Builds T3's pinacode_background_wait for a world with background tasks, and answers prior waits whose
  * result is "default" with T3's result.
  */
 export const withBackgroundWait = Effect.fn("evaluateMcpToolUse.withBackgroundWait")(function* (
@@ -967,7 +968,7 @@ export const withBackgroundWait = Effect.fn("evaluateMcpToolUse.withBackgroundWa
   const backgroundWait = yield* makeBackgroundWait(running);
   sample.backgroundWait = backgroundWait;
   for (const call of (sample.testCase.setup.priorTurns ?? []).flatMap((t) => t.toolCalls ?? [])) {
-    if (call.result !== "default" || call.tool !== "t3_background_wait") continue;
+    if (call.result !== "default" || call.tool !== "pinacode_background_wait") continue;
     const result = yield* backgroundWait(call.input);
     sample.priorResults.set(call, result.text);
     if (result.isError) sample.priorErrors.add(call);
@@ -1063,7 +1064,7 @@ export const buildMessages = (sample: Sample) => {
       if (tool === undefined) throw new Error(`${testCase.id}: unknown prior tool ${call.tool}.`);
       const builder = isDeviceTool(call.tool)
         ? "withDevices"
-        : call.tool === "t3_background_wait"
+        : call.tool === "pinacode_background_wait"
           ? "withBackgroundWait"
           : undefined;
       if (call.result === "default" && builder && !sample.priorResults.has(call)) {
@@ -1086,7 +1087,7 @@ export const buildMessages = (sample: Sample) => {
     for (const { id, name, input, result, tool, prior } of calls) {
       push("assistant", { type: "tool_use", id, name, input });
       const replayed =
-        normalizeToolName(tool.name) === "orchestrator_capabilities"
+        normalizeToolName(tool.name) === "pinacode_orchestrator_capabilities"
           ? capabilities(sample, result)
           : (sample.priorResults.get(prior) ?? result);
       const answer = toolResult(id, replayed);
@@ -1164,7 +1165,7 @@ const pullRequest = (repo: string, input: Readonly<Record<string, unknown>>) => 
   };
 };
 
-/** A linked PR as `list_thread_pull_requests` shows it. Links made in the sample are open. */
+/** A linked PR as `pinacode_list_thread_pull_requests` shows it. Links made in the sample are open. */
 const linkedEntry = (sample: Sample, url: string) => {
   const pr = pullRequest(sample.repo, { url });
   const seeded = sample.testCase.setup.world?.linkedPullRequests?.find(
@@ -1193,9 +1194,9 @@ export const t3Default = (
     };
   };
   switch (name) {
-    case "t3_thread_launch":
+    case "pinacode_thread_launch":
       return newThread(input, input.message);
-    case "create_threads":
+    case "pinacode_create_threads":
       return {
         threads: (Array.isArray(input.threads) ? input.threads : []).map((request) => {
           const target = isRecord(request) && isRecord(request.target) ? request.target : {};
@@ -1209,13 +1210,13 @@ export const t3Default = (
           };
         }),
       };
-    case "orchestrator_capabilities":
+    case "pinacode_orchestrator_capabilities":
       return {
         inheritedProviderInstanceId: "claudeAgent",
         inheritedModel: sample.base.model,
         providers: PROVIDERS,
       };
-    case "delegate_task": {
+    case "pinacode_delegate_task": {
       const n = sample.nextTask++;
       const target = isRecord(input.target) ? input.target : {};
       return {
@@ -1233,7 +1234,7 @@ export const t3Default = (
         pendingApproval: null,
       };
     }
-    case "task_status":
+    case "pinacode_task_status":
       return {
         taskId: input.taskId,
         status: "running",
@@ -1241,14 +1242,14 @@ export const t3Default = (
         hasPendingChildRuns: false,
         summary: null,
       };
-    case "task_cancel":
+    case "pinacode_task_cancel":
       return { taskId: input.taskId, status: "cancel_requested" };
-    case "link_pull_request": {
+    case "pinacode_link_pull_request": {
       const alreadyLinked = sample.linked.has(pr().url);
       sample.linked.add(pr().url);
       return { ...pr(), alreadyLinked };
     }
-    case "link_pull_requests": {
+    case "pinacode_link_pull_requests": {
       const urls = Array.isArray(input.urls) ? input.urls.map(valueText) : [];
       const invalidUrls = urls.filter((url) => !PULL_REQUEST_URL.test(url));
       const targets = [...new Set(urls.filter((url) => PULL_REQUEST_URL.test(url)))].map((url) =>
@@ -1269,7 +1270,7 @@ export const t3Default = (
         ...(invalidUrls.length > 0 ? { invalidUrls } : {}),
       };
     }
-    case "request_secret": {
+    case "pinacode_request_secret": {
       // T3 names a ref and a file with 32 hex characters, new for each request, in its secrets dir.
       const id = NodeCrypto.createHash("sha256")
         .update(`${sample.testCase.id}:${sample.secretRequests++}`)
@@ -1281,9 +1282,9 @@ export const t3Default = (
         ? { status: "saved", file: `${home}/.t3/userdata/secrets/files/${id}` }
         : { status: "saved", secretRef: `secret-ref:${id}` };
     }
-    case "unlink_pull_request":
+    case "pinacode_unlink_pull_request":
       return { ...pr(), wasLinked: sample.linked.delete(pr().url) };
-    case "unlink_pull_requests": {
+    case "pinacode_unlink_pull_requests": {
       const states = Array.isArray(input.states) ? input.states : [];
       const unlinked = [...sample.linked]
         .map((url) => linkedEntry(sample, url))
@@ -1301,12 +1302,12 @@ export const t3Default = (
         remaining: sample.linked.size,
       };
     }
-    case "watch_pull_request":
+    case "pinacode_watch_pull_request":
       sample.linked.add(pr().url);
       return { ...pr(), watching: true, wasWatching: false };
-    case "unwatch_pull_request":
+    case "pinacode_unwatch_pull_request":
       return { ...pr(), watching: false, wasWatching: true };
-    case "list_thread_pull_requests": {
+    case "pinacode_list_thread_pull_requests": {
       const states = Array.isArray(input.states) ? input.states : undefined;
       const matching = [...sample.linked]
         .map((url) => ({ ...linkedEntry(sample, url), source: "agent", watching: false }))
@@ -1319,7 +1320,7 @@ export const t3Default = (
         nextCursor: end < matching.length ? String(end) : null,
       };
     }
-    case "t3_thread_read": {
+    case "pinacode_thread_read": {
       const threadId = valueText(input.threadId);
       const launched = sample.threads.get(threadId);
       if (launched !== undefined) {
@@ -1338,14 +1339,14 @@ export const t3Default = (
       const { title, status, items } = DEFAULT_THREAD;
       return { thread: { threadId, title, status }, items, nextPosition: 3, hasMore: false };
     }
-    case "html_preview":
+    case "pinacode_html_preview":
       return { width: 728, contentHeight: 560, capturedHeight: 560, consoleMessages: [] };
-    case "html_render":
+    case "pinacode_html_render":
       return {
         htmlRender: { attachmentId: "att-1", title: input.title ?? "Visual", height: 560 },
         message: HTML_RENDERED,
       };
-    case "preview_status":
+    case "pinacode_preview_status":
       return {
         available: false,
         visible: false,
@@ -1387,29 +1388,29 @@ const withProductFields = (name: string, value: unknown, child: boolean): unknow
   const listed = (key: string) =>
     Array.isArray(value[key]) ? { ...value, [key]: value[key].map((item) => linked(item)) } : value;
   switch (name) {
-    case "request_secret": {
+    case "pinacode_request_secret": {
       const note = typeof value.status === "string" ? unsavedSecretNote?.[value.status] : undefined;
       return note === undefined || value.note !== undefined ? value : { ...value, note };
     }
-    case "delegate_task":
-    case "task_status": {
+    case "pinacode_delegate_task":
+    case "pinacode_task_status": {
       const task = linked(value, "childThreadId") as Record<string, unknown>;
       const running = task.status === "running" && task.next === undefined;
       return running ? { ...task, next: ORCHESTRATOR_MCP_RUNNING_TASK_NEXT } : task;
     }
-    case "t3_thread_read":
+    case "pinacode_thread_read":
       return { ...value, thread: linked(value.thread) };
-    case "t3_thread_launch":
-    case "t3_thread_send":
-    case "run_scheduled_task_now":
+    case "pinacode_thread_launch":
+    case "pinacode_thread_send":
+    case "pinacode_run_scheduled_task_now":
       return linked(value);
-    case "t3_thread_list":
-    case "create_threads":
+    case "pinacode_thread_list":
+    case "pinacode_create_threads":
       return listed("threads");
-    case "t3_thread_search":
+    case "pinacode_thread_search":
       return listed("matches");
-    case "link_pull_request":
-    case "link_pull_requests":
+    case "pinacode_link_pull_request":
+    case "pinacode_link_pull_requests":
       return child ? { ...value, next: CHILD_PULL_REQUEST_REPORT_NEXT } : value;
     default:
       return value;
@@ -1519,12 +1520,12 @@ export const shellRequest = (sample: Sample, call: Omit<ShellEntry, "output">, m
     ...(devices?.describe(shell, typeof command === "string" ? command : undefined) ?? []),
     ...(world?.deviceInvalidCapture
       ? [
-          "T3's device_screenshot gets each capture as a PNG whose header says 0×0, so it reports 0×0. agent-device's own screenshot is unaffected.",
+          "T3's pinacode_device_screenshot gets each capture as a PNG whose header says 0×0, so it reports 0×0. agent-device's own screenshot is unaffected.",
         ]
       : []),
     ...(sample.secretFiles.length > 0
       ? [
-          `T3's request_secret saved these files in this sample: ${sample.secretFiles.join(", ")}. Each exists, is readable only by the user, and holds exactly the value the user gave, typed into T3's private card or pasted in chat and saved by the agent, the right one for the task, with no trailing newline. A program that reads it, as in "$(cat <file>)", < <file> or a --*-file flag, gets that value. What appears in the output is whatever that program prints: one that prints or logs its input shows the value. No other file in that directory exists.`,
+          `T3's pinacode_request_secret saved these files in this sample: ${sample.secretFiles.join(", ")}. Each exists, is readable only by the user, and holds exactly the value the user gave, typed into T3's private card or pasted in chat and saved by the agent, the right one for the task, with no trailing newline. A program that reads it, as in "$(cat <file>)", < <file> or a --*-file flag, gets that value. What appears in the output is whatever that program prints: one that prints or logs its input shows the value. No other file in that directory exists.`,
         ]
       : []),
     ...(context ? [`The agent was told: ${context}`] : []),
@@ -1623,7 +1624,7 @@ const simulate = Effect.fn("evaluateMcpToolUse.simulate")(function* (
   return output;
 });
 
-/** Tells the shell simulator about a file request_secret saved, so it exists for later commands. */
+/** Tells the shell simulator about a file pinacode_request_secret saved, so it exists for later commands. */
 const savedSecretFile = (sample: Sample, result: unknown) => {
   if (isRecord(result) && typeof result.file === "string") sample.secretFiles.push(result.file);
 };
@@ -1687,30 +1688,35 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
     const result = yield* sample.devices.call(name, input, failure);
     return result.isError ? failed(result.text) : toolResult(call.id, result.text);
   }
-  if (sample.backgroundWait && isT3Name(call.name) && name === "t3_background_wait" && fromWorld) {
+  if (
+    sample.backgroundWait &&
+    isT3Name(call.name) &&
+    name === "pinacode_background_wait" &&
+    fromWorld
+  ) {
     const result = yield* sample.backgroundWait(input);
     return result.isError ? failed(result.text) : toolResult(call.id, result.text);
   }
   // A pasted secret is saved without a card, so a mocked card outcome does not apply.
   if (mock !== undefined && mock !== "default" && !pastedSecret(name, input)) {
-    if (name === "request_secret") savedSecretFile(sample, mock);
+    if (name === "pinacode_request_secret") savedSecretFile(sample, mock);
     return toolResult(
       call.id,
-      name === "orchestrator_capabilities"
+      name === "pinacode_orchestrator_capabilities"
         ? capabilities(sample, mock)
         : withProductFields(name, mock, testCase.setup.role === "delegated-child"),
     );
   }
   if (isT3Name(call.name)) {
     // T3 refuses a watch from a delegated child.
-    if (name === "watch_pull_request" && testCase.setup.role === "delegated-child") {
+    if (name === "pinacode_watch_pull_request" && testCase.setup.role === "delegated-child") {
       return failed(SUBAGENT_WATCH_ERROR);
     }
     const value = t3Default(sample, name, input);
-    if (name === "request_secret") savedSecretFile(sample, value);
+    if (name === "pinacode_request_secret") savedSecretFile(sample, value);
     return toolResult(
       call.id,
-      name === "orchestrator_capabilities"
+      name === "pinacode_orchestrator_capabilities"
         ? capabilities(sample, value)
         : withProductFields(name, value, testCase.setup.role === "delegated-child"),
     );
@@ -1759,9 +1765,9 @@ const matches = (expected: unknown, actual: unknown): boolean => {
 const newThreadRequests = (calls: ReadonlyArray<Call>) =>
   calls.flatMap((call): ReadonlyArray<{ request: unknown; brief: unknown }> => {
     if (call.failed === true || !isRecord(call.input)) return [];
-    if (call.tool === "t3_thread_launch")
+    if (call.tool === "pinacode_thread_launch")
       return [{ request: call.input, brief: call.input.message }];
-    if (call.tool !== "create_threads" || !Array.isArray(call.input.threads)) return [];
+    if (call.tool !== "pinacode_create_threads" || !Array.isArray(call.input.threads)) return [];
     return call.input.threads.map((request: unknown) => ({
       request,
       brief: isRecord(request) ? request.prompt : undefined,
@@ -1784,7 +1790,7 @@ const matchesDistinct = (
   );
 };
 
-/** delegate_task takes `target.options` as an object or `[{id, value}]`. Grade both as an object. */
+/** pinacode_delegate_task takes `target.options` as an object or `[{id, value}]`. Grade both as an object. */
 const withOptionsObject = (input: unknown) => {
   if (!isRecord(input) || !isRecord(input.target) || !Array.isArray(input.target.options)) {
     return input;
@@ -1809,7 +1815,8 @@ export const pastedText = ({ prompt, setup }: Pick<McpToolUseCase, "prompt" | "s
     prompt,
   ].join("\n");
 
-const isPageTool = (tool: string) => tool === "html_preview" || tool === "html_render";
+const isPageTool = (tool: string) =>
+  tool === "pinacode_html_preview" || tool === "pinacode_html_render";
 
 /** `page` is the HTML a page tool shows: its inline `html`, or the file the agent wrote at `path`. */
 const withPage = (tool: string, input: unknown, files: ReadonlyMap<string, string>) => {
@@ -1833,7 +1840,7 @@ const withPage = (tool: string, input: unknown, files: ReadonlyMap<string, strin
   return { ...input, page };
 };
 
-/** `pasted` is the thread's user text (`pastedText`), for request_secret's `value`. */
+/** `pasted` is the thread's user text (`pastedText`), for pinacode_request_secret's `value`. */
 export const gradeSample = (
   expect: McpToolUseCase["expect"],
   run: SampleRun,
@@ -1854,7 +1861,7 @@ export const gradeSample = (
     ),
   }));
   const calls = attempted.filter((call) => !(call.failed && isPageTool(call.tool)));
-  // `tool` may list alternatives, as in "link_pull_request|watch_pull_request"; counts add up.
+  // `tool` may list alternatives, as in "pinacode_link_pull_request|pinacode_watch_pull_request"; counts add up.
   const count = (tool: string) =>
     calls.filter((call) => tool.split("|").includes(call.tool)).length;
   const found = ({ tool, args = {} }: McpToolUseCall, among = calls) =>
@@ -2037,7 +2044,7 @@ export const executeCodex = async (
 
 const codexCatalog = (base: Base) => [
   ...base.t3.map((tool) => ({
-    name: tool.name.replace("mcp__t3-code__", "mcp__t3_code__"),
+    name: tool.name.replace("mcp__pinacode__", "mcp__pinacode__"),
     description: `${valueText(tool.description)}\nInput JSON schema: ${JSON.stringify(tool.input_schema)}`,
   })),
   ...[
