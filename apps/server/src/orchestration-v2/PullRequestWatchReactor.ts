@@ -755,20 +755,22 @@ export const make = Effect.gen(function* () {
       status: fingerprint?.status ?? null,
       remarks: fingerprint?.remarks ?? null,
     });
+    const unresolvedReviewThreads = Option.isSome(activity)
+      ? pullRequestConversationThreads(activity.value).filter((thread) => !thread.isResolved).length
+      : undefined;
     yield* eachTarget(group, (target) => {
       const report = evaluatePullRequestWatch(
         target.watch,
         {
           ...detail,
-          ...(Option.isSome(activity) &&
-          activity.value.reviewThreadsTruncated !== true &&
-          remarks !== null
-            ? {
-                unresolvedReviewThreads: pullRequestConversationThreads(activity.value).filter(
-                  (thread) => !thread.isResolved,
-                ).length,
-              }
-            : {}),
+          unresolvedReviewThreads:
+            unresolvedReviewThreads !== undefined &&
+            (unresolvedReviewThreads > 0 ||
+              (Option.isSome(activity) &&
+                activity.value.reviewThreadsTruncated !== true &&
+                remarks !== null))
+              ? unresolvedReviewThreads
+              : undefined,
         },
         remarks,
         now,

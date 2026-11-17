@@ -252,30 +252,37 @@ const make = Effect.gen(function* () {
                 followUps.find((binding) => binding?.childThreadId === task.childThreadId)
                   ?.issueUrl,
             }))
-            .filter((task) => task.issueUrl !== undefined && task.childThreadId !== null)
+            .filter((task) => task.childThreadId !== null)
             .map((task) => [task.childThreadId, task]),
         ).values(),
       ],
       (task) =>
         engine.getThreadShell(task.childThreadId!).pipe(
           Effect.mapError((cause) => new PullRequestWatchFailedError({ cause })),
-          Effect.map((child) => ({
-            issueUrl: task.issueUrl!,
-            childThreadId: task.childThreadId!,
-            worktreePath: child?.worktreePath ?? null,
-            providerInstanceId: child?.providerInstanceId ?? task.providerInstanceId,
-            model: child?.modelSelection.model ?? task.model,
-            status:
-              child?.deletedAt != null
-                ? "deleted"
-                : child?.archivedAt != null
-                  ? "archived"
-                  : (child?.status ?? "unavailable"),
-          })),
+          Effect.map((child) =>
+            task.issueUrl === undefined && child?.lineage.relationshipToParent !== "delegation"
+              ? null
+              : {
+                  issueUrl: task.issueUrl ?? null,
+                  childThreadId: task.childThreadId!,
+                  worktreePath: child?.worktreePath ?? null,
+                  providerInstanceId: child?.providerInstanceId ?? task.providerInstanceId,
+                  model: child?.modelSelection.model ?? task.model,
+                  status:
+                    child?.deletedAt != null
+                      ? "deleted"
+                      : child?.archivedAt != null
+                        ? "archived"
+                        : (child?.status ?? "unavailable"),
+                },
+          ),
         ),
       { concurrency: 4 },
     );
-    return { sessions, pullRequests: threadPullRequestsOf(thread) };
+    return {
+      sessions: sessions.filter((session) => session !== null),
+      pullRequests: threadPullRequestsOf(thread),
+    };
   });
 
   return PullRequestWatchService.of({ setWatching, readWorkflow });

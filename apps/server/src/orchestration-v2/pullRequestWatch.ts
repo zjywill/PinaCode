@@ -249,7 +249,6 @@ export function evaluatePullRequestWatch(
       detail.unresolvedReviewThreads === undefined ||
       detail.isDraft === undefined ||
       detail.mergeGate === undefined ||
-      detail.mergeGate === "unknown" ||
       detail.platformReviewDecision === undefined;
     let phase: PullRequestFollowUp["phase"];
     if (blockers.length > 0) phase = "blocked";
@@ -262,6 +261,9 @@ export function evaluatePullRequestWatch(
     } else if (detail.platformReviewDecision !== "approved") {
       phase = "waiting-approval";
       blockers.push("Valid platform approval not established");
+    } else if (detail.mergeGate === "unknown") {
+      phase = "unreadable";
+      blockers.push("Host merge readiness not yet established");
     } else if (detail.mergeGate !== "ready") {
       phase = "blocked";
       blockers.push("Platform merge restrictions");

@@ -109,10 +109,44 @@ describe("evaluatePullRequestWatch", () => {
     );
     const moved = evaluatePullRequestWatch(
       ready.next,
-      { ...approved, headSha: "bbbbbbbbbb", checks: [], platformReviewDecision: null },
+      {
+        ...approved,
+        headSha: "bbbbbbbbbb",
+        checks: [],
+        platformReviewDecision: null,
+        mergeGate: "unknown",
+      },
       noRemarks,
     );
     assert.equal(moved.next.followUp?.phase, "waiting-ci");
+    for (const checks of [[], [check("test", "pending")]]) {
+      assert.equal(
+        evaluatePullRequestWatch(
+          ready.next,
+          { ...approved, checks, mergeGate: "unknown" },
+          noRemarks,
+        ).next.followUp?.phase,
+        "waiting-ci",
+      );
+    }
+    assert.equal(
+      evaluatePullRequestWatch(ready.next, { ...green, mergeGate: "unknown" }, noRemarks).next
+        .followUp?.phase,
+      "waiting-approval",
+    );
+    assert.equal(
+      evaluatePullRequestWatch(ready.next, { ...approved, mergeGate: "unknown" }, noRemarks).next
+        .followUp?.phase,
+      "unreadable",
+    );
+    assert.equal(
+      evaluatePullRequestWatch(
+        ready.next,
+        { ...green, checks: [], mergeGate: undefined },
+        noRemarks,
+      ).next.followUp?.phase,
+      "unreadable",
+    );
     const blocked = evaluatePullRequestWatch(
       ready.next,
       { ...approved, platformReviewDecision: "review-required", unresolvedReviewThreads: 1 },

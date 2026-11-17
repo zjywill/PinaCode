@@ -5518,6 +5518,19 @@ it.layer(layerContinuationWorkerTest)("independent review sessions", (it) => {
           ],
         });
         const children: Array<{ threadId: ThreadId; runId: RunId; worktreePath: string }> = [];
+        const readWorkflow = PullRequestWatchService.PullRequestWatchService.pipe(
+          Effect.flatMap((service) => service.readWorkflow(parentThreadId)),
+          Effect.provide(
+            PullRequestWatchService.layer.pipe(
+              Layer.provide(
+                Layer.mergeAll(
+                  NodeCrypto.layer,
+                  Layer.mock(PullRequestService.PullRequestService)({}),
+                ),
+              ),
+            ),
+          ),
+        );
         for (const issue of [1, 2, 3, 4, 5, 6, 7]) {
           if (issue === 5) {
             const morning = yield* orchestrator.getThreadProjection(parentThreadId);
@@ -5575,6 +5588,17 @@ it.layer(layerContinuationWorkerTest)("independent review sessions", (it) => {
           });
           const retry = yield* orchestrator.dispatch({ ...command, workspaceStrategy: undefined });
           assert.isTrue(retry.replayed);
+          const beforePullRequest = yield* readWorkflow;
+          assert.lengthOf(beforePullRequest.sessions, issue);
+          assert.deepInclude(beforePullRequest.sessions, {
+            issueUrl: issue > 4 ? issueUrl : null,
+            childThreadId,
+            worktreePath,
+            providerInstanceId: child.thread.providerInstanceId,
+            model: child.thread.modelSelection.model,
+            status: (yield* orchestrator.getThreadShell(childThreadId))!.status,
+          });
+          assert.lengthOf(beforePullRequest.pullRequests, issue - 1);
           yield* orchestrator.dispatch({
             type: "thread.pull-request.link",
             commandId: CommandId.make(`independent-pr-${issue}`),
@@ -5738,19 +5762,7 @@ it.layer(layerContinuationWorkerTest)("independent review sessions", (it) => {
           7,
         );
         assert.lengthOf(accepted.thread.pullRequests?.filter((link) => link.watch) ?? [], 7);
-        const restored = yield* PullRequestWatchService.PullRequestWatchService.pipe(
-          Effect.flatMap((service) => service.readWorkflow(parentThreadId)),
-          Effect.provide(
-            PullRequestWatchService.layer.pipe(
-              Layer.provide(
-                Layer.mergeAll(
-                  NodeCrypto.layer,
-                  Layer.mock(PullRequestService.PullRequestService)({}),
-                ),
-              ),
-            ),
-          ),
-        );
+        const restored = yield* readWorkflow;
         assert.lengthOf(restored.sessions, 7);
         for (const [index, child] of children.entries()) {
           assert.deepEqual(

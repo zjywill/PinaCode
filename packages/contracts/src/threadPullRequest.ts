@@ -158,7 +158,7 @@ export type ThreadPullRequestLink = typeof ThreadPullRequestLink.Type;
 export const PullRequestWorkflowState = Schema.Struct({
   sessions: Schema.Array(
     Schema.Struct({
-      issueUrl: Schema.String,
+      issueUrl: Schema.NullOr(Schema.String),
       childThreadId: ThreadId,
       worktreePath: Schema.NullOr(Schema.String),
       providerInstanceId: Schema.String,

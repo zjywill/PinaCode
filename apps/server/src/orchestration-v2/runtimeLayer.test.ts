@@ -4730,6 +4730,7 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         let unreadable = false;
         let rateLimited = false;
         let reviewResolved = true;
+        let reviewThreadsTruncated = false;
         let comments: ReadonlyArray<PullRequestComment> = [];
         const host = Layer.mergeAll(
           NodeServices.layer,
@@ -4771,7 +4772,7 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
                 comments,
                 commentCount: comments.length,
                 commentsTruncated: false,
-                reviewThreadsTruncated: false,
+                reviewThreadsTruncated,
                 reviewThreads: [
                   {
                     id: "follow-up-review",
@@ -4800,9 +4801,15 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         detail = { ...detail, platformReviewDecision: "approved" };
         assert.equal((yield* sweep)?.followUp?.phase, "awaiting-acceptance");
         reviewResolved = false;
+        reviewThreadsTruncated = true;
         yield* TestClock.adjust("2 minutes");
-        assert.equal((yield* sweep)?.followUp?.phase, "blocked");
+        const incompleteBlocked = yield* sweep;
+        assert.equal(incompleteBlocked?.followUp?.phase, "blocked");
+        assert.include(incompleteBlocked?.followUp?.blockers ?? [], "Unresolved review threads");
         reviewResolved = true;
+        yield* TestClock.adjust("2 minutes");
+        assert.equal((yield* sweep)?.followUp?.phase, "unreadable");
+        reviewThreadsTruncated = false;
         yield* TestClock.adjust("2 minutes");
         assert.equal((yield* sweep)?.followUp?.phase, "awaiting-acceptance");
         detail = { ...detail, mergeGate: "blocked" };
