@@ -255,29 +255,35 @@ export function useThreadListV2(input: {
   }, []);
   const grouped = useMemo(
     () =>
-      groupDelegationList({
-        items,
-        threadOf: (item) => (item.type === "v2-thread" ? item.item.thread : undefined),
-        threads,
-        collapsed: collapsedDelegations,
-      }),
-    [items, threads, collapsedDelegations],
+      input.searchQuery.trim() !== ""
+        ? null
+        : groupDelegationList({
+            items,
+            threadOf: (item) => (item.type === "v2-thread" ? item.item.thread : undefined),
+            sectionOf: (item) =>
+              item.type === "v2-thread" && item.item.pinned ? "pinned" : "unpinned",
+            threads,
+            collapsed: collapsedDelegations,
+          }),
+    [items, threads, collapsedDelegations, input.searchQuery],
   );
   const delegatedItems = useMemo(
     () =>
-      grouped.items.map((item) =>
-        item.type === "v2-thread"
-          ? {
-              ...item,
-              delegation: grouped.rows.get(
-                scopedThreadKey(
-                  scopeThreadRef(item.item.thread.environmentId, item.item.thread.id),
-                ),
-              ),
-            }
-          : item,
-      ),
-    [grouped],
+      grouped === null
+        ? items
+        : grouped.items.map((item) =>
+            item.type === "v2-thread"
+              ? {
+                  ...item,
+                  delegation: grouped.rows.get(
+                    scopedThreadKey(
+                      scopeThreadRef(item.item.thread.environmentId, item.item.thread.id),
+                    ),
+                  ),
+                }
+              : item,
+          ),
+    [grouped, items],
   );
   return {
     layout,

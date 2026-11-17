@@ -12,6 +12,7 @@ import { scopeThreadRef, scopedThreadKey } from "../environment/scoped.ts";
 export interface DelegationListRow {
   readonly depth: number;
   readonly childCount: number;
+  readonly taskCount: number;
   readonly expanded: boolean;
   readonly activeCount: number;
   readonly blockedCount: number;
@@ -23,15 +24,27 @@ export interface DelegationListRow {
 export function groupDelegationList<T>(input: {
   readonly items: ReadonlyArray<T>;
   readonly threadOf: (item: T) => EnvironmentThreadShell | undefined;
+  readonly sectionOf?: (item: T) => string | undefined;
   readonly threads: ReadonlyArray<EnvironmentThreadShell>;
   readonly collapsed: ReadonlySet<string>;
 }): { readonly items: ReadonlyArray<T>; readonly rows: ReadonlyMap<string, DelegationListRow> } {
   const keyOf = (thread: EnvironmentThreadShell) =>
     scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
   const visible = new Map<string, T>();
+  const partitions = new Map<string, number>();
+  let partition = 0;
+  let previousSection: string | undefined;
   for (const item of input.items) {
     const thread = input.threadOf(item);
-    if (thread !== undefined) visible.set(keyOf(thread), item);
+    if (thread === undefined) {
+      partition++;
+      continue;
+    }
+    const section = input.sectionOf?.(item);
+    if (section !== previousSection) partition++;
+    previousSection = section;
+    visible.set(keyOf(thread), item);
+    partitions.set(keyOf(thread), partition);
   }
   const parentByKey = new Map<string, string>();
   const children = new Map<string, string[]>();
@@ -45,7 +58,7 @@ export function groupDelegationList<T>(input: {
     const parentKey = scopedThreadKey(
       scopeThreadRef(thread.environmentId, thread.lineage.parentThreadId),
     );
-    if (parentKey === key || !visible.has(parentKey)) continue;
+    if (parentKey === key || partitions.get(parentKey) !== partitions.get(key)) continue;
     parentByKey.set(key, parentKey);
     const siblings = children.get(parentKey) ?? [];
     siblings.push(key);
@@ -77,7 +90,7 @@ export function groupDelegationList<T>(input: {
           : phase === "waiting-approval"
             ? "Waiting for approval"
             : phase === "awaiting-acceptance"
-              ? "Ready to merge"
+              ? "Awaiting coordinator acceptance"
               : phase === "unreadable"
                 ? "Unable to verify"
                 : phase === "paused"
@@ -101,7 +114,7 @@ export function groupDelegationList<T>(input: {
       if (previous === undefined || (!previous.active && state.active)) progress.set(key, state);
     }
   }
-  const totals = new Map<string, { active: number; blocked: number }>();
+  const totals = new Map<string, { count: number; active: number; blocked: number }>();
   for (const thread of input.threads) {
     if (
       thread.lineage.relationshipToParent !== "delegation" ||
@@ -114,7 +127,8 @@ export function groupDelegationList<T>(input: {
     const parentKey = scopedThreadKey(
       scopeThreadRef(thread.environmentId, thread.lineage.parentThreadId),
     );
-    const total = totals.get(parentKey) ?? { active: 0, blocked: 0 };
+    const total = totals.get(parentKey) ?? { count: 0, active: 0, blocked: 0 };
+    total.count++;
     const active = state?.active ?? thread.archivedAt === null;
     if (active) total.active++;
     if (active && (state?.blocked || thread.hasPendingApprovals || thread.hasPendingUserInput))
@@ -144,6 +158,7 @@ export function groupDelegationList<T>(input: {
         rows.set(key, {
           depth,
           childCount: nested.length,
+          taskCount: total?.count ?? 0,
           expanded,
           activeCount: total?.active ?? 0,
           blockedCount: total?.blocked ?? 0,

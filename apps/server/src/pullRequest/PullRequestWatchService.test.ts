@@ -276,27 +276,36 @@ describe("PullRequestWatchService", () => {
     }),
   );
 
-  it.effect("keeps PR monitoring and the coordinator workflow in the parent thread", () =>
-    Effect.gen(function* () {
-      for (const relationshipToParent of ["subagent", "delegation"] as const) {
-        const harness = yield* makeHarness({
-          thread: {
-            ...makeThread([makeLink(1, { headBranch: "feature" })]),
-            lineage: {
-              rootThreadId: ThreadId.make("parent"),
-              parentThreadId: ThreadId.make("parent"),
-              relationshipToParent,
+  it.effect(
+    "allows ordinary independent watches but keeps the coordinator workflow in the parent",
+    () =>
+      Effect.gen(function* () {
+        for (const relationshipToParent of ["subagent", "delegation"] as const) {
+          const harness = yield* makeHarness({
+            thread: {
+              ...makeThread([makeLink(1, { headBranch: "feature" })]),
+              lineage: {
+                rootThreadId: ThreadId.make("parent"),
+                parentThreadId: ThreadId.make("parent"),
+                relationshipToParent,
+              },
             },
-          },
-        });
-        const error = yield* harness
-          .setWatching(true, { repository: "t3tools/t3code", number: 1 })
-          .pipe(Effect.flip);
-        expect(error).toMatchObject({ _tag: "PullRequestWatchFromSubagentError" });
-        const workflowError = yield* harness.readWorkflow().pipe(Effect.flip);
-        expect(workflowError).toMatchObject({ _tag: "PullRequestWatchFromSubagentError" });
-        expect(yield* Ref.get(harness.commands)).toEqual([]);
-      }
-    }),
+          });
+          if (relationshipToParent === "subagent") {
+            const error = yield* harness
+              .setWatching(true, { repository: "t3tools/t3code", number: 1 })
+              .pipe(Effect.flip);
+            expect(error).toMatchObject({ _tag: "PullRequestWatchFromSubagentError" });
+            expect(yield* Ref.get(harness.commands)).toEqual([]);
+          } else {
+            yield* harness.setWatching(true, { repository: "t3tools/t3code", number: 1 });
+            expect(yield* Ref.get(harness.commands)).toMatchObject([
+              { type: "thread.pull-request.watch", number: 1, watching: true },
+            ]);
+          }
+          const workflowError = yield* harness.readWorkflow().pipe(Effect.flip);
+          expect(workflowError).toMatchObject({ _tag: "PullRequestWatchFromSubagentError" });
+        }
+      }),
   );
 });

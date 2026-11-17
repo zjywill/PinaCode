@@ -1324,7 +1324,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     renderedSettledThreads,
     visibleSnoozedThreads,
     visibleWorkingThreads,
-    orderedThreadKeys: ungroupedThreadKeys,
     threadByKey,
     settledThreadKeys,
     snoozedThreadKeys,
@@ -1351,12 +1350,103 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     keepEmptyFolders: (group) =>
       scopedProjectGroups.length > 0 || (group.pinned && !group.archived),
   });
-  const orderedThreadKeys = groupDelegationList({
-    items: ungroupedThreadKeys,
-    threadOf: (key) => threadByKey.get(key),
+  const hasProjectFolders = projectFolders !== null && projectFolders.length > 0;
+  const sidebarListItemsFresh = ((): readonly SidebarListItem[] => {
+    const rowsOf = (
+      list: readonly EnvironmentThreadShell[],
+      section: SidebarSection,
+    ): SidebarListItem[] =>
+      list.map((thread) => {
+        const key = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+        return { kind: "thread", key, section };
+      });
+    // Boring mode keeps a pinned open project or one the user filtered to, so it can start a thread.
+    if (
+      !hasProjectFolders &&
+      pinnedThreads.length +
+        activeThreads.length +
+        workingThreads.length +
+        snoozedThreads.length +
+        settledCount ===
+        0
+    ) {
+      return [];
+    }
+    const items: SidebarListItem[] = [{ kind: "marker", marker: "pinned-header" }];
+    const pinnedRows = rowsOf(pinnedThreads, "pinned");
+    items.push(...pinnedRows);
+    items.push({ kind: "marker", marker: "pinned-divider" });
+    const activeRows = rowsOf(activeThreads, "active");
+    items.push({ kind: "marker", marker: "active-placeholder" });
+    items.push(...activeRows);
+    if (workingThreads.length > 0) {
+      items.push({ kind: "marker", marker: "working-header" });
+      items.push(...rowsOf(visibleWorkingThreads, "working"));
+    }
+    if (snoozedThreads.length > 0) {
+      items.push({ kind: "marker", marker: "snoozed-header" });
+      items.push(...rowsOf(visibleSnoozedThreads, "snoozed"));
+    }
+    items.push({ kind: "marker", marker: "settled-header" });
+    const settledRows = rowsOf(renderedSettledThreads, "settled");
+    items.push({ kind: "marker", marker: "settled-placeholder" });
+    items.push(...settledRows);
+    return items;
+  })();
+  // Preserve the list while streamed updates leave order unchanged to retain row memoization.
+  const sidebarListItemsKey = sidebarListItemsFresh
+    .map((item) => (item.kind === "thread" ? item.section + ":" + item.key : item.marker))
+    .join("\n");
+  const [sidebarListItemsState, setSidebarListItems] = useState(sidebarListItemsFresh);
+  const [sidebarListItemsKeyState, setSidebarListItemsKeyState] = useState(sidebarListItemsKey);
+  let sidebarListItems = sidebarListItemsState;
+  if (sidebarListItemsKeyState !== sidebarListItemsKey) {
+    setSidebarListItemsKeyState(sidebarListItemsKey);
+    setSidebarListItems(sidebarListItemsFresh);
+    // Update the local list too; threadByKey already omits rows moved into collapsed shelves.
+    sidebarListItems = sidebarListItemsFresh;
+  }
+  const delegationList = groupDelegationList({
+    items:
+      projectFolders === null
+        ? sidebarListItems
+        : sidebarListItems.filter((item) => item.kind !== "thread" || item.section !== "active"),
+    threadOf: (item) => (item.kind === "thread" ? threadByKey.get(item.key) : undefined),
     threads,
     collapsed: collapsedDelegations,
-  }).items;
+  });
+  const delegationThreadsByProject = new Map<string, EnvironmentThreadShell[]>();
+  if (projectFolders !== null) {
+    for (const thread of threads) {
+      const key = `${thread.environmentId}:${thread.projectId}`;
+      const projectThreads = delegationThreadsByProject.get(key) ?? [];
+      projectThreads.push(thread);
+      delegationThreadsByProject.set(key, projectThreads);
+    }
+  }
+  const delegationFolders = projectFolders?.map((folder) => ({
+    ...folder,
+    delegation: groupDelegationList({
+      items: folder.threads,
+      threadOf: (thread) => thread,
+      threads: folder.group.memberProjectRefs.flatMap(
+        (ref) => delegationThreadsByProject.get(`${ref.environmentId}:${ref.projectId}`) ?? [],
+      ),
+      collapsed: collapsedDelegations,
+    }),
+  }));
+  const delegationRows = new Map([
+    ...delegationList.rows,
+    ...(delegationFolders?.flatMap((folder) => [...folder.delegation.rows]) ?? []),
+  ]);
+  const orderedThreadKeys = delegationList.items.flatMap((item) =>
+    item.kind === "thread"
+      ? [item.key]
+      : item.marker === "active-placeholder"
+        ? (delegationFolders?.flatMap((folder) => folder.delegation.items.map(threadShellKey)) ??
+          [])
+        : [],
+  );
 
   // Ranked across environments as the palette ranks them, so one
   // environment's list does not sit above another's better matches; rows
@@ -1940,95 +2030,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         event.activatorEvent instanceof PointerEvent ? event.activatorEvent.clientY : null,
     });
   };
-  const hasProjectFolders = projectFolders !== null && projectFolders.length > 0;
-  const sidebarListItemsFresh = ((): readonly SidebarListItem[] => {
-    const rowsOf = (
-      list: readonly EnvironmentThreadShell[],
-      section: SidebarSection,
-    ): SidebarListItem[] =>
-      list.map((thread) => {
-        const key = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
-        return { kind: "thread", key, section };
-      });
-    // Boring mode keeps a pinned open project or one the user filtered to, so it can start a thread.
-    if (
-      !hasProjectFolders &&
-      pinnedThreads.length +
-        activeThreads.length +
-        workingThreads.length +
-        snoozedThreads.length +
-        settledCount ===
-        0
-    ) {
-      return [];
-    }
-    const items: SidebarListItem[] = [{ kind: "marker", marker: "pinned-header" }];
-    const pinnedRows = rowsOf(pinnedThreads, "pinned");
-    items.push(...pinnedRows);
-    items.push({ kind: "marker", marker: "pinned-divider" });
-    const activeRows = rowsOf(activeThreads, "active");
-    items.push({ kind: "marker", marker: "active-placeholder" });
-    items.push(...activeRows);
-    if (workingThreads.length > 0) {
-      items.push({ kind: "marker", marker: "working-header" });
-      items.push(...rowsOf(visibleWorkingThreads, "working"));
-    }
-    if (snoozedThreads.length > 0) {
-      items.push({ kind: "marker", marker: "snoozed-header" });
-      items.push(...rowsOf(visibleSnoozedThreads, "snoozed"));
-    }
-    items.push({ kind: "marker", marker: "settled-header" });
-    const settledRows = rowsOf(renderedSettledThreads, "settled");
-    items.push({ kind: "marker", marker: "settled-placeholder" });
-    items.push(...settledRows);
-    return items;
-  })();
-  // Preserve the list while streamed updates leave order unchanged to retain row memoization.
-  const sidebarListItemsKey = sidebarListItemsFresh
-    .map((item) => (item.kind === "thread" ? item.section + ":" + item.key : item.marker))
-    .join("\n");
-  const [sidebarListItemsState, setSidebarListItems] = useState(sidebarListItemsFresh);
-  const [sidebarListItemsKeyState, setSidebarListItemsKeyState] = useState(sidebarListItemsKey);
-  let sidebarListItems = sidebarListItemsState;
-  if (sidebarListItemsKeyState !== sidebarListItemsKey) {
-    setSidebarListItemsKeyState(sidebarListItemsKey);
-    setSidebarListItems(sidebarListItemsFresh);
-    // Update the local list too; threadByKey already omits rows moved into collapsed shelves.
-    sidebarListItems = sidebarListItemsFresh;
-  }
-  const delegationList = groupDelegationList({
-    items:
-      projectFolders === null
-        ? sidebarListItems
-        : sidebarListItems.filter((item) => item.kind !== "thread" || item.section !== "active"),
-    threadOf: (item) => (item.kind === "thread" ? threadByKey.get(item.key) : undefined),
-    threads,
-    collapsed: collapsedDelegations,
-  });
-  const delegationThreadsByProject = new Map<string, EnvironmentThreadShell[]>();
-  if (projectFolders !== null) {
-    for (const thread of threads) {
-      const key = `${thread.environmentId}:${thread.projectId}`;
-      const projectThreads = delegationThreadsByProject.get(key) ?? [];
-      projectThreads.push(thread);
-      delegationThreadsByProject.set(key, projectThreads);
-    }
-  }
-  const delegationFolders = projectFolders?.map((folder) => ({
-    ...folder,
-    delegation: groupDelegationList({
-      items: folder.threads,
-      threadOf: (thread) => thread,
-      threads: folder.group.memberProjectRefs.flatMap(
-        (ref) => delegationThreadsByProject.get(`${ref.environmentId}:${ref.projectId}`) ?? [],
-      ),
-      collapsed: collapsedDelegations,
-    }),
-  }));
-  const delegationRows = new Map([
-    ...delegationList.rows,
-    ...(delegationFolders?.flatMap((folder) => [...folder.delegation.rows]) ?? []),
-  ]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- cancels the dnd-kit drag sensor when the dragged row leaves the list
   useEffect(() => {
     if (

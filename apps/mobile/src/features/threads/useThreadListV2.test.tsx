@@ -241,4 +241,67 @@ it("reuses a large thread list across tab renders and updates when its inputs ch
   expect(loaded.layout.items).toHaveLength(160);
   expect(loaded.olderSettledShelf.isListed(threads[150]!)).toBe(true);
   expect(loaded.items).not.toBe(loading.items);
+
+  const parent = {
+    ...threads[0]!,
+    id: ThreadId.make("review-parent"),
+    title: "Shared search parent",
+    lineage: {
+      rootThreadId: ThreadId.make("review-parent"),
+      parentThreadId: null,
+      relationshipToParent: null,
+    },
+  };
+  const child = {
+    ...parent,
+    id: ThreadId.make("review-child"),
+    title: "Shared search child",
+    lineage: {
+      rootThreadId: parent.id,
+      parentThreadId: parent.id,
+      relationshipToParent: "delegation" as const,
+    },
+  };
+  const reviewInput = {
+    ...input,
+    threads: [child, parent],
+    workingShelfEnabled: false,
+    settledShelfExpanded: false,
+  };
+  await act(async () => root.render(<Probe input={reviewInput} tab="chats" />));
+  await act(async () => seen.at(-1)!.toggleDelegation(`${environmentId}:${parent.id}`));
+  await act(async () =>
+    root.render(<Probe input={{ ...reviewInput, searchQuery: "Shared search" }} tab="chats" />),
+  );
+  expect(seen.at(-1)!.layout.items).toHaveLength(2);
+  expect
+    .soft(
+      seen
+        .at(-1)!
+        .items.filter((item) => item.type === "v2-thread")
+        .map((item) => item.item.thread.id)
+        .sort(),
+      "search must retain both matching sessions despite an earlier parent collapse",
+    )
+    .toEqual([child.id, parent.id].sort());
+
+  await act(async () => seen.at(-1)!.toggleDelegation(`${environmentId}:${parent.id}`));
+  await act(async () =>
+    root.render(
+      <Probe
+        input={{ ...reviewInput, threads: [{ ...child, pinnedAt: input.now }, parent] }}
+        tab="chats"
+      />,
+    ),
+  );
+  expect(seen.at(-1)!.layout.items.map((item) => item.thread.id)).toEqual([child.id, parent.id]);
+  expect
+    .soft(
+      seen
+        .at(-1)!
+        .items.filter((item) => item.type === "v2-thread")
+        .map((item) => item.item.thread.id),
+      "pinned child must remain ahead of the unpinned parent",
+    )
+    .toEqual([child.id, parent.id]);
 });

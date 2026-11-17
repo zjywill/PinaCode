@@ -86,6 +86,21 @@ describe("thread relationships", () => {
     });
     const collapsed = new Set(["local:parent"]);
     expect(group(threads, collapsed).items).toEqual([otherEnvironmentChild, parent]);
+    const separatedItems = [child, "shelf", parent];
+    const separated = groupDelegationList({
+      items: separatedItems,
+      threadOf: (item) => (typeof item === "string" ? undefined : item),
+      threads,
+      collapsed,
+    });
+    expect(separated.items).toEqual(separatedItems);
+    expect(separated.rows.get("local:child")?.depth).toBe(0);
+    expect(group([parent], collapsed).rows.get("local:parent")).toMatchObject({
+      childCount: 0,
+      taskCount: 2,
+      activeCount: 2,
+      blockedCount: 1,
+    });
     expect(group([child], collapsed).rows.get("local:child")).toMatchObject({
       depth: 0,
       progress: "Waiting for approval",
@@ -94,7 +109,7 @@ describe("thread relationships", () => {
     parent.pullRequests[0]!.watch.followUp.phase = "awaiting-acceptance";
     parent.pullRequests[0]!.watch.followUp.blockers = [];
     expect(group().rows.get("local:parent")).toMatchObject({ activeCount: 2, blockedCount: 0 });
-    expect(group().rows.get("local:child")?.progress).toBe("Ready to merge");
+    expect(group().rows.get("local:child")?.progress).toBe("Awaiting coordinator acceptance");
     parent.pullRequests[0]!.watch.followUp.phase = "unreadable";
     expect(group().rows.get("local:child")?.progress).toBe("Unable to verify");
     expect(group().rows.get("local:parent")?.blockedCount).toBe(1);

@@ -518,6 +518,7 @@ function toListItem(
 
 function toDetail(raw: Schema.Schema.Type<typeof RawMergeRequestSchema>): GitLabMergeRequestDetail {
   const listItem = toListItem(raw);
+  const mergeStatus = raw.detailed_merge_status?.trim().toLowerCase();
   const headSha = trimmed(raw.sha);
   const refs = raw.diff_refs;
   const diffRefs =
@@ -531,9 +532,10 @@ function toDetail(raw: Schema.Schema.Type<typeof RawMergeRequestSchema>): GitLab
   return {
     ...listItem,
     mergeGate:
-      raw.detailed_merge_status == null
+      !mergeStatus ||
+      ["checking", "unchecked", "preparing", "approvals_syncing"].includes(mergeStatus)
         ? "unknown"
-        : raw.detailed_merge_status === "mergeable"
+        : mergeStatus === "mergeable"
           ? "ready"
           : "blocked",
     body: raw.description ?? "",

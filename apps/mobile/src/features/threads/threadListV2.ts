@@ -512,6 +512,7 @@ export function threadListV2ListItemsAreEqual(
         previous.hasQueuedMessages === item.hasQueuedMessages &&
         previous.delegation?.depth === item.delegation?.depth &&
         previous.delegation?.childCount === item.delegation?.childCount &&
+        previous.delegation?.taskCount === item.delegation?.taskCount &&
         previous.delegation?.expanded === item.delegation?.expanded &&
         previous.delegation?.activeCount === item.delegation?.activeCount &&
         previous.delegation?.blockedCount === item.delegation?.blockedCount &&

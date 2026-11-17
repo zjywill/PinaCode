@@ -1616,7 +1616,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     </View>
   );
   const delegation = props.delegation;
-  if (!delegation || (delegation.childCount === 0 && delegation.progress === null)) return content;
+  if (!delegation || (delegation.taskCount === 0 && delegation.progress === null)) return content;
   return (
     <View
       className={delegation.depth > 0 ? "border-l border-border-subtle" : undefined}
@@ -1636,6 +1636,10 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
               {delegation.activeCount} active · {delegation.blockedCount} blocked
             </Text>
           </Pressable>
+        ) : delegation.taskCount > 0 ? (
+          <Text className="text-xs text-muted-foreground">
+            {delegation.activeCount} active · {delegation.blockedCount} blocked
+          </Text>
         ) : null}
         {delegation.progress !== null ? (
           <Pressable

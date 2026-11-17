@@ -465,9 +465,11 @@ const SUMMARY: Record<PullRequestWatchChange["kind"], string> = {
 };
 
 const WATCHING_CLOSING =
-  "Look into each item and act on it as your task requires. This PR stays linked and watched. For independent follow-up, call pinacode_pr_workflow to recover the workflow and original session mapping. End your turn when no work remains; progress reports and readiness do not end monitoring. Unwatch only when the user stops follow-up or the PR is merged or closed.";
+  "Look into each item and act on it as your task requires. This is an ordinary PR watch. End your turn while waiting for its next change. When the user's monitoring goal is met, call pinacode_unwatch_pull_request before handing back so the thread returns to their inbox.";
 const WATCHING_CLOSING_PLURAL =
-  "Look into each item and act on it as your task requires. Each active PR stays linked and watched. For independent follow-up, call pinacode_pr_workflow to recover the workflow and original session mappings. End your turn when no work remains; progress reports and readiness do not end monitoring. Unwatch only the PRs the user stopped or that merged or closed.";
+  "For the ordinary PR watches above, act as your task requires and end your turn while waiting. Unwatch each ordinary PR whose monitoring goal is met before handing back. Keep the registered independent follow-ups active under their own instructions.";
+const FOLLOW_UP_CLOSING =
+  "This PR has a registered independent follow-up. Call pinacode_pr_workflow to recover its rules and original session mapping. Progress reports and readiness do not end this follow-up. Unwatch it only when the user explicitly stops it or it merges or closes.";
 
 export interface PullRequestWatchWake {
   readonly text: string;
@@ -519,7 +521,9 @@ export function pullRequestWatchMessage(input: {
     "",
     exhausted
       ? `PinaCode paused monitoring after ${PULL_REQUEST_WATCH_WAKE_LIMIT} comment-only updates in a row. Follow-up is blocked, not complete. The coordinator must inspect the loop and report the pause; call pinacode_watch_pull_request to resume only after resolving it.`
-      : WATCHING_CLOSING,
+      : input.report.next.followUp === undefined
+        ? WATCHING_CLOSING
+        : FOLLOW_UP_CLOSING,
   ].join("\n");
   const failed = changes.some(
     (change) =>

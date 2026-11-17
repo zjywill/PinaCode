@@ -11,6 +11,7 @@ import {
   type ThreadPullRequestWatch,
 } from "@t3tools/contracts";
 import {
+  parentOwnsPullRequestFollowUp,
   normalizeThreadPullRequestKey,
   threadPullRequestKeyOf,
   visibleThreadPullRequests,
@@ -560,13 +561,17 @@ export const make = Effect.gen(function* () {
       reason: "closed",
     });
 
-  const endsWithoutRead = ({ thread, link }: WatchTarget): WatchEndReason | undefined =>
+  const endsWithoutRead = (
+    { thread, link }: WatchTarget,
+    parentLinks: ReadonlyArray<ThreadPullRequestLink>,
+  ): WatchEndReason | undefined =>
     link.snapshot?.state === "merged"
       ? "merged"
       : thread.settledOverride === "settled" || thread.settledAt !== null
         ? "settled"
         : thread.lineage.relationshipToParent === "subagent" ||
-            thread.lineage.relationshipToParent === "delegation"
+            (thread.lineage.relationshipToParent === "delegation" &&
+              parentOwnsPullRequestFollowUp(parentLinks, thread.id, link))
           ? "subagent"
           : undefined;
 
@@ -829,10 +834,15 @@ export const make = Effect.gen(function* () {
       );
     }
     for (const target of targets) lifeOf(target);
+    const linksByThread = new Map(threads.map((thread) => [thread.id, thread.pullRequests]));
     const byPullRequest = new Map<string, Array<WatchTarget>>();
     const ending: Array<readonly [WatchTarget, WatchEndReason]> = [];
     for (const target of targets) {
-      const reason = endsWithoutRead(target);
+      const parentId = target.thread.lineage.parentThreadId;
+      const reason = endsWithoutRead(
+        target,
+        parentId === null ? [] : (linksByThread.get(parentId) ?? []),
+      );
       if (reason !== undefined) {
         ending.push([target, reason]);
         continue;

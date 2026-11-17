@@ -16,6 +16,7 @@ import {
 import { canonicalizeGitCafePullRequestUrl } from "@t3tools/source-control-definitions/registry";
 import { threadPullRequestsOf } from "../sourceControl/threadPullRequests.ts";
 import {
+  parentOwnsPullRequestFollowUp,
   normalizeThreadPullRequestKey,
   visibleThreadPullRequests,
   threadPullRequestKeysEqual,
@@ -4200,17 +4201,25 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         cause: `Thread ${command.threadId} is settled or archived and cannot watch pull requests.`,
       });
     }
-    // Child tasks report to their parent, which owns PR monitoring; child watches would cause unrelated wakes.
+    const monitoringParent =
+      command.type === "thread.pull-request.watch" &&
+      command.watching &&
+      thread.lineage.relationshipToParent === "delegation" &&
+      thread.lineage.parentThreadId !== null
+        ? yield* projectionStore
+            .getThreadShell(thread.lineage.parentThreadId)
+            .pipe(mapDispatchError(command))
+        : null;
     if (
       command.type === "thread.pull-request.watch" &&
       command.watching &&
       (thread.lineage.relationshipToParent === "subagent" ||
-        thread.lineage.relationshipToParent === "delegation")
+        parentOwnsPullRequestFollowUp(monitoringParent?.pullRequests ?? [], thread.id, command))
     ) {
       return yield* new OrchestratorDispatchError({
         commandId: command.commandId,
         commandType: command.type,
-        cause: `Thread ${command.threadId} is a subagent; its parent thread watches pull requests.`,
+        cause: `Thread ${command.threadId}'s parent owns monitoring for this pull request.`,
       });
     }
     if (command.type === "thread.pull-request.watch" && command.watching && command.followUp) {

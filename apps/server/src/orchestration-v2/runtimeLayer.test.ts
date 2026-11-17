@@ -4656,6 +4656,13 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         assert.equal(wrongPullRequest._tag, "OrchestratorDispatchError");
         yield* orchestrator.dispatch({
           type: "thread.pull-request.watch",
+          commandId: CommandId.make("independent-ordinary-watch"),
+          threadId: childThreadId,
+          ...key,
+          watching: true,
+        });
+        yield* orchestrator.dispatch({
+          type: "thread.pull-request.watch",
           commandId: CommandId.make("follow-up-watch"),
           threadId,
           ...key,
@@ -4701,6 +4708,16 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
           })
           .pipe(Effect.flip);
         assert.equal(reassigned._tag, "OrchestratorDispatchError");
+        const duplicate = yield* orchestrator
+          .dispatch({
+            type: "thread.pull-request.watch",
+            commandId: CommandId.make("follow-up-child-duplicate"),
+            threadId: childThreadId,
+            ...key,
+            watching: true,
+          })
+          .pipe(Effect.flip);
+        assert.equal(duplicate._tag, "OrchestratorDispatchError");
         let detail: PullRequestDetail = {
           ...watchedPullRequestDetail({ projectId, number: 7, at: "2026-10-02T12:00:00.000Z" }),
           mergeability: "mergeable",
@@ -4777,6 +4794,9 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
           return (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]?.watch;
         });
         assert.equal((yield* sweep)?.followUp?.phase, "waiting-approval");
+        assert.isUndefined(
+          (yield* orchestrator.getThreadShell(childThreadId))?.pullRequests?.[0]?.watch,
+        );
         detail = { ...detail, platformReviewDecision: "approved" };
         assert.equal((yield* sweep)?.followUp?.phase, "awaiting-acceptance");
         reviewResolved = false;
@@ -4854,6 +4874,16 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
           ?.endedWatch;
         assert.equal(paused?.followUp?.phase, "paused");
         assert.equal(paused?.followUp?.childThreadId, childThreadId);
+        const pausedDuplicate = yield* orchestrator
+          .dispatch({
+            type: "thread.pull-request.watch",
+            commandId: CommandId.make("follow-up-paused-child-duplicate"),
+            threadId: childThreadId,
+            ...key,
+            watching: true,
+          })
+          .pipe(Effect.flip);
+        assert.equal(pausedDuplicate._tag, "OrchestratorDispatchError");
         yield* orchestrator.dispatch({
           type: "thread.pull-request.watch",
           commandId: CommandId.make("follow-up-stop-paused"),
@@ -4892,6 +4922,24 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
           (yield* orchestrator.getThreadShell(childThreadId))?.worktreePath,
           "/workspace/issue-seven",
         );
+        yield* orchestrator.dispatch({
+          type: "thread.pull-request.watch",
+          commandId: CommandId.make("independent-watch-after-owner-stopped"),
+          threadId: childThreadId,
+          ...key,
+          watching: true,
+        });
+        yield* sweep;
+        assert.isDefined(
+          (yield* orchestrator.getThreadShell(childThreadId))?.pullRequests?.[0]?.watch,
+        );
+        yield* orchestrator.dispatch({
+          type: "thread.pull-request.watch",
+          commandId: CommandId.make("independent-watch-cleanup"),
+          threadId: childThreadId,
+          ...key,
+          watching: false,
+        });
       }),
   );
 

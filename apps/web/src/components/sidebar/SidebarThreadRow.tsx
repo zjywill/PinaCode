@@ -1224,7 +1224,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
 
   const delegation = props.delegation;
   const delegationSummary =
-    delegation && (delegation.childCount > 0 || delegation.progress !== null) ? (
+    delegation && (delegation.taskCount > 0 || delegation.progress !== null) ? (
       <div className="flex min-w-0 items-center gap-1.5 px-2.5 pt-1 text-xs text-sidebar-muted-foreground">
         {delegation.childCount > 0 ? (
           <InlineButton
@@ -1241,6 +1241,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               {delegation.activeCount} active · {delegation.blockedCount} blocked
             </span>
           </InlineButton>
+        ) : delegation.taskCount > 0 ? (
+          <span>
+            {delegation.activeCount} active · {delegation.blockedCount} blocked
+          </span>
         ) : null}
         {delegation.progress !== null ? (
           <Tooltip>

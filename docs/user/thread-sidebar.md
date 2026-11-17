@@ -77,10 +77,12 @@ their PRs are ready to merge.” You can add more issues later without restartin
 earlier sessions. The coordinator checks review feedback, CI and conflicts, then
 returns repairs to the original session. No project-level skill installation is needed.
 
-Ready to merge requires checks and valid approvals for the latest head, no unresolved
-blocking feedback, and the host's merge restrictions to be satisfied. An agent's
-own review or a bot comment is not a formal approval. Readiness can be withdrawn
-when new commits or blockers appear; it never merges a PR for you.
+“Awaiting coordinator acceptance” means checks, platform-valid approvals and merge
+restrictions pass for the current head, with no unresolved blocking feedback.
+The coordinator still needs to accept the implementation. An agent's own review or
+a bot comment is not a formal approval. Approval validity follows the repository's
+rules; a new commit does not invalidate an approval that the platform retains.
+New commits and blockers trigger another check; this workflow never merges a PR for you.
 
 The coordinator's task counts and each independent session's progress reflect this
 follow-up. Collapsing the list, changing threads or asking for a progress report does

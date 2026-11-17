@@ -24,6 +24,7 @@ import {
   type ResolvedTarget,
 } from "./pullRequestTarget.ts";
 import {
+  parentOwnsPullRequestFollowUp,
   threadPullRequestKeysEqual,
   threadPullRequestsOf,
 } from "../sourceControl/threadPullRequests.ts";
@@ -138,10 +139,18 @@ const make = Effect.gen(function* () {
       threadPullRequestsOf(shell).find(
         (link) => link.source !== "stack-dismissed" && threadPullRequestKeysEqual(link, target),
       );
+    const parent =
+      watching &&
+      thread.lineage.relationshipToParent === "delegation" &&
+      thread.lineage.parentThreadId !== null
+        ? yield* engine
+            .getThreadShell(thread.lineage.parentThreadId)
+            .pipe(Effect.mapError((cause) => new PullRequestWatchFailedError({ cause })))
+        : null;
     if (
       watching &&
       (thread.lineage.relationshipToParent === "subagent" ||
-        thread.lineage.relationshipToParent === "delegation")
+        parentOwnsPullRequestFollowUp(parent?.pullRequests ?? [], thread.id, target))
     ) {
       return yield* new PullRequestWatchFromSubagentError();
     }

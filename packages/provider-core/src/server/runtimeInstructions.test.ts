@@ -41,7 +41,8 @@ describe("buildRuntimeInstructions", () => {
     assert.notInclude(instructions, "merge it now");
     assert.include(instructions, "Otherwise act now or hand back.");
     assert.include(instructions, "then watch while waiting");
-    assert.include(instructions, "never watch, even if the brief says babysit");
+    assert.include(instructions, "Short-lived subagents never watch.");
+    assert.include(instructions, "Independent sessions may watch their own PR unless");
     assert.include(
       instructions,
       "After PR work, a child's last line is: PR <full URL>, head <SHA>, checks and reviews <state>.",
@@ -50,6 +51,13 @@ describe("buildRuntimeInstructions", () => {
       instructions,
       "For PR waits, no sleep, loops, gh --watch, Monitor or ScheduleWakeup.",
     );
-    assert.include(instructions, "Unwatch only when the user explicitly stops");
+    assert.include(
+      instructions,
+      "For an ordinary watch, unwatch when the user's monitoring goal is met",
+    );
+    assert.include(
+      instructions,
+      "For a watch registered with followUp, progress reports and readiness keep monitoring active",
+    );
   });
 });

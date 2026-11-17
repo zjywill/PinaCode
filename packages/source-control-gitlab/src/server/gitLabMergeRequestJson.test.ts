@@ -126,6 +126,20 @@ describe("decodeMergeRequestListJson", () => {
 });
 
 describe("decodeMergeRequestDetailJson", () => {
+  it.each([
+    ["checking", "unknown"],
+    ["unchecked", "unknown"],
+    ["preparing", "unknown"],
+    ["approvals_syncing", "unknown"],
+    ["need_rebase", "blocked"],
+    ["mergeable", "ready"],
+  ])("preserves the platform merge gate %s", (status, expected) => {
+    expect(
+      expectSuccess(decodeMergeRequestDetailJson(detailJson({ detailed_merge_status: status })))
+        .mergeGate,
+    ).toBe(expected);
+  });
+
   it("preserves a required rebase while CI is running or successful", () => {
     for (const status of ["running", "success"]) {
       const detail = expectSuccess(

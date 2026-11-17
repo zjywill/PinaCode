@@ -1029,6 +1029,7 @@ export function toPullRequestWatchFingerprint(
 
 export interface GitHubPullRequestCore extends GitHubPullRequestDetail {
   readonly platformReviewDecision: PullRequestReviewDecision | null;
+  readonly mergeGate?: "ready" | "blocked" | "unknown";
   readonly mergeQueueRemoval?: PullRequestMergeQueueRemoval;
   readonly maintainerCanModify: boolean;
   readonly canEditMaintainerEdits: boolean;
@@ -1088,6 +1089,12 @@ export function toPullRequestCore(result: PullRequestCore.Result): GitHubPullReq
     }),
     headRepositoryNameWithOwner: trimmed(pr.headRepository?.nameWithOwner),
     platformReviewDecision: toReviewDecision(pr.reviewDecision),
+    mergeGate:
+      pr.mergeStateStatus === "UNKNOWN"
+        ? "unknown"
+        : IMMEDIATELY_MERGEABLE.has(pr.mergeStateStatus)
+          ? "ready"
+          : "blocked",
     maintainerCanModify: pr.maintainerCanModify,
     canEditMaintainerEdits:
       pr.state === "OPEN" &&

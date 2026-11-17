@@ -396,6 +396,25 @@ describe("delegated session navigation", () => {
         screen.container.querySelector<HTMLElement>(`[data-thread-item="local:${child.id}"]`)!.style
           .marginInlineStart,
       ).toBe("");
+      if (folders) {
+        vi.mocked(useQuietThreadShells).mockReturnValue([
+          { ...coordinator, pinnedAt: "2026-01-01T00:00:00.000Z" },
+          child,
+        ]);
+        await screen.rerender(view());
+        await expect.element(screen.getByText(child.title, { exact: true })).toBeInTheDocument();
+        await expect
+          .element(screen.getByText("1 active · 1 blocked", { exact: true }))
+          .toBeInTheDocument();
+        const modifier = isMacPlatform(navigator.platform) ? "Meta" : "Control";
+        using _reviewTimers = fakeTimers();
+        await userEvent.keyboard(`{${modifier}>}`);
+        await act(() => vi.advanceTimersByTime(THREAD_JUMP_HINT_SHOW_DELAY_MS));
+        await expect
+          .element(screen.getByText(`${modifier === "Meta" ? "⌘" : "Ctrl+"}2`, { exact: true }))
+          .toBeInTheDocument();
+        await userEvent.keyboard(`{/${modifier}}`);
+      }
     },
   );
 });

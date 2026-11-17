@@ -435,6 +435,15 @@ describe("pull request detail decoding", () => {
   ) => expectSuccess(decodePullRequestCoreJson(coreJson(rollup, pullRequest)));
 
   it.each([
+    ["UNKNOWN", "unknown"],
+    ["BLOCKED", "blocked"],
+    ["DIRTY", "blocked"],
+    ["CLEAN", "ready"],
+  ])("preserves the platform merge gate %s", (mergeStateStatus, expected) => {
+    expect(detailOf([], { mergeStateStatus }).mergeGate).toBe(expected);
+  });
+
+  it.each([
     [null, null],
     ["REVIEW_REQUIRED", "review-required"],
     ["APPROVED", "approved"],
