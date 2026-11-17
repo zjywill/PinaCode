@@ -37,6 +37,8 @@ Fastlane 已在本机验证可用。临时 API key JSON 包含 key_id、issuer_i
       --app_identifier app.pinacode.client --ipa <ipa-path> \
       --skip_waiting_for_build_processing true --skip_submission true
 
+若 `builds` 中尚未出现新构建，先查询 `/v1/apps/<app-id>/buildUploads?include=build`，按本次版本／构建号检查 `state.state` 及 errors；它会在正式 build 记录出现前显示上传处理进度。
+
 等待 ASC 查询返回本次版本和构建号，且 processingState=VALID。上传成功不代表处理已完成；未确认结果前不要重传同一构建或盲目增加构建号。
 
 读取实际 betaGroups，沿用已有组。当前是 PinaCode Internal 和 PinaCode Public Beta，不把这些名字当其他应用的默认值。
