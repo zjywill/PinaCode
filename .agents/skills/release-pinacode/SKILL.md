@@ -22,6 +22,7 @@ description: 发布 PinaCode 的 macOS 安装包、iOS TestFlight 和 App Store 
 - 一份有效的 iOS App Store 构建可以同时用于 TestFlight 和正式版审核，无需为两个渠道重复构建。
 - 已知生产标识：bundle ID 为 app.pinacode.client，Apple Team ID 为 NGM7GX8DGB，ASC App ID 为 6834654178。用 API 核对应用和团队后再使用。
 - 凭据只从已配置的环境、钥匙串或维护者提供的本机配置读取，不写进仓库或技能。兼容配置名 APP_STORE_CONNECT_API_KEY（key ID）和 APP_STORE_CONNECT_ISSUER_ID；私钥默认位于 ~/.appstoreconnect/private_keys/AuthKey_<key-id>.p8，也可用 ASC_KEY_PATH 显式指定。不要输出配置或私钥内容。
+- 本机已配置的 Apple 发布资料位于 `~/Documents/apple sign/`：先读取其中 `README.md` 和 `KITE-IOS-TESTFLIGHT.md` 核对 key ID、issuer ID 与团队，私钥位于 `api-key/AuthKey_<key-id>.p8`。此路径优先于上述默认路径；设置 `ASC_KEY_PATH` 后核验目标应用，不必复制私钥，也不要在未检查此目录前向维护者重复索取凭据。
 - scripts/asc.mjs 提供无需第三方依赖的 ASC API 调用。支持 ASC_KEY_ID、ASC_ISSUER_ID、ASC_KEY_PATH；也可通过 --env-file 显式传入维护者指定的配置文件。涉及联系人等资料时把响应存入私有临时目录，只输出必要状态。
 
 ## 执行对应平台
