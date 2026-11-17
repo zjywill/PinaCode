@@ -1273,6 +1273,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     delegation && delegation.depth > 0
       ? { marginInlineStart: Math.min(delegation.depth, 6) * 14 }
       : undefined;
+  const delegationConnectorClassName =
+    delegationStyle &&
+    "relative ps-3.5 before:pointer-events-none before:absolute before:start-0 before:top-0 before:h-1/2 before:w-3.5 before:rounded-es-lg before:border-s-2 before:border-b-2 before:border-sidebar-muted-foreground/60 before:content-['']";
   if (variant !== "card") {
     const multiline = variant === "folder-multiline";
     const inFolder = variant === "folder" || multiline;
@@ -1286,7 +1289,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
           "list-none [content-visibility:auto] [contain-intrinsic-size:auto_--spacing(9)]",
           metaLine !== null && multiline && "[contain-intrinsic-size:auto_--spacing(13.5)]",
           sortable?.isDragging && "relative z-20",
-          delegationStyle && "border-s border-sidebar-border",
+          delegationConnectorClassName,
         )}
       >
         {delegationSummary}
@@ -1486,7 +1489,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         "list-none py-0.5 [content-visibility:auto] [contain-intrinsic-size:auto_78px]",
         metaLineEmpty && "[contain-intrinsic-size:auto_60px]",
         sortable?.isDragging && "relative z-20",
-        delegationStyle && "border-s border-sidebar-border",
+        delegationConnectorClassName,
       )}
     >
       {delegationSummary}
