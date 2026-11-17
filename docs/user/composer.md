@@ -281,7 +281,12 @@ provider. On mobile, both are also available before starting a thread on
 **New task**.
 
 The slash menu also includes skills unless you turn off **Settings → Chat →
-Show skills in slash menu**, under Advanced. Only skills enabled for the provider are listed.
+Show skills in slash menu**, under Advanced. Enabled provider skills and PinaCode’s built-in skills are listed.
+
+Select **Follow issues and PRs** from `$` to keep issues or an existing PR moving through
+review, CI and conflict repairs. It is included with PinaCode and needs no project installation.
+Add the issue or PR and your instructions to the message; the original independent session
+handles later repairs, and readiness is reported without automatically merging.
 
 After you add or change skills, plugins, or MCP servers, use **Restart agent
 session** in the command palette on web and desktop. The conversation continues,

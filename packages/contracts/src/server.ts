@@ -127,6 +127,16 @@ export const ServerProviderSkill = Schema.Struct({
 });
 export type ServerProviderSkill = typeof ServerProviderSkill.Type;
 
+export const PINACODE_PR_WORKFLOW_SKILL = {
+  name: "following-pull-requests",
+  displayName: "Follow issues and PRs",
+  description:
+    "PinaCode built-in workflow: keep independent issue sessions moving through PR review, CI and conflict repairs until mergeable.",
+  path: "pinacode://skills/following-pull-requests",
+  scope: "app",
+  enabled: true,
+} satisfies ServerProviderSkill;
+
 export const ServerProviderWorkspaceSnapshot = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   checkedAt: IsoDateTime,
@@ -276,6 +286,7 @@ export const ServerProvider = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   skills: Schema.Array(ServerProviderSkill).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  builtInSkills: Schema.optionalKey(Schema.Array(ServerProviderSkill)),
   workspaceSnapshots: Schema.optionalKey(Schema.Array(ServerProviderWorkspaceSnapshot)),
   /**
    * Set when the server rescanned a workspace after a session start and its skills or commands

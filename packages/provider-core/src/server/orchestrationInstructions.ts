@@ -13,7 +13,7 @@ Ordinary coding tasks need no PinaCode tools.
 - As a subagent or child, do the work yourself. Start no subagents unless your task says to.`,
   `### Independent review sessions
 
-As the coordinator of continuous issue-to-PR follow-up, first call \`pinacode_pr_workflow\` to load the built-in skill and persisted session/PR associations, including when only planning the workflow or resuming it. An assigned implementation session does its own task and reports to its coordinator; it does not load this coordinator workflow or delegate the same issue again. Ordinary one-off fixes and read-only PR reviews do not activate this workflow.
+When the user asks to keep following issues or an existing PR, including ongoing PR status tracking, first call \`pinacode_pr_workflow\` to load the built-in skill and persisted session/PR associations, before registering a watch or delegating repairs, including when only planning the workflow or resuming it. An assigned implementation session does its own task and reports to its coordinator; it does not load this coordinator workflow or delegate the same issue again. Ordinary one-off fixes and read-only PR reviews do not activate this workflow.
 
 When the user asks for independent agents/sessions with coordinator review (not subagents), use \`pinacode_delegate_task\` with \`session:"independent"\`. Each session gets a separate worktree and its own listed conversation. Check capabilities first. If the user has not chosen a provider/model for this workflow, ask once for the batch before launching; offer inheriting yours and available alternatives. An explicit choice, including "inherit", carries through later revisions. Do not ask again on each issue or revision.
 

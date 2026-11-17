@@ -70,6 +70,8 @@ export function resolveProviderSkillSourceKind(
 
   const normalizedScope = skill.scope?.trim().toLowerCase();
   switch (normalizedScope) {
+    case "app":
+      return "app";
     case "repo":
     case "repository":
       return "repo";
@@ -119,11 +121,24 @@ function hasCurrentProviderWorkspaceSnapshot(
   );
 }
 
+const appSkillLists = new WeakMap<
+  ServerProvider,
+  Map<ReadonlyArray<ServerProviderSkill>, ServerProvider["skills"]>
+>();
+
 export function resolveProviderSkillsForCwd(
   provider: ServerProvider,
   cwd: string | null | undefined,
 ): ServerProvider["skills"] {
-  return resolveProviderWorkspaceSnapshot(provider, cwd)?.skills ?? provider.skills;
+  const providerSkills = resolveProviderWorkspaceSnapshot(provider, cwd)?.skills ?? provider.skills;
+  if (!provider.builtInSkills?.length) return providerSkills;
+  const lists = appSkillLists.get(provider) ?? new Map();
+  const cached = lists.get(providerSkills);
+  if (cached) return cached;
+  const skills = dedupeProviderSkillsByName([...provider.builtInSkills, ...providerSkills]);
+  lists.set(providerSkills, skills);
+  appSkillLists.set(provider, lists);
+  return skills;
 }
 
 export function resolveProviderSlashCommandsForCwd(

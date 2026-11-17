@@ -2103,6 +2103,33 @@ effectIt.effect(
     }),
 );
 
+effectIt.effect("delivers the explicitly selected app skill before starting the provider", () =>
+  Effect.gen(function* () {
+    const harness = makeLocalCommandHarness({
+      text: "$following-pull-requests Keep following this PR.",
+      sideChat: { contextRun: "delivered" },
+    });
+    yield* harness.start;
+    const text = harness.startTurn.mock.calls[0]?.[0].message.text;
+    expect(text).toContain("# Following pull requests");
+    expect(text).toContain('session:"independent"');
+    expect(text).toContain("Keep following this PR.");
+    expect(text).not.toContain("$following-pull-requests");
+    for (const request of [
+      "Fix a local typo.",
+      "Read-only review this PR.",
+      "Explain `$following-pull-requests`.",
+    ]) {
+      const ordinary = makeLocalCommandHarness({
+        text: request,
+        sideChat: { contextRun: "delivered" },
+      });
+      yield* ordinary.start;
+      expect(ordinary.startTurn.mock.calls[0]?.[0].message.text).toBe(request);
+    }
+  }),
+);
+
 effectIt.effect("sends new steering text when restarting a manual continuation", () =>
   Effect.gen(function* () {
     const harness = makeLocalCommandHarness({

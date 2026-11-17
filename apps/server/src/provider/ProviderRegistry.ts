@@ -1,4 +1,5 @@
 import {
+  PINACODE_PR_WORKFLOW_SKILL,
   defaultInstanceIdForDriver,
   isProviderWorkspaceSnapshotCurrent,
   isProviderWorkspaceSnapshotPending,
@@ -128,6 +129,24 @@ export class ProviderRegistry extends Context.Service<
     readonly streamChanges: Stream.Stream<ReadonlyArray<ServerProvider>>;
   }
 >()("pinacode/provider/ProviderRegistry") {}
+
+const builtInSkillSnapshots = new WeakMap<
+  ReadonlyArray<ServerProvider>,
+  ReadonlyArray<ServerProvider>
+>();
+
+function withBuiltInSkills(
+  providers: ReadonlyArray<ServerProvider>,
+): ReadonlyArray<ServerProvider> {
+  const cached = builtInSkillSnapshots.get(providers);
+  if (cached) return cached;
+  const snapshots = providers.map((provider) => ({
+    ...provider,
+    builtInSkills: [PINACODE_PR_WORKFLOW_SKILL],
+  }));
+  builtInSkillSnapshots.set(providers, snapshots);
+  return snapshots;
+}
 
 const loadProviders = (
   providerSources: ReadonlyArray<ProviderSnapshotSource>,
@@ -1291,18 +1310,34 @@ export const layer = Layer.effect(
     });
 
     return {
-      getProviders: Ref.get(providersRef),
+      getProviders: Ref.get(providersRef).pipe(Effect.map(withBuiltInSkills)),
       refresh: (provider?: ProviderDriverKind) =>
-        refresh(provider).pipe(Effect.catchCause(recoverRefreshFailure)),
+        refresh(provider).pipe(
+          Effect.catchCause(recoverRefreshFailure),
+          Effect.map(withBuiltInSkills),
+        ),
       refreshInstance: (instanceId: ProviderInstanceId) =>
-        refreshInstance(instanceId).pipe(Effect.catchCause(recoverRefreshFailure)),
+        refreshInstance(instanceId).pipe(
+          Effect.catchCause(recoverRefreshFailure),
+          Effect.map(withBuiltInSkills),
+        ),
       reloadSecretsAndRefresh: (instanceId?: ProviderInstanceId) =>
-        reloadSecretsAndRefresh(instanceId).pipe(Effect.catchCause(recoverRefreshFailure)),
+        reloadSecretsAndRefresh(instanceId).pipe(
+          Effect.catchCause(recoverRefreshFailure),
+          Effect.map(withBuiltInSkills),
+        ),
       applySecretAndRefresh: (reference: SecretReference, value: string) =>
-        applySecretAndRefresh(reference, value).pipe(Effect.catchCause(recoverRefreshFailure)),
+        applySecretAndRefresh(reference, value).pipe(
+          Effect.catchCause(recoverRefreshFailure),
+          Effect.map(withBuiltInSkills),
+        ),
       refreshWorkspaceSnapshot: (input) =>
-        refreshWorkspaceSnapshot(input).pipe(Effect.catchCause(recoverRefreshFailure)),
-      refreshAfterUpdate,
+        refreshWorkspaceSnapshot(input).pipe(
+          Effect.catchCause(recoverRefreshFailure),
+          Effect.map(withBuiltInSkills),
+        ),
+      refreshAfterUpdate: (...args: Parameters<typeof refreshAfterUpdate>) =>
+        refreshAfterUpdate(...args).pipe(Effect.map(withBuiltInSkills)),
       invalidateModelCaches,
       refreshModelCatalog: (instanceId?: ProviderInstanceId) =>
         refreshModelCatalog(instanceId).pipe(
@@ -1310,9 +1345,11 @@ export const layer = Layer.effect(
           Effect.asVoid,
         ),
       getProviderMaintenanceCapabilitiesForInstance,
-      setProviderMaintenanceActionState,
+      setProviderMaintenanceActionState: (
+        ...args: Parameters<typeof setProviderMaintenanceActionState>
+      ) => setProviderMaintenanceActionState(...args).pipe(Effect.map(withBuiltInSkills)),
       get streamChanges() {
-        return Stream.fromPubSub(changesPubSub);
+        return Stream.fromPubSub(changesPubSub).pipe(Stream.map(withBuiltInSkills));
       },
     } satisfies ProviderRegistry["Service"];
   }),

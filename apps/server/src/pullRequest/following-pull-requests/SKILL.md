@@ -9,6 +9,8 @@ You are the coordinator. PinaCode owns durable watches and completion delivery; 
 
 ## Intake and revisions
 
+- For an existing PR, recover its original session first. If no implementation session exists and the user asks for a child/node to handle repairs, create one with `session:"independent"`, even when they say “子节点” or “subagent”. A separate worktree alone does not select an independent session. Status-only tracking does not require creating an implementation session.
+
 - For each new issue, use pinacode_delegate_task with session:"independent", issueUrl and a stable clientRequestId. Keep the user's existing provider/model choice; ask once when none was chosen. Completion wakes this coordinator. Ordinary implementation acceptance does not end PR follow-up.
 - Each child must report PR URL, latest head, tests and remaining work after implementation and every push. Read the actual diff and test evidence in its original worktree. Register its PR with pinacode_watch_pull_request and followUp:{issueUrl,childThreadId}. Handle existing review comments too: the watch baselines historical remarks.
 - On a watch wake or child completion, call pinacode_pr_workflow to recover this skill and persisted associations. Verify each review finding before assigning fixes. Send concrete valid findings to that same childThreadId with pinacode_thread_send; explain rejected findings. Do not create a replacement, change its execution choices, or fix the same files in the parent.

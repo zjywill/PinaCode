@@ -1,3 +1,4 @@
+import { PINACODE_PR_WORKFLOW_SKILL } from "@t3tools/contracts";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import { vi } from "vite-plus/test";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
@@ -3845,13 +3846,22 @@ it.layer(
           const registry = yield* ProviderRegistry.ProviderRegistry;
 
           assert.deepStrictEqual(yield* registry.getProviders, [
-            withBundledCompatibility(cachedProvider),
+            {
+              ...withBundledCompatibility(cachedProvider),
+              builtInSkills: [PINACODE_PR_WORKFLOW_SKILL],
+            },
           ]);
           assert.deepStrictEqual(yield* registry.refresh(codexDriver), [
-            withBundledCompatibility(cachedProvider),
+            {
+              ...withBundledCompatibility(cachedProvider),
+              builtInSkills: [PINACODE_PR_WORKFLOW_SKILL],
+            },
           ]);
           assert.deepStrictEqual(yield* registry.refreshInstance(codexInstanceId), [
-            withBundledCompatibility(cachedProvider),
+            {
+              ...withBundledCompatibility(cachedProvider),
+              builtInSkills: [PINACODE_PR_WORKFLOW_SKILL],
+            },
           ]);
         }).pipe(Effect.provide(runtimeServices));
       }),

@@ -39,7 +39,10 @@ import * as McpSchema from "effect/ai/McpSchema";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 
 import { taskPrompt } from "../../apps/server/src/mcp/delegatedTaskModes.ts";
-import { PULL_REQUEST_WORKFLOW_SKILL } from "../../apps/server/src/pullRequest/pullRequestWorkflow.ts";
+import {
+  PULL_REQUEST_WORKFLOW_SKILL,
+  expandPullRequestWorkflowPrompt,
+} from "../../apps/server/src/pullRequest/pullRequestWorkflow.ts";
 import * as McpInvocationContext from "../../apps/server/src/mcp/McpInvocationContext.ts";
 import { advertisedJsonSchema } from "../../apps/server/src/mcp/advertisedJsonSchema.ts";
 import * as Contracts from "@t3tools/contracts";
@@ -1101,8 +1104,11 @@ export const buildMessages = (sample: Sample) => {
   }
   const userText =
     testCase.promptContext === undefined
-      ? testCase.prompt
-      : projectComposerContextForProvider({ text: testCase.prompt, ...testCase.promptContext });
+      ? expandPullRequestWorkflowPrompt(testCase.prompt)
+      : projectComposerContextForProvider({
+          text: expandPullRequestWorkflowPrompt(testCase.prompt),
+          ...testCase.promptContext,
+        });
   const prompt =
     sideChatContext === undefined ? userText : withInlineContext(sideChatContext, userText);
   const childPrompt = () =>

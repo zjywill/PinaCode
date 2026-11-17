@@ -1,3 +1,4 @@
+import { expandPullRequestWorkflowPrompt } from "../pullRequest/pullRequestWorkflow.ts";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
 import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
 import {
@@ -894,7 +895,7 @@ export const layer: Layer.Layer<
       let effectiveHandoffs = handoffs;
       let resumeFellBack = false;
       const userText = projectComposerContextForProvider({
-        text: providerMessage.text,
+        text: expandPullRequestWorkflowPrompt(providerMessage.text),
         records: providerMessage.context?.records ?? [],
       });
       // Native goal commands go verbatim; handoff history waits a turn.
