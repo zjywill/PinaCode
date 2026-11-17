@@ -1,13 +1,7 @@
-import { useSidebarWorkspaceTabs } from "../layout/workspace/useSystemWorkspaceTabBar";
 import { Button } from "../../components/ui/Button";
 import * as Dialog from "../../components/ui/Dialog";
 import type { ComposerTextPaste } from "../../native/T3ComposerEditor.types";
-import { useDeviceType } from "../../native/native-layout-metrics";
-import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
-import {
-  useAppearancePreferences,
-  useAndroidFloatingTabs,
-} from "../settings/appearance/AppearancePreferencesProvider";
+import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { AsyncResult } from "effect/reactivity";
@@ -30,11 +24,10 @@ import {
   hasProviderUsageLimits,
   isUsageLimitsCommand,
 } from "@t3tools/shared/usageLimits";
-import { parseSideChatCommand } from "@t3tools/shared/composerTrigger";
 import { StackActions, useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { ReactNode } from "react";
 import { useEffect, useEffectEvent, useRef, useState, type RefObject } from "react";
-import { I18nManager, Keyboard, Platform, View, type ViewStyle } from "react-native";
+import { I18nManager, Keyboard, Platform, View } from "react-native";
 import { composerImageGallery } from "../../lib/composerImageGallery";
 import { filePreviewGallery } from "../../lib/filePreviewGallery";
 import { FilePreviewModal, type FilePreviewSource } from "../../components/ui/FilePreviewModal";
@@ -46,12 +39,8 @@ import {
 import Animated, {
   FadeIn,
   FadeOut,
-  interpolate,
   type LayoutAnimationFunction,
   ReduceMotion,
-  useAnimatedStyle,
-  useDerivedValue,
-  useSharedValue,
   withTiming,
 } from "react-native-reanimated";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
@@ -78,8 +67,15 @@ import {
   ComposerAttachmentThumbnail,
 } from "../../components/ComposerAttachmentStrip";
 import { VideoPreviewModal, type VideoPreviewSource } from "../../components/ui/VideoPreviewModal";
-import { GlassSurface } from "../../components/ui/GlassSurface";
 import { ComposerEditor, type ComposerEditorHandle } from "../../components/ComposerEditor";
+import {
+  COMPOSER_BOTTOM_GUTTER,
+  COMPOSER_TRANSITION_DURATION_MS,
+  ComposerSurface,
+  INLINE_EDITOR_MIN_WIDTH,
+  useComposerChrome,
+  useCompactComposerEditor,
+} from "../../components/ComposerSurface";
 import { fileRoutePathSegments } from "../files/filePath";
 import {
   ComposerActionButton,
@@ -97,17 +93,18 @@ import {
   isModelSelectionUnavailable,
   serverConfigForCwd,
 } from "../../lib/modelOptions";
-import { useComposerTextRole, type ScaledTextRole } from "../settings/appearance/useScaledTextRole";
+import { useComposerTextRole } from "../settings/appearance/useScaledTextRole";
 import type { RemoteClientConnectionState } from "../../lib/connection";
-import { MOBILE_TYPOGRAPHY } from "../../lib/typography";
 import { Menu } from "../../components/ui/Menu";
-import type { ActiveTurnComposerAction } from "@t3tools/client-runtime/state/composer-dispatch";
+import {
+  composerRunsDraftLocally,
+  type ActiveTurnComposerAction,
+} from "@t3tools/client-runtime/state/composer-dispatch";
 import type { FollowUpBehavior } from "../../lib/followUpBehavior";
 import {
   resolveComposerSendPresentation,
   type ComposerSendPresentation,
 } from "./composerSendPresentation";
-import { compactEditorInsets } from "./compactEditorInsets";
 import { ComposerCommandPopover } from "./ComposerCommandPopover";
 import { ComposerPopoverAnchor } from "./ComposerPopoverAnchor";
 import { ComposerQueuedEditAttachments } from "./ComposerQueuedEdit";
@@ -132,101 +129,9 @@ import {
 } from "./use-thread-settings-sheet-presentation";
 
 export const COMPOSER_COLLAPSED_CHROME = 60;
+export const THREAD_COMPOSER_BOTTOM_GUTTER = COMPOSER_BOTTOM_GUTTER;
 
 const NO_MACHINES: ReadonlyArray<ComposerEnvironmentCandidate> = [];
-const COLLAPSED_EDITOR_DEFAULT_INSET = 6;
-// iOS puts line-height slack above glyphs. DM Sans's lowercase midline is
-// descender (0.31em) + half x-height (0.504em) above the line bottom.
-const LOWERCASE_MIDLINE_EM = 0.562;
-
-function lowercaseMidline(text: ScaledTextRole): number {
-  return text.lineHeight - LOWERCASE_MIDLINE_EM * text.fontSize;
-}
-
-function collapsedEditorInset(text: ScaledTextRole): number {
-  const shift = lowercaseMidline(text) - lowercaseMidline(MOBILE_TYPOGRAPHY.body);
-  return Math.max(0, Math.round(COLLAPSED_EDITOR_DEFAULT_INSET - shift));
-}
-
-function useCompactComposerEditor(text: ScaledTextRole, value: string, rowWidth: number) {
-  const [contentSize, setContentSize] = useState({ width: 0, height: 0 });
-  const [compactWidth, setCompactWidth] = useState(0);
-  const contentHeight = contentSize.height;
-  const editorX = useSharedValue(0);
-  const editorWidth = useSharedValue(0);
-  const inset =
-    Platform.OS === "android" ? COLLAPSED_EDITOR_DEFAULT_INSET : collapsedEditorInset(text);
-  const minimum = Math.max(INLINE_EDITOR_HEIGHT, Math.ceil(text.lineHeight) + 2 * inset);
-  const height = Math.max(
-    minimum,
-    Math.min(text.lineHeight * 4 + 2 * inset, contentHeight + 2 * inset),
-  );
-  // A line that fits the expanded editor may still overflow its compact slot.
-  // Compare its measured width too so widening cannot trigger a collapse loop.
-  const isExpanded =
-    value.length > 0 &&
-    (contentHeight > text.lineHeight * 1.5 ||
-      (compactWidth > 0 && contentSize.width > compactWidth));
-  const compactRowHeight = Math.max(44, minimum);
-  const animatesLayout = Platform.OS === "ios";
-  const expansion = useDerivedValue(() =>
-    animatesLayout ? withTiming(Number(isExpanded), COMPOSER_TIMING) : Number(isExpanded),
-  );
-  const editorHeight = useDerivedValue(() =>
-    animatesLayout ? withTiming(height, COMPOSER_TIMING) : height,
-  );
-  const containerStyle = useAnimatedStyle(() => ({
-    height:
-      editorHeight.value + interpolate(expansion.value, [0, 1], [compactRowHeight - minimum, 52]),
-  }));
-  const isRTL = I18nManager.isRTL;
-  const editorStyle = useAnimatedStyle(() => {
-    const compact = compactEditorInsets({
-      slotX: editorX.value,
-      slotWidth: editorWidth.value,
-      rowWidth,
-      isRTL,
-    });
-    // Open the text viewport sideways once the draft has lifted clear of the toolbar.
-    const horizontal = Math.max(0, (expansion.value - 0.6) / 0.4);
-    return {
-      position: "absolute",
-      overflow: "hidden",
-      // The compact slot is unknown until its first layout, so the editor would draw over the + button.
-      opacity: isExpanded || editorWidth.value > 0 ? 1 : 0,
-      height: editorHeight.value,
-      left: interpolate(horizontal, [0, 1], [compact.left, 14]),
-      right: interpolate(horizontal, [0, 1], [compact.right, 14]),
-      bottom: interpolate(expansion.value, [0, 1], [(compactRowHeight - minimum) / 2, 52]),
-    };
-  });
-  // Measure wrapping at the destination width while the surrounding viewport moves.
-  const inputWidth = isExpanded ? rowWidth - 28 : compactWidth;
-  return {
-    isExpanded,
-    containerStyle,
-    editorStyle,
-    onEditorLayout: (event: { nativeEvent: { layout: { x: number; width: number } } }) => {
-      // The expanded toolbar gives this slot to the model control. Keep the
-      // compact geometry for the return transition, rather than recording zero.
-      if (!isExpanded) {
-        editorX.set(event.nativeEvent.layout.x);
-        editorWidth.set(event.nativeEvent.layout.width);
-        setCompactWidth(Math.max(0, event.nativeEvent.layout.width - 8));
-      }
-    },
-    editorProps: {
-      singleLineCentered: !isExpanded,
-      scrollEnabled: Platform.OS === "android" || contentHeight >= text.lineHeight * 4,
-      contentInsetVertical: inset,
-      onContentSizeChange: (size: { width: number; height: number }) => {
-        setContentSize(size);
-      },
-      style: { flex: 1, width: animatesLayout && inputWidth > 0 ? inputWidth : undefined },
-    },
-  };
-}
-
 export interface ThreadComposerProps {
   readonly isDraft?: boolean;
   readonly canOperateThread: boolean;
@@ -288,8 +193,6 @@ export interface ThreadComposerProps {
   readonly onEditorFocusChange?: (focused: boolean) => void;
 }
 
-// Android KeyboardStickyView tracks the IME; concurrent timed layout morphs cause jitter.
-const COMPOSER_TRANSITION_DURATION_MS = 220;
 const COMPOSER_TIMING = {
   duration: COMPOSER_TRANSITION_DURATION_MS,
   reduceMotion: ReduceMotion.System,
@@ -308,35 +211,10 @@ const modelControlTransition: LayoutAnimationFunction = (values) => {
     },
   };
 };
-// Side panes animate dock width; nested horizontal transitions would make the surface trail the toolbar.
-const composerHeightTransition: LayoutAnimationFunction = (values) => {
-  "worklet";
-  return {
-    initialValues: {
-      originX: values.targetOriginX,
-      originY: values.currentOriginY,
-      width: values.targetWidth,
-      height: values.currentHeight,
-    },
-    animations: {
-      originX: values.targetOriginX,
-      originY: withTiming(values.targetOriginY, COMPOSER_TIMING),
-      width: values.targetWidth,
-      height: withTiming(values.targetHeight, COMPOSER_TIMING),
-    },
-  };
-};
-const COMPOSER_LAYOUT_TRANSITION = Platform.OS === "android" ? undefined : composerHeightTransition;
-// Share of the one-row composer the draft keeps; a long model name truncates first.
-const INLINE_EDITOR_MIN_WIDTH = "40%";
-const INLINE_EDITOR_HEIGHT = 36;
-
 const COMPOSER_ATTACHMENT_ENTERING =
   Platform.OS === "android"
     ? FadeIn.duration(160)
     : FadeIn.delay(COMPOSER_TRANSITION_DURATION_MS).duration(160).reduceMotion(ReduceMotion.System);
-
-const AnimatedGlassSurface = Animated.createAnimatedComponent(GlassSurface);
 
 const FOLLOW_UP_ACTION_LABEL = {
   queue: "Queue",
@@ -393,70 +271,6 @@ function SendActionButton(props: {
   );
 }
 
-function ComposerSurface(props: {
-  readonly children: ReactNode;
-  readonly style: ViewStyle;
-  readonly animateLayout?: boolean;
-}) {
-  const colors = useUniwindTheme();
-  const targetBorderRadius =
-    typeof props.style.borderRadius === "number" ? props.style.borderRadius : 0;
-  const shouldAnimate = props.animateLayout !== false && Platform.OS !== "android";
-  const animatedBorderRadius = useDerivedValue(() =>
-    shouldAnimate
-      ? withTiming(targetBorderRadius, {
-          duration: COMPOSER_TRANSITION_DURATION_MS,
-          reduceMotion: ReduceMotion.System,
-        })
-      : targetBorderRadius,
-  );
-  const borderCurve = props.style.borderCurve;
-  const animatedShapeStyle = useAnimatedStyle(() => ({
-    borderRadius: animatedBorderRadius.value,
-    ...(borderCurve ? { borderCurve } : {}),
-  }));
-  const layoutTransition = shouldAnimate ? COMPOSER_LAYOUT_TRANSITION : undefined;
-
-  // Animate every native frame or glass and content jump to final height inside the clip.
-  return (
-    <Animated.View
-      className={
-        Platform.OS === "android" ? undefined : "shadow-[0_6px_28px] shadow-adaptive-black-a15-a35"
-      }
-      layout={layoutTransition}
-      style={[
-        animatedShapeStyle,
-        {
-          overflow: "hidden",
-        },
-      ]}
-    >
-      <AnimatedGlassSurface
-        chrome="none"
-        fallbackColor={colors["--color-composer-surface"]}
-        fallbackClassName="border border-composer-border"
-        glassEffectStyle="regular"
-        pointerEvents="none"
-        tintColor="transparent"
-        layout={layoutTransition}
-        style={[{ position: "absolute", inset: 0 }, animatedShapeStyle]}
-      >
-        {null}
-      </AnimatedGlassSurface>
-      <Animated.View
-        collapsable={false}
-        layout={layoutTransition}
-        style={[props.style, animatedShapeStyle]}
-      >
-        {props.children}
-      </Animated.View>
-    </Animated.View>
-  );
-}
-
-/** Space below the composer pill, inside the bottom inset it is given. */
-export const THREAD_COMPOSER_BOTTOM_GUTTER = 6;
-
 export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps) {
   const project = useProject(scopeProjectRef(props.environmentId, props.selectedThread.projectId));
   const { themeVariables: materialTheme } = useAppearancePreferences();
@@ -496,7 +310,11 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
   const [previewVideo, setPreviewVideo] = useState<VideoPreviewSource | null>(null);
   const composerOwnerKey = scopedThreadKey(props.environmentId, props.selectedThread.id);
   const composerDraftKey = props.draftKey ?? composerOwnerKey;
-  const { text: draftMessage, attachments: draftAttachments } = useComposerDraft(composerDraftKey);
+  const {
+    text: draftMessage,
+    attachments: draftAttachments,
+    context: draftContext,
+  } = useComposerDraft(composerDraftKey);
   const queuedEdit = props.queuedEdit ?? null;
   const hasContent =
     draftMessage.trim().length > 0 ||
@@ -528,18 +346,6 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
       serverConfig: props.serverConfig,
       states: uploadStates,
     });
-  const sendPresentation = resolveComposerSendPresentation({
-    editingQueuedMessage: queuedEdit !== null,
-    // A side-chat command starts a side chat; it never queues or steers the running turn.
-    running:
-      props.activeThreadBusy &&
-      (props.redirectsApproval || parseSideChatCommand(draftMessage) === null),
-    canSteer: props.canSteerActiveTurn,
-    followUpBehavior: props.followUpBehavior,
-    deliveryDeferred:
-      props.connectionState !== "connected" || props.queueCount > 0 || attachmentsUploading,
-  });
-  const sendLabel = sendPresentation.label;
   const currentModelSelection = props.selectedThread.modelSelection;
   const modelUnavailable =
     props.connectionState === "connected" &&
@@ -576,6 +382,25 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
       props.serverConfig?.providers ?? [],
       props.serverConfig?.usageLimitSources ?? [],
     );
+  const draftRunsLocally = composerRunsDraftLocally({
+    text: draftMessage,
+    holdsOnlyText: draftAttachments.length === 0,
+    // A redirect's text answers its approval, so `/side` there is that text.
+    sideChat: !props.redirectsApproval,
+    usageLimits: usageLimitsOffered,
+    codexFeedback: selectedProviderStatus?.driver === "codex",
+    freshSession: props.onFreshSession !== undefined && draftContext === undefined,
+  });
+  const sendPresentation = resolveComposerSendPresentation({
+    editingQueuedMessage: queuedEdit !== null,
+    running: props.activeThreadBusy && !draftRunsLocally,
+    canSteer: props.canSteerActiveTurn,
+    followUpBehavior: props.followUpBehavior,
+    deliveryDeferred:
+      !draftRunsLocally &&
+      (props.connectionState !== "connected" || props.queueCount > 0 || attachmentsUploading),
+  });
+  const sendLabel = sendPresentation.label;
   const openUsageLimits = () => {
     const report = collectProviderUsageLimits(
       currentModelSelection.instanceId,
@@ -641,15 +466,14 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
   );
   const isVoiceInputPresented = voicePresentation.statusKind === "active";
   const isExpanded = isFocused || settingsSheetPresentation.keepsComposerExpanded;
-  const { layout } = useAdaptiveWorkspaceLayout();
-  const floatingSidebarComposer = useAndroidFloatingTabs() && layout.usesSplitView;
-  const sidebarWorkspaceTabs = useSidebarWorkspaceTabs();
-  const deviceType = useDeviceType();
-  const usesLargeControls = sidebarWorkspaceTabs === "picker" || deviceType === "pad";
-  const surfacePaddingVertical = usesLargeControls ? 9 : floatingSidebarComposer ? 6 : 2;
+  const { usesLargeControls, paddingVertical: surfacePaddingVertical } = useComposerChrome();
   const [compactRowWidth, setCompactRowWidth] = useState(0);
   const compactAttachmentLimit = compactRowWidth >= 500 ? 3 : 1;
-  const compactEditor = useCompactComposerEditor(bodyText, draftMessage, compactRowWidth);
+  const compactEditor = useCompactComposerEditor(
+    bodyText,
+    draftMessage,
+    Platform.OS === "ios" && isFocused,
+  );
   const showsCompactDictation = isVoiceInputPresented;
   const isToolbarVisible = isVoiceInputPresented;
   const hasEditingAttachments =
@@ -970,6 +794,7 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
           {isExpanded ? editingAttachments : null}
           <View
             onLayout={(event) => {
+              compactEditor.onRowLayout(event);
               setCompactRowWidth(event.nativeEvent.layout.width);
             }}
           >
@@ -1165,8 +990,14 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
                   compactEditor.isExpanded ? { flex: 1, justifyContent: "flex-end" } : undefined
                 }
               >
-                {compactControl}
-                {modelControl}
+                <Animated.View
+                  key={compactEditor.isExpanded ? "expanded" : "compact"}
+                  className="min-w-0 shrink flex-row items-center"
+                  entering={compactEditor.toolbarControlsEntering}
+                >
+                  {compactControl}
+                  {modelControl}
+                </Animated.View>
                 <ComposerDictationStartAction
                   size={usesLargeControls ? "large" : "regular"}
                   state={voiceInput.state}

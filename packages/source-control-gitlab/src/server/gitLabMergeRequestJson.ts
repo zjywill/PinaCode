@@ -1023,6 +1023,8 @@ export interface GitLabMergeRequestPatch {
   readonly patch: string;
   readonly truncated: boolean;
   readonly rawCount: number;
+  /** Files GitLab sent without their diff because they are too large or collapsed. */
+  readonly withheldPaths: ReadonlyArray<string>;
 }
 
 export function decodeMergeRequestDiffsJson(
@@ -1053,6 +1055,7 @@ export function decodeMergeRequestChangesJson(
 
 function mergeRequestPatch(entries: ReadonlyArray<unknown>): GitLabMergeRequestPatch {
   const sections: string[] = [];
+  const withheldPaths: string[] = [];
   let truncated = false;
   for (const entry of entries) {
     const file = decodeDiffEntry(entry);
@@ -1062,8 +1065,9 @@ function mergeRequestPatch(entries: ReadonlyArray<unknown>): GitLabMergeRequestP
     }
     const value = file.value;
     const hunks = value.diff ?? "";
-    if (hunks.length === 0) {
-      truncated = truncated || value.too_large === true || value.collapsed === true;
+    if (hunks.length === 0 && (value.too_large === true || value.collapsed === true)) {
+      truncated = true;
+      withheldPaths.push(value.new_path);
     }
     const { from, to } = diffHeaderPaths(value);
     const header = [
@@ -1087,6 +1091,7 @@ function mergeRequestPatch(entries: ReadonlyArray<unknown>): GitLabMergeRequestP
     patch: sections.join("\n"),
     truncated,
     rawCount: entries.length,
+    withheldPaths,
   };
 }
 

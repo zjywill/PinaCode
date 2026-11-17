@@ -906,7 +906,7 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
       getSettings: snapshotSettings.getSettings,
       streamSettings: snapshotSettings.streamSettings,
       haveSettingsChanged: haveProviderSnapshotSettingsChanged,
-      initialSnapshot: () => checkProvider,
+      initialSnapshot: () => buildInitialAcpRegistrySnapshot(readinessInput),
       checkProvider: dimCode
         ? checkProvider.pipe(
             Effect.filterOrElse(

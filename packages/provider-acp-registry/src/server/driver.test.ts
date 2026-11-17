@@ -996,6 +996,7 @@ it.layer(driverLayer, { excludeTestServices: true })("AcpRegistryDriver", (it) =
           }),
         ),
       );
+      yield* instance.snapshot.refresh;
       expect(yield* instance.snapshot.getSnapshot).toMatchObject({
         installed: false,
         versionAdvisory: { canUpdate: true },
@@ -1050,6 +1051,27 @@ it.layer(driverLayer, { excludeTestServices: true })("AcpRegistryDriver", (it) =
           executable: "npm",
           args: ["install", "-g", "--prefix", yield* fs.realPath(prefix), "dimcode-alpha@alpha"],
         },
+      });
+    }),
+  );
+
+  it.effect("creates without inspecting the agent, which may fetch the registry", () =>
+    Effect.gen(function* () {
+      const instance = yield* AcpRegistryDriver.create({
+        instanceId: identity.instanceId,
+        displayName: identity.displayName,
+        enabled: true,
+        environment: [],
+        config: decodeSettings({ agentId: "test-agent" }),
+      }).pipe(
+        Effect.provideService(AcpRegistrySupport.AcpRegistryCatalog, {
+          ...catalogWithInspection({ status: "unconfigured" }),
+          inspect: () => Effect.die("inspected during creation"),
+        }),
+      );
+      expect(yield* instance.snapshot.getSnapshot).toMatchObject({
+        installed: false,
+        message: "Checking ACP Registry agent readiness...",
       });
     }),
   );

@@ -67,6 +67,14 @@ export type T3McpToolSummaryAction =
   | "unwatch-pr"
   | "write-pr-guides"
   | "read-pr-guide"
+  | "list-issues"
+  | "read-issue"
+  | "create-issue"
+  | "comment-issue"
+  | "set-issue-state"
+  | "link-issue"
+  | "unlink-issue"
+  | "list-thread-issues"
   | "browser"
   | "device"
   | "html-preview"
@@ -142,6 +150,23 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     ["Read", "Reading", "Read", "a review guide"],
     "read-pr-guide",
     "pull-request",
+  ),
+  pinacode_list_issues: tool(["List", "Listing", "Listed", "issues"], "list-issues"),
+  pinacode_read_issue: tool(["Read", "Reading", "Read", "an issue"], "read-issue"),
+  pinacode_create_issue: tool(["File", "Filing", "Filed", "an issue"], "create-issue"),
+  pinacode_comment_on_issue: tool(
+    ["Comment on", "Commenting on", "Commented on", "an issue"],
+    "comment-issue",
+  ),
+  pinacode_set_issue_state: tool(
+    ["Change", "Changing", "Changed", "an issue's state"],
+    "set-issue-state",
+  ),
+  pinacode_link_issue: tool(["Link", "Linking", "Linked", "an issue"], "link-issue"),
+  pinacode_unlink_issue: tool(["Unlink", "Unlinking", "Unlinked", "an issue"], "unlink-issue"),
+  pinacode_list_thread_issues: tool(
+    ["Check", "Checking", "Checked", "linked issues"],
+    "list-thread-issues",
   ),
   pinacode_orchestrator_capabilities: tool(
     ["Get", "Getting", "Got", "orchestration capabilities"],
