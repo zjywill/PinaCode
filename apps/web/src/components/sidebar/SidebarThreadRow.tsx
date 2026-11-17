@@ -1271,11 +1271,27 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     ) : null;
   const delegationStyle =
     delegation && delegation.depth > 0
-      ? { marginInlineStart: Math.min(delegation.depth, 6) * 14 }
+      ? { paddingInlineStart: (Math.min(delegation.depth, 6) + 1) * 14 }
       : undefined;
-  const delegationConnectorClassName =
-    delegationStyle &&
-    "relative ps-3.5 before:pointer-events-none before:absolute before:start-0 before:top-0 before:h-1/2 before:w-3.5 before:rounded-es-lg before:border-s-2 before:border-b-2 before:border-sidebar-muted-foreground/60 before:content-['']";
+  const delegationConnectors =
+    delegationStyle && delegation ? (
+      <span aria-hidden className="pointer-events-none absolute inset-0">
+        {delegation.continuations
+          .slice(-6)
+          .flatMap((continues, index) => (continues ? [(index + 1) * 14] : []))
+          .map((insetInlineStart) => (
+            <span
+              key={insetInlineStart}
+              className="absolute inset-y-0 border-s-2 border-sidebar-muted-foreground/60"
+              style={{ insetInlineStart }}
+            />
+          ))}
+        <span
+          className="absolute top-0 h-1/2 w-3.5 rounded-es-lg border-s-2 border-b-2 border-sidebar-muted-foreground/60"
+          style={{ insetInlineStart: Math.min(delegation.depth, 6) * 14 }}
+        />
+      </span>
+    ) : null;
   if (variant !== "card") {
     const multiline = variant === "folder-multiline";
     const inFolder = variant === "folder" || multiline;
@@ -1289,9 +1305,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
           "list-none [content-visibility:auto] [contain-intrinsic-size:auto_--spacing(9)]",
           metaLine !== null && multiline && "[contain-intrinsic-size:auto_--spacing(13.5)]",
           sortable?.isDragging && "relative z-20",
-          delegationConnectorClassName,
+          delegationStyle && "relative",
         )}
       >
+        {delegationConnectors}
         {delegationSummary}
         <Tooltip disabled={isRenaming || sortable?.isDragging}>
           <TooltipTrigger
@@ -1489,9 +1506,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         "list-none py-0.5 [content-visibility:auto] [contain-intrinsic-size:auto_78px]",
         metaLineEmpty && "[contain-intrinsic-size:auto_60px]",
         sortable?.isDragging && "relative z-20",
-        delegationConnectorClassName,
+        delegationStyle && "relative",
       )}
     >
+      {delegationConnectors}
       {delegationSummary}
       <Tooltip disabled={isRenaming || snoozeMenuOpen || sortable?.isDragging}>
         <TooltipTrigger

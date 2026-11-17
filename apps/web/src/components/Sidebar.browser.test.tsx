@@ -366,10 +366,10 @@ describe("delegated session navigation", () => {
         .toBeInTheDocument();
       await expect.element(screen.getByText(child.title, { exact: true })).toBeInTheDocument();
       const childRow = screen.container.querySelector<HTMLElement>(
-        `[data-thread-item="local:${child.id}"]`,
+        `[data-sidebar-row="local:${child.id}"]`,
       )!;
       const parentRow = screen.container.querySelector<HTMLElement>(
-        `[data-thread-item="local:${parent.id}"]`,
+        `[data-sidebar-row="local:${parent.id}"]`,
       )!;
       expect(childRow.getBoundingClientRect().left).toBeGreaterThan(
         parentRow.getBoundingClientRect().left,
@@ -397,7 +397,7 @@ describe("delegated session navigation", () => {
       await expect.element(screen.getByText(child.title, { exact: true })).toBeInTheDocument();
       expect(
         screen.container.querySelector<HTMLElement>(`[data-thread-item="local:${child.id}"]`)!.style
-          .marginInlineStart,
+          .paddingInlineStart,
       ).toBe("");
       if (folders) {
         vi.mocked(useQuietThreadShells).mockReturnValue([

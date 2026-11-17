@@ -81,8 +81,19 @@ describe("thread relationships", () => {
     });
     expect(opened.rows.get("local:child")).toMatchObject({
       depth: 1,
+      continuations: [true],
       progress: "Waiting for approval",
       detail: "Independent approval required",
+    });
+    expect(opened.rows.get("local:sibling")).toMatchObject({ continuations: [false] });
+    const grandchild = shell("grandchild", "child");
+    const nested = group([parent, child, grandchild, sibling]);
+    expect(nested.rows.get("local:grandchild")).toMatchObject({
+      depth: 2,
+      continuations: [true, false],
+    });
+    expect(group([parent, child, grandchild]).rows.get("local:grandchild")).toMatchObject({
+      continuations: [false, false],
     });
     const collapsed = new Set(["local:parent"]);
     expect(group(threads, collapsed).items).toEqual([otherEnvironmentChild, parent]);

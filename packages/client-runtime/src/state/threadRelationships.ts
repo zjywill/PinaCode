@@ -11,6 +11,7 @@ import { scopeThreadRef, scopedThreadKey } from "../environment/scoped.ts";
 
 export interface DelegationListRow {
   readonly depth: number;
+  readonly continuations: ReadonlyArray<boolean>;
   readonly childCount: number;
   readonly taskCount: number;
   readonly expanded: boolean;
@@ -138,7 +139,7 @@ export function groupDelegationList<T>(input: {
   const rows = new Map<string, DelegationListRow>();
   const items: T[] = [];
   const visited = new Set<string>();
-  const visit = (key: string, depth: number, hidden = false) => {
+  const visit = (key: string, continuations: ReadonlyArray<boolean>, hidden = false) => {
     if (visited.has(key)) return;
     visited.add(key);
     const item = visible.get(key)!;
@@ -156,7 +157,8 @@ export function groupDelegationList<T>(input: {
         thread.lineage.relationshipToParent === "delegation"
       )
         rows.set(key, {
-          depth,
+          depth: continuations.length,
+          continuations,
           childCount: nested.length,
           taskCount: total?.count ?? 0,
           expanded,
@@ -169,20 +171,20 @@ export function groupDelegationList<T>(input: {
                 ? "Waiting for input"
                 : state?.active && isThreadWorking(thread)
                   ? "Repairing"
-                  : (state?.label ??
-                    (thread.lineage.relationshipToParent === "delegation" ? "Implementing" : null)),
+                  : (state?.label ?? null),
           detail: state?.detail ?? null,
         });
     }
-    for (const child of nested) visit(child, depth + 1, hidden || !expanded);
+    for (const [index, child] of nested.entries())
+      visit(child, [...continuations, index < nested.length - 1], hidden || !expanded);
   };
   for (const item of input.items) {
     const thread = input.threadOf(item);
     if (thread === undefined) items.push(item);
-    else if (!parentByKey.has(keyOf(thread))) visit(keyOf(thread), 0);
+    else if (!parentByKey.has(keyOf(thread))) visit(keyOf(thread), []);
   }
   // Malformed legacy cycles must remain navigable too.
-  for (const key of visible.keys()) if (!visited.has(key)) visit(key, 0);
+  for (const key of visible.keys()) if (!visited.has(key)) visit(key, []);
   return { items, rows };
 }
 
