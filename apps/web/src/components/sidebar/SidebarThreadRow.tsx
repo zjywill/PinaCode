@@ -1271,24 +1271,29 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     ) : null;
   const delegationStyle =
     delegation && delegation.depth > 0
-      ? { paddingInlineStart: (Math.min(delegation.depth, 6) + 1) * 14 }
+      ? { paddingInlineStart: (Math.min(delegation.depth, 6) + 1) * 12 }
       : undefined;
   const delegationConnectors =
     delegationStyle && delegation ? (
       <span aria-hidden className="pointer-events-none absolute inset-0">
         {delegation.continuations
           .slice(-6)
-          .flatMap((continues, index) => (continues ? [(index + 1) * 14] : []))
+          .flatMap((continues, index) => (continues ? [(index + 1) * 12] : []))
           .map((insetInlineStart) => (
             <span
               key={insetInlineStart}
-              className="absolute inset-y-0 border-s-2 border-sidebar-muted-foreground/60"
+              className="absolute inset-y-0 border-s border-sidebar-muted-foreground/60"
               style={{ insetInlineStart }}
             />
           ))}
         <span
-          className="absolute top-0 h-1/2 w-3.5 rounded-es-lg border-s-2 border-b-2 border-sidebar-muted-foreground/60"
-          style={{ insetInlineStart: Math.min(delegation.depth, 6) * 14 }}
+          className={cn(
+            "absolute w-3 border-sidebar-muted-foreground/60",
+            delegation.continuations.at(-1)
+              ? "top-1/2 border-b"
+              : "top-0 h-1/2 rounded-es-lg border-s border-b",
+          )}
+          style={{ insetInlineStart: Math.min(delegation.depth, 6) * 12 }}
         />
       </span>
     ) : null;
@@ -1500,11 +1505,17 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       {...sortableRootProps}
       style={{ ...sortableRootProps.style, ...delegationStyle }}
       {...(fileDropHandlers ?? {})}
-      // The hints are the rendered heights inside py-0.5. Revealing the open thread measures rows
+      // The hints include row padding. Revealing the open thread measures rows
       // that have not rendered yet, so a hint off by a pixel lands it a pixel short per row above.
       className={cn(
-        "list-none py-0.5 [content-visibility:auto] [contain-intrinsic-size:auto_78px]",
-        metaLineEmpty && "[contain-intrinsic-size:auto_60px]",
+        "list-none [content-visibility:auto]",
+        delegationStyle
+          ? "py-1.5 [contain-intrinsic-size:auto_86px]"
+          : "py-0.5 [contain-intrinsic-size:auto_78px]",
+        metaLineEmpty &&
+          (delegationStyle
+            ? "[contain-intrinsic-size:auto_68px]"
+            : "[contain-intrinsic-size:auto_60px]"),
         sortable?.isDragging && "relative z-20",
         delegationStyle && "relative",
       )}
