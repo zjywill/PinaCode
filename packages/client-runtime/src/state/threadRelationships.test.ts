@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
-import { ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ThreadId, type PullRequestFollowUp } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
+import { presentThreadShell } from "./models.ts";
+import { v2ThreadShell } from "./orchestrationV2TestFixtures.ts";
 
 import {
   deriveThreadRelationshipGraph,
+  groupDelegationList,
   immediateThreadRelationships,
   orderWebThreadLineageRows,
   resolveMergeBackTargetThreadId,
@@ -11,6 +14,100 @@ import {
 } from "./threadRelationships.ts";
 
 describe("thread relationships", () => {
+  it("groups independent sessions without hiding filtered parents' children or changing watches", () => {
+    const environment = EnvironmentId.make("local");
+    const shell = (id: string, parent: string | null = null) =>
+      presentThreadShell(environment, {
+        ...v2ThreadShell,
+        id: ThreadId.make(id),
+        lineage: {
+          rootThreadId: ThreadId.make(parent ?? id),
+          parentThreadId: parent === null ? null : ThreadId.make(parent),
+          relationshipToParent: parent === null ? null : "delegation",
+        },
+      });
+    const child = shell("child", "parent");
+    const sibling = shell("sibling", "parent");
+    const otherEnvironmentChild = {
+      ...shell("child", "parent"),
+      environmentId: EnvironmentId.make("remote"),
+    };
+    const parent = {
+      ...shell("parent"),
+      pullRequests: [
+        {
+          host: "github.com",
+          repository: "owner/repo",
+          number: 1,
+          url: "https://github.com/owner/repo/pull/1",
+          source: "agent" as const,
+          linkedAt: "2026-06-20T00:00:00.000Z",
+          snapshot: null,
+          stack: null,
+          watch: {
+            startedAt: "2026-06-20T00:00:00.000Z",
+            headSha: "head",
+            failedChecks: [],
+            passed: true,
+            passedChecks: ["test"],
+            remarksThrough: "2026-06-20T00:00:00.000Z",
+            remarkIds: [],
+            conflicting: false,
+            wakes: 0,
+            followUp: {
+              issueUrl: "https://github.com/owner/repo/issues/2",
+              childThreadId: child.id,
+              phase: "waiting-approval" as PullRequestFollowUp["phase"],
+              blockers: ["Independent approval required"],
+            },
+          },
+        },
+      ],
+    };
+    const threads = [child, otherEnvironmentChild, parent, sibling];
+    const group = (items = threads, collapsed = new Set<string>()) =>
+      groupDelegationList({ items, threadOf: (thread) => thread, threads, collapsed });
+    const opened = group();
+    expect(opened.items.map((thread) => `${thread.environmentId}:${thread.id}`)).toEqual([
+      "remote:child",
+      "local:parent",
+      "local:child",
+      "local:sibling",
+    ]);
+    expect(opened.rows.get("local:parent")).toMatchObject({
+      childCount: 2,
+      activeCount: 2,
+      blockedCount: 1,
+    });
+    expect(opened.rows.get("local:child")).toMatchObject({
+      depth: 1,
+      progress: "Waiting for approval",
+      detail: "Independent approval required",
+    });
+    const collapsed = new Set(["local:parent"]);
+    expect(group(threads, collapsed).items).toEqual([otherEnvironmentChild, parent]);
+    expect(group([child], collapsed).rows.get("local:child")).toMatchObject({
+      depth: 0,
+      progress: "Waiting for approval",
+    });
+    expect(parent.pullRequests[0]!.watch.followUp.phase).toBe("waiting-approval");
+    parent.pullRequests[0]!.watch.followUp.phase = "awaiting-acceptance";
+    parent.pullRequests[0]!.watch.followUp.blockers = [];
+    expect(group().rows.get("local:parent")).toMatchObject({ activeCount: 2, blockedCount: 0 });
+    expect(group().rows.get("local:child")?.progress).toBe("Ready to merge");
+    parent.pullRequests[0]!.watch.followUp.phase = "unreadable";
+    expect(group().rows.get("local:child")?.progress).toBe("Unable to verify");
+    expect(group().rows.get("local:parent")?.blockedCount).toBe(1);
+    const { watch, ...link } = parent.pullRequests[0]!;
+    watch.followUp.phase = "paused";
+    threads[2] = { ...parent, pullRequests: [{ ...link, endedWatch: watch }] };
+    expect(group().rows.get("local:child")?.progress).toBe("Paused");
+    expect(group().rows.get("local:parent")).toMatchObject({ activeCount: 2, blockedCount: 1 });
+    watch.followUp.phase = undefined;
+    expect(group().rows.get("local:child")?.progress).toBe("Stopped");
+    expect(group().rows.get("local:parent")).toMatchObject({ activeCount: 1, blockedCount: 0 });
+  });
+
   it.each([
     ["running", "completed"],
     ["completed", "running"],

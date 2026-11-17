@@ -1028,6 +1028,7 @@ export function toPullRequestWatchFingerprint(
 }
 
 export interface GitHubPullRequestCore extends GitHubPullRequestDetail {
+  readonly platformReviewDecision: PullRequestReviewDecision | null;
   readonly mergeQueueRemoval?: PullRequestMergeQueueRemoval;
   readonly maintainerCanModify: boolean;
   readonly canEditMaintainerEdits: boolean;
@@ -1086,6 +1087,7 @@ export function toPullRequestCore(result: PullRequestCore.Result): GitHubPullReq
       statusCheckRollup: toCheckContexts(nodesOf(contexts)),
     }),
     headRepositoryNameWithOwner: trimmed(pr.headRepository?.nameWithOwner),
+    platformReviewDecision: toReviewDecision(pr.reviewDecision),
     maintainerCanModify: pr.maintainerCanModify,
     canEditMaintainerEdits:
       pr.state === "OPEN" &&

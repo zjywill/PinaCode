@@ -1,4 +1,5 @@
 import * as Dialog from "../../components/ui/Dialog";
+import type { DelegationListRow } from "@t3tools/client-runtime/state/thread-relationships";
 import type { ThreadRowProviderInstance } from "./thread-provider-instance";
 import {
   THREAD_LIST_V2_MONO_FONT as MONO_FONT,
@@ -651,6 +652,8 @@ export const ThreadListV2PendingRow = memo(function ThreadListV2PendingRow(props
 
 export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly thread: EnvironmentThreadShell;
+  readonly delegation?: DelegationListRow | undefined;
+  readonly onToggleDelegation?: ((key: string) => void) | undefined;
   readonly variant: "card" | "slim";
   readonly hasQueuedMessages?: boolean;
   readonly snoozed?: boolean;
@@ -1574,10 +1577,9 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       </RowPressable>
     );
 
-  if (!canOperateThread)
-    return <View style={rowAppearance.swipeContainerStyle}>{rowContent(() => {})}</View>;
-
-  return (
+  const content = !canOperateThread ? (
+    <View style={rowAppearance.swipeContainerStyle}>{rowContent(() => {})}</View>
+  ) : (
     <View collapsable={false}>
       {customSnoozeOpen && (
         <CustomSnoozeSheet onClose={() => setCustomSnoozeOpen(false)} onSnooze={handleSnooze} />
@@ -1611,6 +1613,45 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           </Menu>
         )}
       </ThreadSwipeable>
+    </View>
+  );
+  const delegation = props.delegation;
+  if (!delegation || (delegation.childCount === 0 && delegation.progress === null)) return content;
+  return (
+    <View
+      className={delegation.depth > 0 ? "border-l border-border-subtle" : undefined}
+      style={{ marginLeft: Math.min(delegation.depth, 6) * 14 }}
+    >
+      <View className="flex-row flex-wrap items-center gap-2 px-3 pt-1">
+        {delegation.childCount > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${delegation.expanded ? "Collapse" : "Expand"} delegated sessions for ${thread.title}`}
+            accessibilityState={{ expanded: delegation.expanded }}
+            onPress={() => props.onToggleDelegation?.(`${thread.environmentId}:${thread.id}`)}
+            className="min-h-9 flex-row items-center gap-1"
+          >
+            <SymbolView name={delegation.expanded ? "chevron.down" : "chevron.right"} size={12} />
+            <Text className="text-xs text-muted-foreground">
+              {delegation.activeCount} active · {delegation.blockedCount} blocked
+            </Text>
+          </Pressable>
+        ) : null}
+        {delegation.progress !== null ? (
+          <Pressable
+            disabled={delegation.detail === null}
+            accessibilityRole={delegation.detail === null ? "text" : "button"}
+            accessibilityLabel={[delegation.progress, delegation.detail].filter(Boolean).join(": ")}
+            onPress={() =>
+              Dialog.alert(delegation.progress ?? "Follow-up", delegation.detail ?? "")
+            }
+            className="min-h-9 justify-center"
+          >
+            <Text className="text-xs text-muted-foreground">{delegation.progress}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {content}
     </View>
   );
 });

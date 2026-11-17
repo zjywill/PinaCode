@@ -1,6 +1,8 @@
 import type { OlderSettledScope } from "@t3tools/client-runtime/state/threads";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { useMemo, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { groupDelegationList } from "@t3tools/client-runtime/state/thread-relationships";
+import { scopeThreadRef, scopedThreadKey } from "@t3tools/client-runtime/environment";
 
 import { scopedProjectKey } from "../../lib/scopedEntities";
 import { useOlderSettledShelf, useOlderSettledShelfGrowth } from "../../state/olderSettledShelf";
@@ -242,7 +244,48 @@ export function useThreadListV2(input: {
       input.shelfPreferencesLoaded,
     ],
   );
-  return { layout, items, contentOnlyThreadKeys, olderSettledShelf };
+  const [collapsedDelegations, setCollapsedDelegations] = useState<ReadonlySet<string>>(new Set());
+  const toggleDelegation = useCallback((key: string) => {
+    setCollapsedDelegations((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+  const grouped = useMemo(
+    () =>
+      groupDelegationList({
+        items,
+        threadOf: (item) => (item.type === "v2-thread" ? item.item.thread : undefined),
+        threads,
+        collapsed: collapsedDelegations,
+      }),
+    [items, threads, collapsedDelegations],
+  );
+  const delegatedItems = useMemo(
+    () =>
+      grouped.items.map((item) =>
+        item.type === "v2-thread"
+          ? {
+              ...item,
+              delegation: grouped.rows.get(
+                scopedThreadKey(
+                  scopeThreadRef(item.item.thread.environmentId, item.item.thread.id),
+                ),
+              ),
+            }
+          : item,
+      ),
+    [grouped],
+  );
+  return {
+    layout,
+    items: delegatedItems,
+    toggleDelegation,
+    contentOnlyThreadKeys,
+    olderSettledShelf,
+  };
 }
 
 /** The list's scope per environment: its projects there, or every project. */

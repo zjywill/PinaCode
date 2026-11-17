@@ -5,6 +5,7 @@ import {
   type OrchestrationV2ThreadShell,
   type ThreadId,
   type ThreadPullRequestLink,
+  type PullRequestFollowUp,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -14,6 +15,7 @@ import * as Option from "effect/Option";
 import * as Orchestrator from "../../../orchestration-v2/Orchestrator.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import * as PullRequestWatchService from "../../../pullRequest/PullRequestWatchService.ts";
+import { PULL_REQUEST_WORKFLOW_SKILL } from "../../../pullRequest/pullRequestWorkflow.ts";
 import { resolveTarget, type ResolvedTarget } from "../../../pullRequest/pullRequestTarget.ts";
 import * as PullRequestReviewGuideService from "../../../pullRequest/PullRequestReviewGuideService.ts";
 import { pullRequestSyncKey } from "../../../pullRequest/pullRequestSyncKey.ts";
@@ -199,18 +201,27 @@ const make = Effect.gen(function* () {
 
   // The domain service owns the registration span.
   const setWatching = Effect.fnUntraced(function* (
-    input: PullRequestTargetInput,
+    input: PullRequestTargetInput & {
+      readonly followUp?: Pick<PullRequestFollowUp, "issueUrl" | "childThreadId"> | undefined;
+    },
     watching: boolean,
   ) {
     const scope = yield* McpInvocationContext.requireMcpCapability("pull-requests");
     const threadId = input.threadId ?? scope.thread?.threadId;
     if (threadId === undefined) return yield* new PullRequestThreadRequiredError();
-    return yield* watches.setWatching({ threadId, target: input, watching }).pipe(
-      Effect.catchTags({
-        PullRequestWatchThreadNotFoundError: (error) =>
-          threadNotFound(engine, scope, error.threadId, error.message),
-      }),
-    );
+    return yield* watches
+      .setWatching({
+        threadId,
+        target: input,
+        watching,
+        ...(input.followUp === undefined ? {} : { followUp: input.followUp }),
+      })
+      .pipe(
+        Effect.catchTags({
+          PullRequestWatchThreadNotFoundError: (error) =>
+            threadNotFound(engine, scope, error.threadId, error.message),
+        }),
+      );
   });
 
   const locateAll = Effect.fn("PullRequestsToolkit.locateAll")(function* (
@@ -441,6 +452,21 @@ const make = Effect.gen(function* () {
     ),
     pinacode_watch_pull_request: writesThread((input) => setWatching(input, true)),
     pinacode_unwatch_pull_request: writesThread((input) => setWatching(input, false)),
+    pinacode_pr_workflow: McpToolAccess.reads((input) =>
+      Effect.gen(function* () {
+        const thread = yield* requireThread(PullRequestListFailedError, input.threadId);
+        const state = yield* watches
+          .readWorkflow(thread.id)
+          .pipe(
+            Effect.mapError((cause) =>
+              cause._tag === "PullRequestWatchFromSubagentError"
+                ? cause
+                : new PullRequestListFailedError({ cause }),
+            ),
+          );
+        return { skill: PULL_REQUEST_WORKFLOW_SKILL, ...state };
+      }),
+    ),
     pinacode_write_pull_request_guides: McpToolAccess.writesWithCapability((input) =>
       Effect.gen(function* () {
         const located = yield* locateAll(input.pullRequests);

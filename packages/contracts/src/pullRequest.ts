@@ -671,6 +671,9 @@ export const PullRequestDetail = Schema.Struct({
   reviewers: Schema.Array(PullRequestActor),
   labels: Schema.Array(PullRequestLabel),
   checks: Schema.Array(PullRequestCheck),
+  /** Platform approval rules, not inferred from comments or check conclusions. */
+  platformReviewDecision: Schema.optional(Schema.NullOr(PullRequestReviewDecision)),
+  mergeGate: Schema.optional(Schema.Literals(["ready", "blocked", "unknown"])),
   mergeCapabilities: PullRequestMergeCapabilities,
   viewer: Schema.optional(TrimmedNonEmptyString),
   baseComparison: Schema.optional(PullRequestBaseComparison),

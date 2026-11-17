@@ -1,4 +1,6 @@
 import "vite-plus/test/config";
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- Embed the bundled workflow without runtime asset paths.
+import * as NodeFS from "node:fs";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- tsdown needs the asset path when it reads this config.
 import * as NodePath from "node:path";
 import { defineConfig, mergeConfig } from "vite-plus";
@@ -145,6 +147,12 @@ export default mergeConfig(
         js: "#!/usr/bin/env node\n",
       },
       define: {
+        __T3CODE_PR_WORKFLOW_SKILL__: JSON.stringify(
+          NodeFS.readFileSync(
+            new URL("./src/pullRequest/following-pull-requests/SKILL.md", import.meta.url),
+            "utf8",
+          ),
+        ),
         __T3CODE_BUILD_CHANNEL__: JSON.stringify(cliBuildChannel),
         __T3CODE_TELEMETRY_CHANNEL__: JSON.stringify(telemetryChannel),
         __T3CODE_BUILD_RELAY_URL__: JSON.stringify(repoEnv.T3CODE_RELAY_URL?.trim() ?? ""),

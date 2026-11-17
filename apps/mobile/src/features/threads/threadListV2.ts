@@ -1,3 +1,4 @@
+import type { DelegationListRow } from "@t3tools/client-runtime/state/thread-relationships";
 import {
   canSnooze,
   effectiveSnoozed,
@@ -424,6 +425,7 @@ export interface ThreadListV2Layout {
 
 export interface ThreadListV2ThreadListItem {
   readonly type: "v2-thread";
+  readonly delegation?: DelegationListRow | undefined;
   readonly key: string;
   readonly item: ThreadListV2Item;
   readonly snoozeWakeLabelText: string | undefined;
@@ -508,6 +510,13 @@ export function threadListV2ListItemsAreEqual(
         previous.snoozePresetMinute === item.snoozePresetMinute &&
         previous.showTrailingDivider === item.showTrailingDivider &&
         previous.hasQueuedMessages === item.hasQueuedMessages &&
+        previous.delegation?.depth === item.delegation?.depth &&
+        previous.delegation?.childCount === item.delegation?.childCount &&
+        previous.delegation?.expanded === item.delegation?.expanded &&
+        previous.delegation?.activeCount === item.delegation?.activeCount &&
+        previous.delegation?.blockedCount === item.delegation?.blockedCount &&
+        previous.delegation?.progress === item.delegation?.progress &&
+        previous.delegation?.detail === item.delegation?.detail &&
         previous.canMoveUp === item.canMoveUp &&
         previous.canMoveDown === item.canMoveDown
       );

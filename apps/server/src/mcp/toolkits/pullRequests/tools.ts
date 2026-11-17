@@ -6,6 +6,8 @@ import {
   PullRequestReviewGuide,
   PullRequestReviewGuideRun,
   PullRequestState,
+  PullRequestFollowUp,
+  PullRequestWorkflowState,
   PullRequestUnavailableError,
   ThreadPullRequestLinkSource,
   TrimmedNonEmptyString,
@@ -138,6 +140,7 @@ export const PullRequestToolError = Schema.Union([
   PullRequestUnavailableError,
   PullRequestWatchService.PullRequestNotOpenError,
   PullRequestWatchService.PullRequestWatchFromSubagentError,
+  PullRequestWatchService.PullRequestFollowUpInvalidError,
   PullRequestProjectNotFoundError,
   PullRequestGuideFailedError,
 ]);
@@ -326,8 +329,16 @@ const ListThreadPullRequestsTool = Tool.make("pinacode_list_thread_pull_requests
 
 const WatchPullRequestTool = Tool.make("pinacode_watch_pull_request", {
   description:
-    "Watch an open PR for this thread, linking it first if needed. PinaCode wakes you on failed checks, passed required checks, new comments or reviews, or conflicts. Handle old comments first. Only later ones wake you. After this call, end your turn. The watch stays on after each wake, so do not call this again on a wake. A wake is not a merge decision. Check readiness yourself.",
-  parameters: PullRequestTargetInput,
+    "Watch an open PR for this thread, linking it first if needed. PinaCode wakes you on failed checks, passed required checks, new comments or reviews, or conflicts. Handle old comments first. Only later ones wake you. When no other work remains, end your turn while waiting. The watch stays on after each wake, so do not call this again on a wake. A wake is not a merge decision. Check readiness yourself.",
+  parameters: Schema.Struct({
+    ...PullRequestTargetInput.fields,
+    followUp: Schema.optional(
+      Schema.Struct({
+        issueUrl: PullRequestFollowUp.fields.issueUrl,
+        childThreadId: PullRequestFollowUp.fields.childThreadId,
+      }),
+    ),
+  }),
   success: WatchPullRequestResult,
   failure: PullRequestToolError,
   dependencies: watchDependencies,
@@ -348,6 +359,24 @@ const UnwatchPullRequestTool = Tool.make("pinacode_unwatch_pull_request", {
 })
   .annotate(Tool.Title, "Stop watching pull request")
   .annotate(Tool.Readonly, false)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, false)
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenFromSubagents);
+
+const PullRequestWorkflowTool = Tool.make("pinacode_pr_workflow", {
+  description:
+    "Load PinaCode's built-in independent issue/PR follow-up skill and recover this coordinator's persisted issue sessions and PR watches. Use when asked to keep issues moving through review, CI and conflicts until mergeable, or when resuming that work. Not for a one-off fix or read-only review. This read does not start or stop watches.",
+  parameters: Schema.Struct({
+    environmentId: OrchestratorMcpEnvironmentTarget,
+    threadId: PullRequestTargetInput.fields.threadId,
+  }),
+  success: Schema.Struct({ skill: Schema.String, ...PullRequestWorkflowState.fields }),
+  failure: PullRequestToolError,
+  dependencies: watchDependencies,
+})
+  .annotate(Tool.Title, "Load PR follow-up workflow")
+  .annotate(Tool.Readonly, true)
   .annotate(Tool.Destructive, false)
   .annotate(Tool.Idempotent, true)
   .annotate(Tool.OpenWorld, false)
@@ -426,6 +455,7 @@ export const PullRequestsToolkit = Toolkit.make(
   ListThreadPullRequestsTool,
   WatchPullRequestTool,
   UnwatchPullRequestTool,
+  PullRequestWorkflowTool,
   WritePullRequestGuidesTool,
   ReadPullRequestGuideTool,
 );

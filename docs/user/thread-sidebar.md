@@ -66,11 +66,29 @@ requires a Git project on the coordinator's environment. If you have not chosen 
 provider and model, the coordinator asks once for the batch; you can choose to
 inherit its settings or use other available models.
 
-Each session appears separately in your thread list. When its work finishes, the
+Each independent session can be opened from your thread list. When its work finishes, the
 coordinator wakes automatically to inspect the diff and tests. Requested fixes go
 back to the same session, preserving its worktree, provider and conversation;
 completion wakes the coordinator for another review. Questions or approvals still
 need an answer. Stopping the coordinator stops its delegated work.
+
+For ongoing PR follow-up, ask the coordinator to “keep these issues moving until
+their PRs are ready to merge.” You can add more issues later without restarting
+earlier sessions. The coordinator checks review feedback, CI and conflicts, then
+returns repairs to the original session. No project-level skill installation is needed.
+
+Ready to merge requires checks and valid approvals for the latest head, no unresolved
+blocking feedback, and the host's merge restrictions to be satisfied. An agent's
+own review or a bot comment is not a formal approval. Readiness can be withdrawn
+when new commits or blockers appear; it never merges a PR for you.
+
+The coordinator's task counts and each independent session's progress reflect this
+follow-up. Collapsing the list, changing threads or asking for a progress report does
+not stop monitoring. Ask to stop a specific PR when you want to end its follow-up;
+merged and closed PRs end automatically. If monitoring pauses or cannot read the
+host, resolve the reported cause and ask the coordinator to resume the original
+follow-up. Monitoring needs the environment server running and valid host access;
+unfinished registrations survive a server restart.
 
 ## Pin and reorder threads
 

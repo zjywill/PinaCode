@@ -5,7 +5,171 @@ import {
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
-import type { ThreadStructure } from "./models.ts";
+import type { EnvironmentThreadShell, ThreadStructure } from "./models.ts";
+import { isThreadWorking } from "./threadInbox.ts";
+import { scopeThreadRef, scopedThreadKey } from "../environment/scoped.ts";
+
+export interface DelegationListRow {
+  readonly depth: number;
+  readonly childCount: number;
+  readonly expanded: boolean;
+  readonly activeCount: number;
+  readonly blockedCount: number;
+  readonly progress: string | null;
+  readonly detail: string | null;
+}
+
+/** Only visible parents group children; a filtered or missing parent never hides a task. */
+export function groupDelegationList<T>(input: {
+  readonly items: ReadonlyArray<T>;
+  readonly threadOf: (item: T) => EnvironmentThreadShell | undefined;
+  readonly threads: ReadonlyArray<EnvironmentThreadShell>;
+  readonly collapsed: ReadonlySet<string>;
+}): { readonly items: ReadonlyArray<T>; readonly rows: ReadonlyMap<string, DelegationListRow> } {
+  const keyOf = (thread: EnvironmentThreadShell) =>
+    scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+  const visible = new Map<string, T>();
+  for (const item of input.items) {
+    const thread = input.threadOf(item);
+    if (thread !== undefined) visible.set(keyOf(thread), item);
+  }
+  const parentByKey = new Map<string, string>();
+  const children = new Map<string, string[]>();
+  for (const [key, item] of visible) {
+    const thread = input.threadOf(item)!;
+    if (
+      thread.lineage.relationshipToParent !== "delegation" ||
+      thread.lineage.parentThreadId === null
+    )
+      continue;
+    const parentKey = scopedThreadKey(
+      scopeThreadRef(thread.environmentId, thread.lineage.parentThreadId),
+    );
+    if (parentKey === key || !visible.has(parentKey)) continue;
+    parentByKey.set(key, parentKey);
+    const siblings = children.get(parentKey) ?? [];
+    siblings.push(key);
+    children.set(parentKey, siblings);
+  }
+  const progress = new Map<
+    string,
+    { label: string; detail: string | null; active: boolean; blocked: boolean }
+  >();
+  for (const parent of input.threads) {
+    for (const link of parent.pullRequests) {
+      const watch = link.watch ?? link.endedWatch;
+      const followUp = watch?.followUp;
+      if (followUp === undefined) continue;
+      const key = scopedThreadKey(scopeThreadRef(parent.environmentId, followUp.childThreadId));
+      const terminal =
+        link.snapshot?.state === "merged"
+          ? "Merged"
+          : link.snapshot?.state === "closed"
+            ? "Closed"
+            : link.watch === undefined && followUp.phase !== "paused"
+              ? "Stopped"
+              : null;
+      const phase = followUp.phase;
+      const label =
+        terminal ??
+        (phase === "waiting-ci"
+          ? "Waiting for CI"
+          : phase === "waiting-approval"
+            ? "Waiting for approval"
+            : phase === "awaiting-acceptance"
+              ? "Ready to merge"
+              : phase === "unreadable"
+                ? "Unable to verify"
+                : phase === "paused"
+                  ? "Paused"
+                  : phase === "blocked"
+                    ? "Blocked"
+                    : "Verifying");
+      const state = {
+        label,
+        detail: followUp.blockers?.join("; ") || null,
+        active: terminal === null,
+        blocked:
+          terminal === null &&
+          (phase === "blocked" ||
+            phase === "waiting-approval" ||
+            phase === "unreadable" ||
+            phase === "paused"),
+      };
+      const previous = progress.get(key);
+      // A resumed watch takes precedence over an older ended link for the same task.
+      if (previous === undefined || (!previous.active && state.active)) progress.set(key, state);
+    }
+  }
+  const totals = new Map<string, { active: number; blocked: number }>();
+  for (const thread of input.threads) {
+    if (
+      thread.lineage.relationshipToParent !== "delegation" ||
+      thread.lineage.parentThreadId === null ||
+      thread.deletedAt !== null
+    )
+      continue;
+    const key = keyOf(thread);
+    const state = progress.get(key);
+    const parentKey = scopedThreadKey(
+      scopeThreadRef(thread.environmentId, thread.lineage.parentThreadId),
+    );
+    const total = totals.get(parentKey) ?? { active: 0, blocked: 0 };
+    const active = state?.active ?? thread.archivedAt === null;
+    if (active) total.active++;
+    if (active && (state?.blocked || thread.hasPendingApprovals || thread.hasPendingUserInput))
+      total.blocked++;
+    totals.set(parentKey, total);
+  }
+  const rows = new Map<string, DelegationListRow>();
+  const items: T[] = [];
+  const visited = new Set<string>();
+  const visit = (key: string, depth: number, hidden = false) => {
+    if (visited.has(key)) return;
+    visited.add(key);
+    const item = visible.get(key)!;
+    const thread = input.threadOf(item)!;
+    const state = progress.get(key);
+    const nested = children.get(key) ?? [];
+    const expanded = !input.collapsed.has(key);
+    const total = totals.get(key);
+    if (!hidden) {
+      items.push(item);
+      if (
+        nested.length > 0 ||
+        total !== undefined ||
+        state !== undefined ||
+        thread.lineage.relationshipToParent === "delegation"
+      )
+        rows.set(key, {
+          depth,
+          childCount: nested.length,
+          expanded,
+          activeCount: total?.active ?? 0,
+          blockedCount: total?.blocked ?? 0,
+          progress:
+            state?.active !== false && thread.hasPendingApprovals
+              ? "Waiting for permission"
+              : state?.active !== false && thread.hasPendingUserInput
+                ? "Waiting for input"
+                : state?.active && isThreadWorking(thread)
+                  ? "Repairing"
+                  : (state?.label ??
+                    (thread.lineage.relationshipToParent === "delegation" ? "Implementing" : null)),
+          detail: state?.detail ?? null,
+        });
+    }
+    for (const child of nested) visit(child, depth + 1, hidden || !expanded);
+  };
+  for (const item of input.items) {
+    const thread = input.threadOf(item);
+    if (thread === undefined) items.push(item);
+    else if (!parentByKey.has(keyOf(thread))) visit(keyOf(thread), 0);
+  }
+  // Malformed legacy cycles must remain navigable too.
+  for (const key of visible.keys()) if (!visited.has(key)) visit(key, 0);
+  return { items, rows };
+}
 
 export type ThreadRelationshipKind = "parent" | "fork" | "subagent" | "delegation" | "transfer";
 

@@ -510,6 +510,8 @@ export const make = Effect.gen(function* () {
       readChecks(input).pipe(
         Effect.map((pullRequest): ProviderChangeRequestDetail => ({
           ...pullRequest,
+          mergeGate: pullRequest.viewerAccess.canMergeNow === true ? "ready" : "blocked",
+          platformReviewDecision: pullRequest.platformReviewDecision,
           author: withAvatar(pullRequest.author, new Map<string, string>(), input.host),
           reviewers: [
             ...pullRequest.reviewRequestLogins.map((login) => ({

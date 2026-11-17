@@ -268,6 +268,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
   const {
     layout: threadListV2Layout,
     items: threadListV2Items,
+    toggleDelegation,
     contentOnlyThreadKeys,
     olderSettledShelf,
   } = useThreadListV2({
@@ -414,6 +415,8 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
           <ThreadListV2Row
             onNewThreadOnBranch={props.onNewThreadOnBranch}
             thread={thread}
+            delegation={item.delegation}
+            onToggleDelegation={toggleDelegation}
             variant={item.item.variant}
             hasQueuedMessages={item.hasQueuedMessages}
             snoozed={item.item.snoozed}

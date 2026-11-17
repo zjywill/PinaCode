@@ -409,6 +409,7 @@ export function HomeScreen(props: HomeScreenProps) {
   const {
     layout: threadListV2Layout,
     items: threadListV2Items,
+    toggleDelegation,
     contentOnlyThreadKeys,
     olderSettledShelf,
   } = useThreadListV2({
@@ -528,6 +529,8 @@ export function HomeScreen(props: HomeScreenProps) {
         fullSwipeWidth={fullSwipeWidth}
         onNewThreadOnBranch={props.onNewThreadOnBranch}
         thread={thread}
+        delegation={item.delegation}
+        onToggleDelegation={toggleDelegation}
         variant={item.item.variant}
         hasQueuedMessages={item.hasQueuedMessages}
         snoozed={item.item.snoozed}

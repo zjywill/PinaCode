@@ -4577,6 +4577,324 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
     }),
   );
 
+  it.effect(
+    "recovers independent follow-up readiness without replaying wakes or reviving stopped watches",
+    () =>
+      Effect.gen(function* () {
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
+        const sink = yield* EventSink.EventSinkV2;
+        const worker = yield* EffectWorker.OrchestrationEffectWorkerV2;
+        const threadId = ThreadId.make("follow-up-coordinator");
+        const childThreadId = ThreadId.make("follow-up-original-session");
+        const projectId = ProjectId.make("follow-up-project");
+        yield* seedProject({
+          projectId,
+          title: "Follow-up",
+          workspaceRoot: "/workspace/follow-up",
+          defaultModelSelection: null,
+          createdAt: "2026-10-01T00:00:00.000Z",
+        });
+        yield* orchestrator.dispatch({
+          type: "thread.create",
+          commandId: CommandId.make(`create-${threadId}`),
+          createdBy: "user",
+          creationSource: "web",
+          threadId,
+          projectId,
+          title: threadId,
+          modelSelection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+        });
+        const parent = yield* orchestrator.getThreadProjection(threadId);
+        const key = { host: "github.com", repository: "acme/follow-up", number: 7 };
+        const followUp = { issueUrl: "https://github.com/acme/follow-up/issues/7", childThreadId };
+        yield* sink.write({
+          events: [
+            {
+              id: EventId.make("follow-up-lineage"),
+              type: "thread.created",
+              threadId: childThreadId,
+              occurredAt: yield* DateTime.now,
+              payload: {
+                ...parent.thread,
+                id: childThreadId,
+                worktreePath: "/workspace/issue-seven",
+                pullRequests: [
+                  {
+                    ...key,
+                    url: "https://github.com/acme/follow-up/pull/7",
+                    source: "created",
+                    linkedAt: "2026-10-01T00:00:00.000Z",
+                    snapshot: null,
+                    stack: null,
+                  },
+                ],
+                lineage: {
+                  parentThreadId: threadId,
+                  relationshipToParent: "delegation",
+                  rootThreadId: childThreadId,
+                },
+              },
+            },
+          ],
+        });
+        const wrongPullRequest = yield* orchestrator
+          .dispatch({
+            type: "thread.pull-request.watch",
+            commandId: CommandId.make("follow-up-wrong-pr"),
+            threadId,
+            ...key,
+            number: 8,
+            watching: true,
+            followUp,
+            link: { url: "https://github.com/acme/follow-up/pull/8", source: "agent" },
+          })
+          .pipe(Effect.flip);
+        assert.equal(wrongPullRequest._tag, "OrchestratorDispatchError");
+        yield* orchestrator.dispatch({
+          type: "thread.pull-request.watch",
+          commandId: CommandId.make("follow-up-watch"),
+          threadId,
+          ...key,
+          watching: true,
+          link: { url: "https://github.com/acme/follow-up/pull/7", source: "agent" },
+        });
+        const ordinaryWatch = (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]
+          ?.watch;
+        assert.isDefined(ordinaryWatch);
+        if (ordinaryWatch === undefined) return;
+        yield* orchestrator.dispatch({
+          type: "thread.pull-request.watch",
+          commandId: CommandId.make("follow-up-bind"),
+          threadId,
+          ...key,
+          watching: true,
+          followUp,
+        });
+        const staleRead = yield* orchestrator
+          .dispatch({
+            type: "thread.pull-request-watch.sync",
+            commandId: CommandId.make("follow-up-old-ordinary-read"),
+            threadId,
+            ...key,
+            startedAt: ordinaryWatch.startedAt,
+            watch: ordinaryWatch,
+          })
+          .pipe(Effect.exit);
+        assert.equal(staleRead._tag, "Failure");
+        assert.equal(
+          (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]?.watch?.followUp
+            ?.childThreadId,
+          childThreadId,
+        );
+        const reassigned = yield* orchestrator
+          .dispatch({
+            type: "thread.pull-request.watch",
+            commandId: CommandId.make("follow-up-reassign"),
+            threadId,
+            ...key,
+            watching: true,
+            followUp: { ...followUp, issueUrl: "https://github.com/acme/follow-up/issues/8" },
+          })
+          .pipe(Effect.flip);
+        assert.equal(reassigned._tag, "OrchestratorDispatchError");
+        let detail: PullRequestDetail = {
+          ...watchedPullRequestDetail({ projectId, number: 7, at: "2026-10-02T12:00:00.000Z" }),
+          mergeability: "mergeable",
+          mergeGate: "ready",
+          platformReviewDecision: null,
+          checks: [
+            { name: "test", status: "success", required: true, description: null, url: null },
+          ],
+        };
+        let unreadable = false;
+        let rateLimited = false;
+        let reviewResolved = true;
+        let comments: ReadonlyArray<PullRequestComment> = [];
+        const host = Layer.mergeAll(
+          NodeServices.layer,
+          NodeCrypto.layer,
+          Layer.mock(PullRequestService.PullRequestService)({
+            invalidate: () => Effect.void,
+            watchFingerprint: () =>
+              rateLimited
+                ? Effect.fail(
+                    new PullRequestOperationError({
+                      operation: "watchFingerprint",
+                      detail: "rate limited",
+                      cause: new PullRequestProviderError({
+                        provider: SourceControlProviderKind.make("github"),
+                        operation: "watchFingerprint",
+                        reason: "rate-limited",
+                        detail: "rate limited",
+                      }),
+                    }),
+                  )
+                : Effect.succeed({
+                    status: JSON.stringify([
+                      detail.headSha,
+                      detail.platformReviewDecision,
+                      detail.checks,
+                      detail.mergeability,
+                    ]),
+                    remarks: String(comments.length),
+                    coversDetail: true,
+                  }),
+            detail: () =>
+              unreadable
+                ? Effect.fail(
+                    new PullRequestOperationError({ operation: "detail", detail: "offline" }),
+                  )
+                : Effect.succeed(detail),
+            activity: () =>
+              Effect.succeed({
+                comments,
+                commentCount: comments.length,
+                commentsTruncated: false,
+                reviewThreadsTruncated: false,
+                reviewThreads: [
+                  {
+                    id: "follow-up-review",
+                    path: "src/index.ts",
+                    line: 1,
+                    side: "right",
+                    isResolved: reviewResolved,
+                    isOutdated: false,
+                    comments: [],
+                  },
+                ],
+                commits: [],
+              }),
+          }),
+        );
+        let reactor = yield* PullRequestWatchReactor.make.pipe(Effect.provide(host));
+        const sweep = Effect.gen(function* () {
+          yield* reactor.sweep;
+          yield* worker.drain();
+          return (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]?.watch;
+        });
+        assert.equal((yield* sweep)?.followUp?.phase, "waiting-approval");
+        detail = { ...detail, platformReviewDecision: "approved" };
+        assert.equal((yield* sweep)?.followUp?.phase, "awaiting-acceptance");
+        reviewResolved = false;
+        yield* TestClock.adjust("2 minutes");
+        assert.equal((yield* sweep)?.followUp?.phase, "blocked");
+        reviewResolved = true;
+        yield* TestClock.adjust("2 minutes");
+        assert.equal((yield* sweep)?.followUp?.phase, "awaiting-acceptance");
+        detail = { ...detail, mergeGate: "blocked" };
+        yield* TestClock.adjust("2 minutes");
+        assert.equal((yield* sweep)?.followUp?.phase, "blocked");
+        detail = { ...detail, mergeGate: "ready" };
+        yield* TestClock.adjust("2 minutes");
+        assert.equal((yield* sweep)?.followUp?.phase, "awaiting-acceptance");
+        rateLimited = true;
+        assert.equal((yield* sweep)?.followUp?.phase, "unreadable");
+        const limitedMessages = (yield* orchestrator.getThreadRecords(threadId, ["messages"]))
+          .messages.length;
+        yield* sweep;
+        assert.lengthOf(
+          (yield* orchestrator.getThreadRecords(threadId, ["messages"])).messages,
+          limitedMessages,
+        );
+        rateLimited = false;
+        assert.equal((yield* sweep)?.followUp?.phase, "awaiting-acceptance");
+        const { messages: beforeReplay } = yield* orchestrator.getThreadRecords(threadId, [
+          "messages",
+        ]);
+        reactor = yield* PullRequestWatchReactor.make.pipe(Effect.provide(host));
+        yield* sweep;
+        assert.lengthOf(
+          (yield* orchestrator.getThreadRecords(threadId, ["messages"])).messages,
+          beforeReplay.length,
+        );
+        yield* orchestrator.dispatch({
+          type: "thread.pull-request-watch.checks-reopen",
+          commandId: CommandId.make("follow-up-new-push"),
+          threadId,
+        });
+        assert.equal(
+          (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]?.watch?.followUp?.phase,
+          "waiting-ci",
+        );
+        detail = { ...detail, headSha: "new-head", checks: [], platformReviewDecision: null };
+        assert.equal((yield* sweep)?.followUp?.phase, "waiting-ci");
+        detail = { ...detail, mergeability: "conflicting" };
+        const blocked = yield* sweep;
+        assert.equal(blocked?.followUp?.phase, "blocked");
+        assert.isDefined(blocked);
+        if (blocked === undefined) return;
+        yield* orchestrator.dispatch({
+          type: "thread.pull-request-watch.sync",
+          commandId: CommandId.make("follow-up-before-comment-limit"),
+          threadId,
+          ...key,
+          startedAt: blocked.startedAt,
+          watch: { ...blocked, wakes: PULL_REQUEST_WATCH_WAKE_LIMIT - 1 },
+        });
+        comments = [
+          {
+            id: "follow-up-comment",
+            kind: "issue-comment",
+            author: null,
+            body: "Please check this again.",
+            createdAt: DateTime.formatIso(
+              DateTime.add(DateTime.makeUnsafe(blocked.startedAt), { seconds: 1 }),
+            ),
+            url: "https://github.com/acme/follow-up/pull/7#comment",
+            path: null,
+            reviewState: null,
+          },
+        ];
+        assert.isUndefined(yield* sweep);
+        const paused = (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]
+          ?.endedWatch;
+        assert.equal(paused?.followUp?.phase, "paused");
+        assert.equal(paused?.followUp?.childThreadId, childThreadId);
+        yield* orchestrator.dispatch({
+          type: "thread.pull-request.watch",
+          commandId: CommandId.make("follow-up-stop-paused"),
+          threadId,
+          ...key,
+          watching: false,
+        });
+        assert.isUndefined(
+          (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]?.endedWatch?.followUp
+            ?.phase,
+        );
+        yield* orchestrator.dispatch({
+          type: "thread.pull-request.watch",
+          commandId: CommandId.make("follow-up-resume"),
+          threadId,
+          ...key,
+          watching: true,
+        });
+        assert.equal((yield* sweep)?.followUp?.phase, "blocked");
+        unreadable = true;
+        yield* TestClock.adjust("2 minutes");
+        assert.equal((yield* sweep)?.followUp?.phase, "unreadable");
+        unreadable = false;
+        yield* orchestrator.dispatch({
+          type: "thread.pull-request.watch",
+          commandId: CommandId.make("follow-up-stop"),
+          threadId,
+          ...key,
+          watching: false,
+        });
+        assert.isUndefined(yield* sweep);
+        const stopped = (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0];
+        assert.isUndefined(stopped?.endedWatch?.followUp?.phase);
+        assert.deepEqual(stopped?.endedWatch?.followUp?.childThreadId, childThreadId);
+        assert.equal(
+          (yield* orchestrator.getThreadShell(childThreadId))?.worktreePath,
+          "/workspace/issue-seven",
+        );
+      }),
+  );
+
   it.effect("baselines a new watch across restarts and reports later changes", () =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;

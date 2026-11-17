@@ -435,6 +435,20 @@ describe("pull request detail decoding", () => {
   ) => expectSuccess(decodePullRequestCoreJson(coreJson(rollup, pullRequest)));
 
   it.each([
+    [null, null],
+    ["REVIEW_REQUIRED", "review-required"],
+    ["APPROVED", "approved"],
+  ])("keeps platform approval separate from latest bot reviews: %s", (raw, expected) => {
+    const detail = detailOf([], {
+      reviewDecision: raw,
+      latestReviews: {
+        nodes: [{ author: user("review-bot"), state: "APPROVED", isMinimized: false }],
+      },
+    });
+    expect(detail.platformReviewDecision).toBe(expected);
+  });
+
+  it.each([
     [{}, true],
     [{ viewerDidAuthor: false }, false],
     [{ isCrossRepository: false }, false],

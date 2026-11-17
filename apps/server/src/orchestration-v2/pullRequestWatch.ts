@@ -3,6 +3,7 @@ import type {
   PullRequestCheck,
   PullRequestComment,
   PullRequestDetail,
+  PullRequestFollowUp,
   ThreadPullRequestWatch,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
@@ -22,7 +23,8 @@ export type PullRequestWatchChange =
   | { readonly kind: "no-checks"; readonly minutes: number }
   | { readonly kind: "conflicting" }
   | { readonly kind: "needs-rebase" }
-  | { readonly kind: "merge-queue-removed"; readonly reason: string | null };
+  | { readonly kind: "merge-queue-removed"; readonly reason: string | null }
+  | { readonly kind: "follow-up"; readonly followUp: PullRequestFollowUp };
 
 export interface PullRequestWatchReport {
   readonly changes: ReadonlyArray<PullRequestWatchChange>;
@@ -49,7 +51,10 @@ export function evaluatePullRequestWatch(
     | "author"
     | "rebaseRequired"
     | "mergeQueueRemoval"
-  >,
+  > &
+    Partial<Pick<PullRequestDetail, "isDraft" | "platformReviewDecision" | "mergeGate">> & {
+      readonly unresolvedReviewThreads?: number | undefined;
+    },
   remarks: ReadonlyArray<PullRequestComment> | null,
   now: number,
 ): PullRequestWatchReport {
@@ -229,6 +234,47 @@ export function evaluatePullRequestWatch(
   // Null records an empty baseline; historical IDs are saved without waking the watch.
   const mergeQueueRemovalId = removal?.id ?? watch.mergeQueueRemovalId ?? null;
 
+  let followUp = watch.followUp;
+  if (followUp !== undefined) {
+    const blockers: string[] = [];
+    if (detail.isDraft) blockers.push("Draft pull request");
+    if (conflicting || rebaseRequired) blockers.push("Branch update required");
+    if (failed.length > 0) blockers.push("CI failed");
+    if (awaitingApproval.length > 0) blockers.push("CI requires human approval");
+    if ((detail.unresolvedReviewThreads ?? 0) > 0) blockers.push("Unresolved review threads");
+    if (detail.platformReviewDecision === "changes-requested") blockers.push("Changes requested");
+    const unreadable =
+      detail.headSha === undefined ||
+      unread ||
+      detail.unresolvedReviewThreads === undefined ||
+      detail.isDraft === undefined ||
+      detail.mergeGate === undefined ||
+      detail.mergeGate === "unknown" ||
+      detail.platformReviewDecision === undefined;
+    let phase: PullRequestFollowUp["phase"];
+    if (blockers.length > 0) phase = "blocked";
+    else if (unreadable) {
+      phase = "unreadable";
+      blockers.push("Host readiness or review evidence unavailable");
+    } else if (checks.length === 0 || !passedNow || checksPending) {
+      phase = "waiting-ci";
+      blockers.push(checks.length === 0 ? "No CI reported for this head" : "CI pending");
+    } else if (detail.platformReviewDecision !== "approved") {
+      phase = "waiting-approval";
+      blockers.push("Valid platform approval not established");
+    } else if (detail.mergeGate !== "ready") {
+      phase = "blocked";
+      blockers.push("Platform merge restrictions");
+    } else phase = "awaiting-acceptance";
+    followUp = { ...followUp, phase, blockers };
+    if (
+      headMoved ||
+      followUp.phase !== watch.followUp?.phase ||
+      blockers.join("\n") !== watch.followUp?.blockers?.join("\n")
+    )
+      changes.push({ kind: "follow-up", followUp });
+  }
+
   const commentsOnly = changes.length > 0 && changes.every((change) => change.kind === "remarks");
   const progress = headMoved || (changes.length > 0 && !commentsOnly);
   const wakes = (progress ? 0 : watch.wakes) + (commentsOnly ? 1 : 0);
@@ -236,6 +282,7 @@ export function evaluatePullRequestWatch(
     changes,
     next: {
       startedAt: watch.startedAt,
+      ...(followUp === undefined ? {} : { followUp }),
       headSha,
       failedChecks,
       passed,
@@ -396,6 +443,12 @@ function changeLines(
       return [
         `- It was removed from the merge queue without merging${change.reason === null ? "" : `: ${change.reason}`}.`,
       ];
+    case "follow-up":
+      return [
+        `- Independent follow-up: ${change.followUp.phase}; issue ${change.followUp.issueUrl}; original session ${change.followUp.childThreadId}.`,
+        ...(change.followUp.blockers ?? []).map((blocker) => `  - ${blocker}`),
+        "- Platform readiness is not coordinator acceptance. Verify the actual diff, tests and user approval requirements before notifying the user; never merge automatically.",
+      ];
   }
 }
 
@@ -408,12 +461,13 @@ const SUMMARY: Record<PullRequestWatchChange["kind"], string> = {
   conflicting: "merge conflict",
   "needs-rebase": "rebase required",
   "merge-queue-removed": "removed from merge queue",
+  "follow-up": "follow-up state changed",
 };
 
 const WATCHING_CLOSING =
-  "Look into each item and act on it as your task requires. This PR stays linked and watched, so do not link, watch, or list it again. End your turn when you are done, and T3 Code wakes you on the next change. When you hand the work back to the user, call pinacode_unwatch_pull_request first so the thread returns to their inbox.";
+  "Look into each item and act on it as your task requires. This PR stays linked and watched. For independent follow-up, call pinacode_pr_workflow to recover the workflow and original session mapping. End your turn when no work remains; progress reports and readiness do not end monitoring. Unwatch only when the user stops follow-up or the PR is merged or closed.";
 const WATCHING_CLOSING_PLURAL =
-  "Look into each item and act on it as your task requires. Each PR T3 Code still watches stays linked and watched, so do not link, watch, or list them again. End your turn when you are done, and T3 Code wakes you on the next change. When you hand the work back to the user, call pinacode_unwatch_pull_request for each first so the thread returns to their inbox.";
+  "Look into each item and act on it as your task requires. Each active PR stays linked and watched. For independent follow-up, call pinacode_pr_workflow to recover the workflow and original session mappings. End your turn when no work remains; progress reports and readiness do not end monitoring. Unwatch only the PRs the user stopped or that merged or closed.";
 
 export interface PullRequestWatchWake {
   readonly text: string;
@@ -464,7 +518,7 @@ export function pullRequestWatchMessage(input: {
     ...changes.flatMap((change) => changeLines(change, context)),
     "",
     exhausted
-      ? `T3 Code stopped watching after ${PULL_REQUEST_WATCH_WAKE_LIMIT} comment-only updates in a row. Call pinacode_watch_pull_request to watch it again.`
+      ? `PinaCode paused monitoring after ${PULL_REQUEST_WATCH_WAKE_LIMIT} comment-only updates in a row. Follow-up is blocked, not complete. The coordinator must inspect the loop and report the pause; call pinacode_watch_pull_request to resume only after resolving it.`
       : WATCHING_CLOSING,
   ].join("\n");
   const failed = changes.some(

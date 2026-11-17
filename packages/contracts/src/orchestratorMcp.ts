@@ -170,6 +170,9 @@ export type OrchestratorMcpTerminalDelegatedTaskStatus =
 
 export const OrchestratorMcpDelegateTaskInput = Schema.Struct({
   task: OrchestratorMcpPrompt,
+  issueUrl: Schema.optional(
+    TrimmedNonEmptyString.annotate({ description: "Issue tracked by an independent session." }),
+  ),
   session: Schema.optional(
     Schema.Literals(["child", "independent"]).annotate({
       description:

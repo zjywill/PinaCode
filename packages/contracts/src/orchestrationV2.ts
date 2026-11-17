@@ -58,6 +58,7 @@ import {
 } from "./checkpointDiff.ts";
 import { ModelSelection } from "./modelSelection.ts";
 import {
+  PullRequestFollowUp,
   ThreadLinkedPullRequest,
   ThreadPullRequestLink,
   ThreadPullRequestKey,
@@ -934,6 +935,7 @@ export const OrchestrationV2Subagent = Schema.Struct({
   prompt: Schema.String,
   title: Schema.NullOr(Schema.String),
   model: Schema.NullOr(Schema.String),
+  issueUrl: Schema.optional(TrimmedNonEmptyString),
   modelSelection: Schema.optional(ModelSelection),
   executedModel: Schema.optional(Schema.String),
   completionWake: Schema.optional(Schema.Literals(["always", "settled_only"])),
@@ -3288,6 +3290,7 @@ export const OrchestrationV2Command = Schema.Union([
     threadId: ThreadId,
     ...ThreadPullRequestKey.fields,
     watching: Schema.Boolean,
+    followUp: Schema.optional(PullRequestFollowUp),
     link: Schema.optional(
       Schema.Struct({
         url: TrimmedNonEmptyString,
@@ -3532,6 +3535,7 @@ export const OrchestrationV2Command = Schema.Union([
     parentNodeId: NodeId,
     task: TrimmedNonEmptyString,
     session: Schema.optional(Schema.Literals(["child", "independent"])),
+    issueUrl: Schema.optional(TrimmedNonEmptyString),
     title: Schema.optional(TrimmedNonEmptyString),
     modelSelection: ModelSelection,
     runtimeMode: RuntimeMode,

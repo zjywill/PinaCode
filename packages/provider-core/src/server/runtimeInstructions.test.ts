@@ -31,16 +31,16 @@ describe("buildRuntimeInstructions", () => {
     const instructions = buildRuntimeInstructions({ harness: "Codex" });
 
     assert.notInclude(instructions, "Creation, pending checks, or a merge ask alone is not enough");
-    assert.include(instructions, "Links and watches persist across pushes.");
+    assert.include(instructions, "Links and watches persist across pushes and turn endings.");
     // The wake message itself carries the do-not-re-watch rule.
     assert.notInclude(instructions, "On a wake");
     assert.include(
       instructions,
-      "Call pinacode_watch_pull_request when asked to monitor or babysit, or when work you were asked to do, such as a merge, still waits on checks or reviews, even after an earlier unwatch",
+      "Call pinacode_watch_pull_request when asked to monitor or babysit, or when work you were asked to do, such as a merge, still waits on checks or reviews",
     );
     assert.notInclude(instructions, "merge it now");
     assert.include(instructions, "Otherwise act now or hand back.");
-    assert.include(instructions, "then watch and end your turn");
+    assert.include(instructions, "then watch while waiting");
     assert.include(instructions, "never watch, even if the brief says babysit");
     assert.include(
       instructions,
@@ -50,6 +50,6 @@ describe("buildRuntimeInstructions", () => {
       instructions,
       "For PR waits, no sleep, loops, gh --watch, Monitor or ScheduleWakeup.",
     );
-    assert.include(instructions, "call pinacode_unwatch_pull_request");
+    assert.include(instructions, "Unwatch only when the user explicitly stops");
   });
 });

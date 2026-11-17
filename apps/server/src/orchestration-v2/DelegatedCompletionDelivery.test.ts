@@ -42,6 +42,8 @@ import * as McpSessionRegistryTestkit from "../mcp/McpSessionRegistry.testkit.ts
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ProjectEnrichmentService from "../project/ProjectEnrichmentService.ts";
 import * as ProjectService from "../project/ProjectService.ts";
+import * as PullRequestWatchService from "../pullRequest/PullRequestWatchService.ts";
+import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import type { ProviderInstance } from "@t3tools/provider-core/server/driver";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -5468,7 +5470,7 @@ it.layer(layerTest)("delegated tasks across a server restart", (it) => {
 
 it.layer(layerContinuationWorkerTest)("independent review sessions", (it) => {
   it.effect(
-    "reviews three isolated sessions and returns revisions to the original session until accepted",
+    "keeps four plus three issue sessions watched while returning revisions to their original worktrees",
     () =>
       Effect.gen(function* () {
         const orchestrator = yield* Orchestrator.OrchestratorV2;
@@ -5516,7 +5518,13 @@ it.layer(layerContinuationWorkerTest)("independent review sessions", (it) => {
           ],
         });
         const children: Array<{ threadId: ThreadId; runId: RunId; worktreePath: string }> = [];
-        for (const issue of [1, 2, 3]) {
+        for (const issue of [1, 2, 3, 4, 5, 6, 7]) {
+          if (issue === 5) {
+            const morning = yield* orchestrator.getThreadProjection(parentThreadId);
+            assert.lengthOf(morning.thread.pullRequests?.filter((link) => link.watch) ?? [], 4);
+            yield* orchestrator.recoverDelegatedTasks;
+          }
+          const issueUrl = `https://github.com/acme/app/issues/${issue}`;
           const command = {
             type: "delegated_task.request" as const,
             createdBy: "agent" as const,
@@ -5527,6 +5535,7 @@ it.layer(layerContinuationWorkerTest)("independent review sessions", (it) => {
             parentNodeId: rootNodeId,
             task: `Fix issue ${issue}`,
             session: "independent" as const,
+            ...(issue > 4 ? { issueUrl } : {}),
             modelSelection,
             runtimeMode: "full-access" as const,
             interactionMode: "default" as const,
@@ -5566,10 +5575,31 @@ it.layer(layerContinuationWorkerTest)("independent review sessions", (it) => {
           });
           const retry = yield* orchestrator.dispatch({ ...command, workspaceStrategy: undefined });
           assert.isTrue(retry.replayed);
+          yield* orchestrator.dispatch({
+            type: "thread.pull-request.link",
+            commandId: CommandId.make(`independent-pr-${issue}`),
+            threadId: childThreadId,
+            host: "github.com",
+            repository: "acme/app",
+            number: issue,
+            url: `https://github.com/acme/app/pull/${issue}`,
+            source: "created",
+          });
+          yield* orchestrator.dispatch({
+            type: "thread.pull-request.watch",
+            commandId: CommandId.make(`independent-watch-${issue}`),
+            threadId: parentThreadId,
+            host: "github.com",
+            repository: "acme/app",
+            number: issue,
+            watching: true,
+            followUp: { issueUrl, childThreadId },
+            link: { url: `https://github.com/acme/app/pull/${issue}`, source: "agent" },
+          });
           children.push({ threadId: childThreadId, runId: child.runs[0]!.id, worktreePath });
         }
-        assert.equal(new Set(children.map((child) => child.threadId)).size, 3);
-        assert.equal(new Set(children.map((child) => child.worktreePath)).size, 3);
+        assert.equal(new Set(children.map((child) => child.threadId)).size, 7);
+        assert.equal(new Set(children.map((child) => child.worktreePath)).size, 7);
         const finish = Effect.fn("test.finishIndependentRun")(function* (
           threadId: ThreadId,
           runId: RunId,
@@ -5607,7 +5637,7 @@ it.layer(layerContinuationWorkerTest)("independent review sessions", (it) => {
             ],
           });
         });
-        yield* finish(parentThreadId, parentRunId, "Waiting for three independent sessions.");
+        yield* finish(parentThreadId, parentRunId, "Waiting for seven independent sessions.");
         const listed = yield* orchestrator.getShellSnapshot();
         for (const child of children) {
           assert.equal(
@@ -5699,14 +5729,44 @@ it.layer(layerContinuationWorkerTest)("independent review sessions", (it) => {
         const accepted = yield* orchestrator.getThreadProjection(parentThreadId);
         assert.lengthOf(
           accepted.subagents.filter((task) => task.childThreadId !== null),
-          5,
+          9,
         );
         assert.isTrue(accepted.subagents.every((task) => task.result !== null));
-        assert.lengthOf(accepted.runs, 6);
+        assert.lengthOf(accepted.runs, 10);
         assert.lengthOf(
           accepted.messages.filter((message) => message.text.includes("reviewed and accepted")),
-          3,
+          7,
         );
+        assert.lengthOf(accepted.thread.pullRequests?.filter((link) => link.watch) ?? [], 7);
+        const restored = yield* PullRequestWatchService.PullRequestWatchService.pipe(
+          Effect.flatMap((service) => service.readWorkflow(parentThreadId)),
+          Effect.provide(
+            PullRequestWatchService.layer.pipe(
+              Layer.provide(
+                Layer.mergeAll(
+                  NodeCrypto.layer,
+                  Layer.mock(PullRequestService.PullRequestService)({}),
+                ),
+              ),
+            ),
+          ),
+        );
+        assert.lengthOf(restored.sessions, 7);
+        for (const [index, child] of children.entries()) {
+          assert.deepEqual(
+            accepted.thread.pullRequests?.find((link) => link.number === index + 1)?.watch
+              ?.followUp,
+            {
+              issueUrl: `https://github.com/acme/app/issues/${index + 1}`,
+              childThreadId: child.threadId,
+            },
+          );
+          assert.equal(
+            restored.sessions.find((session) => session.childThreadId === child.threadId)
+              ?.worktreePath,
+            child.worktreePath,
+          );
+        }
       }),
   );
 });

@@ -213,6 +213,8 @@ export interface ProviderChangeRequestStat {
 
 export interface ProviderChangeRequestDetail extends ProviderChangeRequest {
   readonly maintainerCanModify?: boolean;
+  readonly platformReviewDecision?: PullRequestReviewDecision | null | undefined;
+  readonly mergeGate?: "ready" | "blocked" | "unknown";
   readonly headSha?: string | null;
   readonly body: string;
   readonly changedFiles: number;
