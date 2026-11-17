@@ -1,4 +1,5 @@
 import { useAtomMount } from "@effect/atom-react";
+import type { DelegationListRow } from "@t3tools/client-runtime/state/thread-relationships";
 import { asLaunchingThread } from "@t3tools/client-runtime/state/thread-inbox";
 import { ThreadHoverCard, ThreadHoverCardPopup } from "../ThreadHoverCard";
 import { ThreadTerminalStatusButton } from "../ThreadStatusIndicators";
@@ -40,6 +41,8 @@ import {
   AlarmClockOffIcon,
   ArrowRightLeftIcon,
   CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   CircleAlertIcon,
   CircleCheckIcon,
   CircleDashedIcon,
@@ -547,6 +550,8 @@ function TopStatusIcon(props: { icon: keyof typeof TOP_STATUS_ICONS; className: 
 
 type SidebarThreadRowProps = {
   thread: SidebarThreadSummary;
+  delegation?: DelegationListRow | undefined;
+  onToggleDelegation?: ((key: string) => void) | undefined;
   // "folder" is a one-line row inside a boring sidebar project folder;
   // "folder-multiline" adds the card's branch and PR line under it.
   variant: "card" | "slim" | "folder" | "folder-multiline";
@@ -1011,7 +1016,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         },
         ...sortable.listeners,
       }
-    : {};
+    : { style: undefined };
   const destinationVerb = sortable?.isDragging
     ? props.dropVerb
     : props.sweepAction === "unsnooze"
@@ -1217,6 +1222,44 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     </span>
   ) : null;
 
+  const delegation = props.delegation;
+  const delegationSummary =
+    delegation && (delegation.taskCount > 0 || delegation.progress !== null) ? (
+      <div className="flex min-w-0 items-center gap-1.5 px-2.5 pt-1 text-xs text-sidebar-muted-foreground">
+        {delegation.childCount > 0 ? (
+          <InlineButton
+            aria-label={`${delegation.expanded ? "Collapse" : "Expand"} delegated sessions for ${thread.title}`}
+            aria-expanded={delegation.expanded}
+            onClick={() => props.onToggleDelegation?.(threadKey)}
+          >
+            {delegation.expanded ? (
+              <ChevronDownIcon aria-hidden className="size-3.5" />
+            ) : (
+              <ChevronRightIcon aria-hidden className="size-3.5" />
+            )}
+            <span>
+              {delegation.activeCount} active · {delegation.blockedCount} blocked
+            </span>
+          </InlineButton>
+        ) : delegation.taskCount > 0 ? (
+          <span>
+            {delegation.activeCount} active · {delegation.blockedCount} blocked
+          </span>
+        ) : null}
+        {delegation.progress !== null ? (
+          <Tooltip>
+            <TooltipTrigger render={<span className="truncate" />}>
+              {delegation.progress}
+            </TooltipTrigger>
+            <TooltipPopup>{delegation.detail ?? delegation.progress}</TooltipPopup>
+          </Tooltip>
+        ) : null}
+      </div>
+    ) : null;
+  const delegationStyle =
+    delegation && delegation.depth > 0
+      ? { marginInlineStart: Math.min(delegation.depth, 6) * 14 }
+      : undefined;
   if (variant !== "card") {
     const multiline = variant === "folder-multiline";
     const inFolder = variant === "folder" || multiline;
@@ -1224,13 +1267,16 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       <li
         data-thread-item={threadKey}
         {...sortableRootProps}
+        style={{ ...sortableRootProps.style, ...delegationStyle }}
         {...(fileDropHandlers ?? {})}
         className={cn(
           "list-none [content-visibility:auto] [contain-intrinsic-size:auto_--spacing(9)]",
           metaLine !== null && multiline && "[contain-intrinsic-size:auto_--spacing(13.5)]",
           sortable?.isDragging && "relative z-20",
+          delegationStyle && "border-s border-sidebar-border",
         )}
       >
+        {delegationSummary}
         <Tooltip disabled={isRenaming || sortable?.isDragging}>
           <TooltipTrigger
             render={
@@ -1419,6 +1465,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     <li
       data-thread-item={threadKey}
       {...sortableRootProps}
+      style={{ ...sortableRootProps.style, ...delegationStyle }}
       {...(fileDropHandlers ?? {})}
       // The hints are the rendered heights inside py-0.5. Revealing the open thread measures rows
       // that have not rendered yet, so a hint off by a pixel lands it a pixel short per row above.
@@ -1426,8 +1473,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         "list-none py-0.5 [content-visibility:auto] [contain-intrinsic-size:auto_78px]",
         metaLineEmpty && "[contain-intrinsic-size:auto_60px]",
         sortable?.isDragging && "relative z-20",
+        delegationStyle && "border-s border-sidebar-border",
       )}
     >
+      {delegationSummary}
       <Tooltip disabled={isRenaming || snoozeMenuOpen || sortable?.isDragging}>
         <TooltipTrigger
           render={

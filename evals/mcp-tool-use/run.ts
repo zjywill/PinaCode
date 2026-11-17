@@ -21,6 +21,7 @@ import {
   PreviewAutomationError,
   PreviewAutomationUnavailableError,
   ProviderInstanceId,
+  PullRequestWorkflowState,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -38,6 +39,7 @@ import * as McpSchema from "effect/ai/McpSchema";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 
 import { taskPrompt } from "../../apps/server/src/mcp/delegatedTaskModes.ts";
+import { PULL_REQUEST_WORKFLOW_SKILL } from "../../apps/server/src/pullRequest/pullRequestWorkflow.ts";
 import * as McpInvocationContext from "../../apps/server/src/mcp/McpInvocationContext.ts";
 import { advertisedJsonSchema } from "../../apps/server/src/mcp/advertisedJsonSchema.ts";
 import * as Contracts from "@t3tools/contracts";
@@ -304,7 +306,7 @@ export const McpToolUseCase = Schema.Struct({
   rule: Schema.optional(Schema.String),
   privacy: Schema.optional(Schema.Literals(["commit-safe", "private"])),
   setup: Schema.Struct({
-    role: Schema.Literals(["top", "delegated-child", "native-subagent"]),
+    role: Schema.Literals(["top", "delegated-child", "independent-child", "native-subagent"]),
     /** Runs only on this harness, for cases whose right answer depends on it. */
     harness: Schema.optional(Schema.Literals(["claude", "codex"])),
     /** The Linked environments beta is on, so T3 lists its link tools. */
@@ -312,6 +314,7 @@ export const McpToolUseCase = Schema.Struct({
     /** pinacode_delegate_task `role` for a delegated child. T3 builds the child's first message from it. */
     delegateRole: Schema.optional(OrchestratorMcpTaskRole),
     context: Schema.optional(Schema.String),
+    workflowState: Schema.optional(PullRequestWorkflowState),
     priorTurns: Schema.optional(
       Schema.Array(
         Schema.Struct({
@@ -1101,9 +1104,17 @@ export const buildMessages = (sample: Sample) => {
       : projectComposerContextForProvider({ text: testCase.prompt, ...testCase.promptContext });
   const prompt =
     sideChatContext === undefined ? userText : withInlineContext(sideChatContext, userText);
-  const childPrompt = () => taskPrompt({ task: prompt, role: delegateRole });
+  const childPrompt = () =>
+    taskPrompt({
+      task: prompt,
+      role: delegateRole,
+      ...(role === "independent-child" ? { session: "independent" } : {}),
+    });
   if (testCase.prompt !== "")
-    push("user", text(role === "delegated-child" ? childPrompt() : prompt));
+    push(
+      "user",
+      text(role === "delegated-child" || role === "independent-child" ? childPrompt() : prompt),
+    );
   // Claude Code gives a subagent its SubagentStart hooks' context as a reminder after the task.
   if (native && base.subagentContext) {
     push("user", reminder(`SubagentStart hook additional context: ${base.subagentContext}`));
@@ -1302,6 +1313,13 @@ export const t3Default = (
         remaining: sample.linked.size,
       };
     }
+    case "pinacode_pr_workflow":
+      return {
+        skill: PULL_REQUEST_WORKFLOW_SKILL,
+        sessions: [],
+        pullRequests: [],
+        ...sample.testCase.setup.workflowState,
+      };
     case "pinacode_watch_pull_request":
       sample.linked.add(pr().url);
       return { ...pr(), watching: true, wasWatching: false };
@@ -1708,8 +1726,11 @@ export const answerToolCall = Effect.fn("evaluateMcpToolUse.answerToolCall")(fun
     );
   }
   if (isT3Name(call.name)) {
-    // T3 refuses a watch from a delegated child.
-    if (name === "pinacode_watch_pull_request" && testCase.setup.role === "delegated-child") {
+    // Both forms of delegated session hand PR coordination back to their parent.
+    if (
+      (name === "pinacode_watch_pull_request" || name === "pinacode_pr_workflow") &&
+      (testCase.setup.role === "delegated-child" || testCase.setup.role === "independent-child")
+    ) {
       return failed(SUBAGENT_WATCH_ERROR);
     }
     const value = t3Default(sample, name, input);

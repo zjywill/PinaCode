@@ -219,6 +219,7 @@ export interface GitLabMergeRequestListItem {
 }
 
 export interface GitLabMergeRequestDetail extends GitLabMergeRequestListItem {
+  readonly mergeGate?: "ready" | "blocked" | "unknown";
   readonly body: string;
   readonly changedFiles: number;
   readonly mergedAt: string | null;
@@ -517,6 +518,7 @@ function toListItem(
 
 function toDetail(raw: Schema.Schema.Type<typeof RawMergeRequestSchema>): GitLabMergeRequestDetail {
   const listItem = toListItem(raw);
+  const mergeStatus = raw.detailed_merge_status?.trim().toLowerCase();
   const headSha = trimmed(raw.sha);
   const refs = raw.diff_refs;
   const diffRefs =
@@ -529,6 +531,13 @@ function toDetail(raw: Schema.Schema.Type<typeof RawMergeRequestSchema>): GitLab
       : raw.merge_when_pipeline_succeeds === true || raw.auto_merge_enabled === true;
   return {
     ...listItem,
+    mergeGate:
+      !mergeStatus ||
+      ["checking", "unchecked", "preparing", "approvals_syncing"].includes(mergeStatus)
+        ? "unknown"
+        : mergeStatus === "mergeable"
+          ? "ready"
+          : "blocked",
     body: raw.description ?? "",
     changedFiles: toChangedFiles(raw.changes_count),
     mergedAt: trimmed(raw.merged_at),
@@ -1530,7 +1539,7 @@ export function decodeMergeMessagesJson(
 }
 
 /** What a listed merge request needs beyond REST: its approval, reviewer and pipeline state. */
-const LIST_STATE_GRAPHQL_FIELDS = `iid approved approvedBy(first: 1) { nodes { username } }
+const LIST_STATE_GRAPHQL_FIELDS = `iid diffHeadSha approved approvedBy(first: 1) { nodes { username } }
   reviewers(first: 20) { nodes { username mergeRequestInteraction { reviewState } } }
   headPipeline { status }`;
 
@@ -1549,6 +1558,7 @@ const RawMetadataSchema = Schema.optional(
 
 const RawListStateFields = {
   iid: Schema.String,
+  diffHeadSha: Schema.optional(Schema.NullOr(Schema.String)),
   approved: Schema.optional(Schema.NullOr(Schema.Boolean)),
   approvedBy: Schema.optional(
     Schema.NullOr(
@@ -1604,6 +1614,7 @@ const RawListStatesSchema = Schema.Struct({
 const decodeListStates = decodeJsonResult(RawListStatesSchema);
 
 export interface GitLabMergeRequestListState {
+  readonly headSha?: string;
   /** Absent when the approval state can't be judged. */
   readonly reviewDecision?: PullRequestReviewDecision | null;
   readonly checksState: PullRequestChecksState | null;
@@ -1673,7 +1684,10 @@ export function decodeListStatesJson(
   for (const node of decoded.success.data.project?.mergeRequests?.nodes ?? []) {
     const number = Number(node?.iid);
     if (node === null || !Number.isSafeInteger(number)) continue;
-    states.set(number, toListState(node, enterprise));
+    states.set(number, {
+      ...toListState(node, enterprise),
+      ...(node.diffHeadSha == null ? {} : { headSha: node.diffHeadSha }),
+    });
   }
   return Result.succeed(states);
 }

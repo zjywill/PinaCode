@@ -17,6 +17,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 
+import { idleThreadProjection } from "../mcp/McpToolAccess.testkit.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
 import {
   type PullRequestTestThread,
@@ -129,6 +130,8 @@ const makeHarness = Effect.fn("makePullRequestWatchHarness")(function* (
     Layer.mock(Orchestrator.OrchestratorV2)({
       getThreadShell: (id) =>
         Effect.succeed(id === thread?.id ? v2PullRequestThread(thread) : null),
+      getThreadRecords: () =>
+        Effect.succeed(idleThreadProjection(v2PullRequestThread(thread ?? makeThread([])))),
       dispatch: (command) =>
         Ref.update(commands, (recorded) => [...recorded, command]).pipe(
           Effect.as({ sequence: 1, storedEvents: [] }),
@@ -156,6 +159,7 @@ const makeHarness = Effect.fn("makePullRequestWatchHarness")(function* (
   );
   return {
     commands,
+    readWorkflow: () => service.readWorkflow(THREAD_ID),
     setWatching: (watching: boolean, target: PullRequestTarget) =>
       service.setWatching({ threadId: THREAD_ID, target, watching }),
   };
@@ -272,23 +276,36 @@ describe("PullRequestWatchService", () => {
     }),
   );
 
-  it.effect("refuses a watch from a subagent thread, whose parent owns the pull request", () =>
-    Effect.gen(function* () {
-      const harness = yield* makeHarness({
-        thread: {
-          ...makeThread([makeLink(1, { headBranch: "feature" })]),
-          lineage: {
-            rootThreadId: ThreadId.make("parent"),
-            parentThreadId: ThreadId.make("parent"),
-            relationshipToParent: "subagent",
-          },
-        },
-      });
-      const error = yield* harness
-        .setWatching(true, { repository: "t3tools/t3code", number: 1 })
-        .pipe(Effect.flip);
-      expect(error).toMatchObject({ _tag: "PullRequestWatchFromSubagentError" });
-      expect(yield* Ref.get(harness.commands)).toEqual([]);
-    }),
+  it.effect(
+    "allows ordinary independent watches but keeps the coordinator workflow in the parent",
+    () =>
+      Effect.gen(function* () {
+        for (const relationshipToParent of ["subagent", "delegation"] as const) {
+          const harness = yield* makeHarness({
+            thread: {
+              ...makeThread([makeLink(1, { headBranch: "feature" })]),
+              lineage: {
+                rootThreadId: ThreadId.make("parent"),
+                parentThreadId: ThreadId.make("parent"),
+                relationshipToParent,
+              },
+            },
+          });
+          if (relationshipToParent === "subagent") {
+            const error = yield* harness
+              .setWatching(true, { repository: "t3tools/t3code", number: 1 })
+              .pipe(Effect.flip);
+            expect(error).toMatchObject({ _tag: "PullRequestWatchFromSubagentError" });
+            expect(yield* Ref.get(harness.commands)).toEqual([]);
+          } else {
+            yield* harness.setWatching(true, { repository: "t3tools/t3code", number: 1 });
+            expect(yield* Ref.get(harness.commands)).toMatchObject([
+              { type: "thread.pull-request.watch", number: 1, watching: true },
+            ]);
+          }
+          const workflowError = yield* harness.readWorkflow().pipe(Effect.flip);
+          expect(workflowError).toMatchObject({ _tag: "PullRequestWatchFromSubagentError" });
+        }
+      }),
   );
 });

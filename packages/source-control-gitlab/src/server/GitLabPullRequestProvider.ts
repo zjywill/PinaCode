@@ -359,12 +359,22 @@ export const make = Effect.gen(function* () {
             projectMergeCapabilities,
             JSON.stringify([input.cwd, input.repository, input.host]),
           ),
+          listStates({
+            cwd: input.cwd,
+            host: input.host,
+            repository: input.repository,
+            numbers: [input.number],
+          }),
         ],
         { concurrency: 2 },
       ).pipe(
         Effect.mapError(fail("getChangeRequest")),
-        Effect.map(([mergeRequest, mergeCapabilities]): ProviderChangeRequestDetail => ({
+        Effect.map(([mergeRequest, mergeCapabilities, states]): ProviderChangeRequestDetail => ({
           ...mergeRequest,
+          ...(mergeRequest.headSha !== undefined &&
+          states.get(input.number)?.headSha === mergeRequest.headSha
+            ? { platformReviewDecision: states.get(input.number)?.reviewDecision }
+            : {}),
           mergeCapabilities,
           viewerPermissions: gitLabViewerPermissions(mergeRequest),
           // Missing divergence counts mean unknown, not up to date.

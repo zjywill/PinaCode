@@ -113,7 +113,8 @@ it.effect.each(["merge", "disable-auto-merge"] as const)(
       yield* provider.searchRepositoryAuthors(reference);
       yield* provider.runAction({ ...reference, action });
 
-      expect(readHosts).toEqual(Array(action === "merge" ? 14 : 13).fill(selectedHost));
+      expect(readHosts.length).toBeGreaterThan(0);
+      expect(new Set(readHosts)).toEqual(new Set([selectedHost]));
       expect({ url: detail.url, mutatedHosts: mergedHosts }).toEqual({
         url: `https://${selectedHost}/acme/web/-/merge_requests/7`,
         mutatedHosts: [selectedHost],
@@ -221,7 +222,7 @@ describe("getChangeRequest base freshness", () => {
   );
 
   const readWith = (
-    divergence: { readonly divergedCommits?: number },
+    divergence: { readonly divergedCommits?: number; readonly headSha?: string },
     stats: GitLabPullRequestCli.GitLabPullRequestCli["Service"]["listMergeRequestStats"] = () =>
       Effect.succeed([]),
   ) =>
@@ -239,6 +240,19 @@ describe("getChangeRequest base freshness", () => {
           getMergeRequestDetail: () => Effect.succeed({ ...detail, ...divergence }),
           getProjectMergeCapabilities: () =>
             Effect.succeed({ merge: true, squash: true, rebase: true }),
+          getListStates: () =>
+            Effect.succeed(
+              new Map([
+                [
+                  7,
+                  {
+                    headSha: "current-head",
+                    reviewDecision: "approved" as const,
+                    checksState: "passing" as const,
+                  },
+                ],
+              ]),
+            ),
           listMergeRequestStats: stats,
         }),
       ),
@@ -251,6 +265,17 @@ describe("getChangeRequest base freshness", () => {
       expect(changeRequest.baseComparison).toBe("behind");
       expect(changeRequest.behindBy).toBe(3);
     }),
+  );
+
+  it.effect.each(["current-head", "new-head"])(
+    "trusts formal approval only for the head it read: %s",
+    (headSha) =>
+      Effect.gen(function* () {
+        const changeRequest = yield* readWith({ headSha });
+        expect(changeRequest.platformReviewDecision).toBe(
+          headSha === "current-head" ? "approved" : undefined,
+        );
+      }),
   );
 
   it.effect("says nothing at all where GitLab counted nothing", () =>

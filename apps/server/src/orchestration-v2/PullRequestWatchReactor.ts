@@ -1,6 +1,7 @@
 import {
   CommandId,
   MessageId,
+  pullRequestConversationThreads,
   type OrchestrationV2Notification,
   type PullRequestActivity,
   type PullRequestComment,
@@ -10,6 +11,7 @@ import {
   type ThreadPullRequestWatch,
 } from "@t3tools/contracts";
 import {
+  parentOwnsPullRequestFollowUp,
   normalizeThreadPullRequestKey,
   threadPullRequestKeyOf,
   visibleThreadPullRequests,
@@ -174,13 +176,17 @@ function planRead(
       (watch.checksAwaitedSince != null &&
         now - Date.parse(watch.checksAwaitedSince) >= PULL_REQUEST_WATCH_NO_CHECKS_MS),
   );
+  // Host fingerprints omit review resolution and some merge restrictions.
+  const followUpDue =
+    group.targets.some(({ watch }) => watch.followUp !== undefined) &&
+    now - last.at >= SWEEP_MINUTES * 60_000;
   if (fingerprint === null) {
     const read =
       last.inFlight ||
       !last.remarksComplete ||
       last.fingerprint !== group.fingerprint ||
       now - last.at >= QUIET_REREAD_MS;
-    return { detail: read || checksDue, activity: read };
+    return { detail: read || checksDue || followUpDue, activity: read };
   }
   const activity =
     last.remarks !== fingerprint.remarks ||
@@ -190,6 +196,7 @@ function planRead(
     detail:
       activity ||
       checksDue ||
+      followUpDue ||
       last.status !== fingerprint.status ||
       (last.inFlight && fingerprint.coversDetail !== true),
     activity,
@@ -203,6 +210,7 @@ const checksPendingBeforeOf = ({ watch }: WatchTarget) =>
 function watchesEqual(left: ThreadPullRequestWatch, right: ThreadPullRequestWatch): boolean {
   return (
     left.startedAt === right.startedAt &&
+    JSON.stringify(left.followUp) === JSON.stringify(right.followUp) &&
     left.headSha === right.headSha &&
     left.failedChecks.join("\n") === right.failedChecks.join("\n") &&
     left.passed === right.passed &&
@@ -336,14 +344,28 @@ export const make = Effect.gen(function* () {
   });
 
   const giveUp = (target: WatchTarget) =>
-    record(target, null, {
-      text: `T3 Code stopped watching pull request #${target.link.number} (${target.link.url}) because it failed to read it from the host ${READ_FAILURE_LIMIT} times in a row. Check it yourself, and call pinacode_watch_pull_request only if it is still open.`,
-      notification: {
-        source: { kind: "monitor" },
-        outcome: "failed",
-        summary: `#${target.link.number}: stopped watching, could not read it`,
+    record(
+      target,
+      null,
+      {
+        text: `T3 Code paused watching pull request #${target.link.number} (${target.link.url}) because it failed to read it from the host ${READ_FAILURE_LIMIT} times in a row. Follow-up is blocked, not complete. Recover with pinacode_pr_workflow, inspect credentials and resume only if it is still open.`,
+        notification: {
+          source: { kind: "monitor" },
+          outcome: "failed",
+          summary: `#${target.link.number}: stopped watching, could not read it`,
+        },
       },
-    }).pipe(
+      target.watch.followUp === undefined
+        ? target.watch
+        : {
+            ...target.watch,
+            followUp: {
+              ...target.watch.followUp,
+              phase: "paused",
+              blockers: ["Repeated host read failures"],
+            },
+          },
+    ).pipe(
       Effect.tap(() => woke(target)),
       Effect.catch(() => record(target, null)),
       Effect.tap(() => ended(target, "unreadable")),
@@ -539,12 +561,17 @@ export const make = Effect.gen(function* () {
       reason: "closed",
     });
 
-  const endsWithoutRead = ({ thread, link }: WatchTarget): WatchEndReason | undefined =>
+  const endsWithoutRead = (
+    { thread, link }: WatchTarget,
+    parentLinks: ReadonlyArray<ThreadPullRequestLink>,
+  ): WatchEndReason | undefined =>
     link.snapshot?.state === "merged"
       ? "merged"
       : thread.settledOverride === "settled" || thread.settledAt !== null
         ? "settled"
-        : thread.lineage.relationshipToParent === "subagent"
+        : thread.lineage.relationshipToParent === "subagent" ||
+            (thread.lineage.relationshipToParent === "delegation" &&
+              parentOwnsPullRequestFollowUp(parentLinks, thread.id, link))
           ? "subagent"
           : undefined;
 
@@ -570,6 +597,36 @@ export const make = Effect.gen(function* () {
     return { projectId: first.thread.projectId, ...identityOf(first.link) };
   };
 
+  const markUnreadable = Effect.fn("PullRequestWatchReactor.markUnreadable")(function* (
+    group: WatchGroup,
+    reason: string | null,
+  ) {
+    lastReads.delete(group.key);
+    yield* eachTarget(group, (target) => {
+      const followUp = target.watch.followUp;
+      if (followUp === undefined || followUp.phase === "unreadable") return Effect.void;
+      return record(
+        target,
+        {
+          ...target.watch,
+          followUp: {
+            ...followUp,
+            phase: "unreadable",
+            blockers: [`Host readiness read failed: ${reason ?? "unknown"}`],
+          },
+        },
+        {
+          text: `PR #${target.link.number} (${target.link.url}) cannot be verified: ${reason ?? "unknown"}. Follow-up remains active. Recover its original session and responsibility with pinacode_pr_workflow; do not report it as mergeable.`,
+          notification: {
+            source: { kind: "monitor" },
+            outcome: "failed",
+            summary: `#${target.link.number}: follow-up unreadable`,
+          },
+        },
+      );
+    });
+  });
+
   const fingerprintOf = (group: WatchGroup) =>
     pullRequests.watchFingerprint(referenceOf(group)).pipe(
       Effect.catchCause(
@@ -593,6 +650,9 @@ export const make = Effect.gen(function* () {
     const last = lastReads.get(group.key);
     const plan = planRead(group, last, fingerprint, now);
     if (!plan.detail) return;
+    // Approval and thread resolution can change together; acceptance needs a complete fresh read.
+    const activityNeeded =
+      plan.activity || group.targets.some((target) => target.watch.followUp !== undefined);
     if (
       last === undefined ||
       group.targets.some((target) => !last.watches.has(watchKey(target))) ||
@@ -608,7 +668,7 @@ export const make = Effect.gen(function* () {
       [
         Effect.exit(pullRequests.detail({ ...reference, allowStale: false })),
         Effect.exit(
-          plan.activity
+          activityNeeded
             ? pullRequests.activity(reference).pipe(Effect.asSome)
             : Effect.succeed(Option.none<PullRequestActivity>()),
         ),
@@ -618,8 +678,8 @@ export const make = Effect.gen(function* () {
     if (Exit.isFailure(detailRead)) {
       if (Cause.hasInterruptsOnly(detailRead.cause))
         return yield* Effect.failCause(detailRead.cause);
-      lastReads.delete(group.key);
       const reason = providerFailureReason(detailRead.cause);
+      yield* markUnreadable(group, reason);
       if (reason === "rate-limited") return;
       // Transport and host failures can outlast the failure limit; keep the watch for recovery.
       if (reason === "failed") {
@@ -683,20 +743,38 @@ export const make = Effect.gen(function* () {
       : null;
     lastReads.set(group.key, {
       at:
-        plan.activity || last === undefined
+        activityNeeded || last === undefined
           ? (threadTails.get(group.key)?.fetchedAt ?? now)
           : last.at,
       fingerprint: group.fingerprint,
       inFlight:
         detail.mergeability === "unknown" ||
         detail.checks.some((check) => check.status === "pending"),
-      remarksComplete: plan.activity ? remarks !== null : (last?.remarksComplete ?? false),
+      remarksComplete: activityNeeded ? remarks !== null : (last?.remarksComplete ?? false),
       watches: new Set(group.targets.map(watchKey)),
       status: fingerprint?.status ?? null,
       remarks: fingerprint?.remarks ?? null,
     });
+    const unresolvedReviewThreads = Option.isSome(activity)
+      ? pullRequestConversationThreads(activity.value).filter((thread) => !thread.isResolved).length
+      : undefined;
     yield* eachTarget(group, (target) => {
-      const report = evaluatePullRequestWatch(target.watch, detail, remarks, now);
+      const report = evaluatePullRequestWatch(
+        target.watch,
+        {
+          ...detail,
+          unresolvedReviewThreads:
+            unresolvedReviewThreads !== undefined &&
+            (unresolvedReviewThreads > 0 ||
+              (Option.isSome(activity) &&
+                activity.value.reviewThreadsTruncated !== true &&
+                remarks !== null))
+              ? unresolvedReviewThreads
+              : undefined,
+        },
+        remarks,
+        now,
+      );
       if (report.changes.length > 0) {
         const wake = {
           ...pullRequestWatchMessage({
@@ -715,7 +793,17 @@ export const make = Effect.gen(function* () {
                 groupKey: group.key,
                 target,
                 next: null,
-                endedWatch: report.next,
+                endedWatch:
+                  report.next.followUp === undefined
+                    ? report.next
+                    : {
+                        ...report.next,
+                        followUp: {
+                          ...report.next.followUp,
+                          phase: "paused",
+                          blockers: ["Comment-only wake limit reached"],
+                        },
+                      },
                 wake,
                 reason: "comment-limit",
               }
@@ -748,10 +836,15 @@ export const make = Effect.gen(function* () {
       );
     }
     for (const target of targets) lifeOf(target);
+    const linksByThread = new Map(threads.map((thread) => [thread.id, thread.pullRequests]));
     const byPullRequest = new Map<string, Array<WatchTarget>>();
     const ending: Array<readonly [WatchTarget, WatchEndReason]> = [];
     for (const target of targets) {
-      const reason = endsWithoutRead(target);
+      const parentId = target.thread.lineage.parentThreadId;
+      const reason = endsWithoutRead(
+        target,
+        parentId === null ? [] : (linksByThread.get(parentId) ?? []),
+      );
       if (reason !== undefined) {
         ending.push([target, reason]);
         continue;
@@ -811,7 +904,7 @@ export const make = Effect.gen(function* () {
           }),
           Effect.flatMap((fingerprint) =>
             fingerprint === "paused"
-              ? Effect.void
+              ? markUnreadable(group, "rate-limited")
               : reads.withPermit(
                   readGroup(group, fingerprint).pipe(
                     Effect.catchCause(

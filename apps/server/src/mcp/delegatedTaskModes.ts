@@ -89,6 +89,9 @@ export function resolveInteractionMode(
 
 /** The task as its child receives it, with the role the caller asked for. */
 export function taskPrompt(input: OrchestratorMcpDelegateTaskInput): string {
+  if (input.session === "independent") {
+    return `You are the independent ${input.role ?? "general"} session assigned by a coordinator.\n\n${input.task}`;
+  }
   return input.role === undefined || input.role === "general"
     ? input.task
     : `Act as the ${input.role} sub-agent for this task.\n\n${input.task}`;

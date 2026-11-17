@@ -16,6 +16,7 @@ import {
 import { canonicalizeGitCafePullRequestUrl } from "@t3tools/source-control-definitions/registry";
 import { threadPullRequestsOf } from "../sourceControl/threadPullRequests.ts";
 import {
+  parentOwnsPullRequestFollowUp,
   normalizeThreadPullRequestKey,
   visibleThreadPullRequests,
   threadPullRequestKeysEqual,
@@ -892,7 +893,18 @@ function syncedPullRequestWatch(
 const withoutChecksAnswer = ({
   checksPending: _answer,
   ...watch
-}: ThreadPullRequestWatch): ThreadPullRequestWatch => watch;
+}: ThreadPullRequestWatch): ThreadPullRequestWatch => ({
+  ...watch,
+  ...(watch.followUp === undefined
+    ? {}
+    : {
+        followUp: {
+          ...watch.followUp,
+          phase: "waiting-ci",
+          blockers: ["Latest head requires revalidation"],
+        },
+      }),
+});
 
 function legacyPullRequestLink(
   thread: OrchestrationV2AppThread,
@@ -4189,17 +4201,56 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         cause: `Thread ${command.threadId} is settled or archived and cannot watch pull requests.`,
       });
     }
-    // Child tasks report to their parent, which owns PR monitoring; child watches would cause unrelated wakes.
+    const monitoringParent =
+      command.type === "thread.pull-request.watch" &&
+      command.watching &&
+      thread.lineage.relationshipToParent === "delegation" &&
+      thread.lineage.parentThreadId !== null
+        ? yield* projectionStore
+            .getThreadShell(thread.lineage.parentThreadId)
+            .pipe(mapDispatchError(command))
+        : null;
     if (
       command.type === "thread.pull-request.watch" &&
       command.watching &&
-      thread.lineage.relationshipToParent === "subagent"
+      (thread.lineage.relationshipToParent === "subagent" ||
+        parentOwnsPullRequestFollowUp(monitoringParent?.pullRequests ?? [], thread.id, command))
     ) {
       return yield* new OrchestratorDispatchError({
         commandId: command.commandId,
         commandType: command.type,
-        cause: `Thread ${command.threadId} is a subagent; its parent thread watches pull requests.`,
+        cause: `Thread ${command.threadId}'s parent owns monitoring for this pull request.`,
       });
+    }
+    if (command.type === "thread.pull-request.watch" && command.watching && command.followUp) {
+      const binding = command.followUp;
+      const child = yield* projectionStore
+        .getThread(binding.childThreadId)
+        .pipe(mapDispatchError(command));
+      const previousLink = threadPullRequestsOf(thread).find((link) =>
+        threadPullRequestKeysEqual(link, command),
+      );
+      const previous = (previousLink?.watch ?? previousLink?.endedWatch)?.followUp;
+      if (
+        child.deletedAt !== null ||
+        child.archivedAt !== null ||
+        child.worktreePath === null ||
+        child.projectId !== thread.projectId ||
+        child.lineage.parentThreadId !== thread.id ||
+        child.lineage.relationshipToParent !== "delegation" ||
+        !threadPullRequestsOf(child).some(
+          (link) => link.source !== "stack-dismissed" && threadPullRequestKeysEqual(link, command),
+        ) ||
+        (previous !== undefined &&
+          (previous.childThreadId !== binding.childThreadId ||
+            previous.issueUrl !== binding.issueUrl))
+      )
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause:
+            "PR follow-up requires the PR linked to its original independent session and issue.",
+        });
     }
     // Agent watches use the latest executed run to catch calls racing Stop; users can still watch.
     if (
@@ -5060,6 +5111,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
               : linked;
           const existing = links.find(visible);
           if (existing === undefined) return thread;
+          const followUp =
+            existing.endedWatch?.followUp ??
+            (command.type === "thread.pull-request.watch" ? command.followUp : undefined);
           const watch =
             command.type === "thread.pull-request-watch.sync"
               ? existing.watch?.startedAt === command.startedAt
@@ -5067,48 +5121,89 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                 : existing.watch
               : !command.watching
                 ? undefined
-                : (existing.watch ?? {
-                    startedAt,
-                    headSha: null,
-                    failedChecks: [],
-                    passed: false,
-                    passedChecks: [],
-                    conflicting: false,
-                    // Watching again must not repeat check or conflict news the last watch told.
-                    ...(existing.endedWatch && {
-                      headSha: existing.endedWatch.headSha,
-                      failedChecks: existing.endedWatch.failedChecks,
-                      passed: existing.endedWatch.passed,
-                      passedChecks: existing.endedWatch.passedChecks,
-                      conflicting: existing.endedWatch.conflicting,
-                      rebaseRequired: existing.endedWatch.rebaseRequired,
-                    }),
-                    awaitingBaseline: existing.endedWatch
-                      ? existing.endedWatch.awaitingBaseline
-                      : "all",
-                    ...(existing.endedWatch?.owedChecks !== undefined && {
-                      owedChecks: existing.endedWatch.owedChecks,
-                    }),
-                    ...(existing.endedWatch?.awaitingApproval !== undefined && {
-                      awaitingApproval: existing.endedWatch.awaitingApproval,
-                    }),
-                    ...(existing.endedWatch?.approvalAnnounced !== undefined && {
-                      approvalAnnounced: existing.endedWatch.approvalAnnounced,
-                    }),
-                    // A finished-checks answer may be an older head's; a fresh read decides.
-                    ...(existing.endedWatch?.checksPending === true && { checksPending: true }),
-                    ...(existing.endedWatch?.checksAwaitedSince !== undefined && {
-                      checksAwaitedSince: existing.endedWatch.checksAwaitedSince,
-                    }),
-                    remarksThrough: startedAt,
-                    remarkIds: [],
-                    wakes: 0,
-                  });
-          if (watch === existing.watch && links === linked) return thread;
-          const final =
-            command.type === "thread.pull-request-watch.sync" && watch === undefined
-              ? command.endedWatch
+                : existing.watch
+                  ? existing.watch.followUp !== undefined || command.followUp === undefined
+                    ? existing.watch
+                    : {
+                        ...existing.watch,
+                        // Binding changes invalidate reads begun as an ordinary watch, even in the same tick.
+                        startedAt: DateTime.formatIso(
+                          DateTime.makeUnsafe(
+                            Math.max(
+                              DateTime.toEpochMillis(now),
+                              Date.parse(existing.watch.startedAt) + 1,
+                            ),
+                          ),
+                        ),
+                        followUp: command.followUp,
+                      }
+                  : {
+                      startedAt,
+                      ...(followUp === undefined
+                        ? {}
+                        : {
+                            followUp: {
+                              issueUrl: followUp.issueUrl,
+                              childThreadId: followUp.childThreadId,
+                            },
+                          }),
+                      headSha: null,
+                      failedChecks: [],
+                      passed: false,
+                      passedChecks: [],
+                      conflicting: false,
+                      // Watching again must not repeat check or conflict news the last watch told.
+                      ...(existing.endedWatch && {
+                        headSha: existing.endedWatch.headSha,
+                        failedChecks: existing.endedWatch.failedChecks,
+                        passed: existing.endedWatch.passed,
+                        passedChecks: existing.endedWatch.passedChecks,
+                        conflicting: existing.endedWatch.conflicting,
+                        rebaseRequired: existing.endedWatch.rebaseRequired,
+                      }),
+                      awaitingBaseline: existing.endedWatch
+                        ? existing.endedWatch.awaitingBaseline
+                        : "all",
+                      ...(existing.endedWatch?.owedChecks !== undefined && {
+                        owedChecks: existing.endedWatch.owedChecks,
+                      }),
+                      ...(existing.endedWatch?.awaitingApproval !== undefined && {
+                        awaitingApproval: existing.endedWatch.awaitingApproval,
+                      }),
+                      ...(existing.endedWatch?.approvalAnnounced !== undefined && {
+                        approvalAnnounced: existing.endedWatch.approvalAnnounced,
+                      }),
+                      // A finished-checks answer may be an older head's; a fresh read decides.
+                      ...(existing.endedWatch?.checksPending === true && { checksPending: true }),
+                      ...(existing.endedWatch?.checksAwaitedSince !== undefined && {
+                        checksAwaitedSince: existing.endedWatch.checksAwaitedSince,
+                      }),
+                      remarksThrough: startedAt,
+                      remarkIds: [],
+                      wakes: 0,
+                    };
+          const stopped =
+            command.type === "thread.pull-request.watch" && !command.watching
+              ? (existing.watch ?? existing.endedWatch)
               : undefined;
+          if (
+            watch === existing.watch &&
+            links === linked &&
+            stopped?.followUp?.phase === undefined
+          )
+            return thread;
+          const final =
+            stopped?.followUp !== undefined
+              ? {
+                  ...stopped,
+                  followUp: {
+                    issueUrl: stopped.followUp.issueUrl,
+                    childThreadId: stopped.followUp.childThreadId,
+                  },
+                }
+              : command.type === "thread.pull-request-watch.sync" && watch === undefined
+                ? command.endedWatch
+                : undefined;
           return {
             ...thread,
             pullRequests: links.map((link) =>
@@ -9500,6 +9595,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         childThreadId,
         nativeTaskRef: null,
         prompt: command.task,
+        ...(command.issueUrl === undefined ? {} : { issueUrl: command.issueUrl }),
         title: command.title ?? null,
         model: command.modelSelection.model,
         modelSelection: command.modelSelection,

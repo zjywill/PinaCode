@@ -2,6 +2,7 @@ import {
   type PullRequestCheck,
   PullRequestComment,
   ThreadPullRequestWatch,
+  ThreadId,
 } from "@t3tools/contracts";
 import { assert, describe, it } from "@effect/vitest";
 
@@ -81,6 +82,90 @@ const remark = (
 const noRemarks: ReadonlyArray<PullRequestComment> = [];
 
 describe("evaluatePullRequestWatch", () => {
+  it("keeps independent PR follow-up open through approval, pushes and renewed blockers", () => {
+    const followUp = {
+      issueUrl: "https://github.com/acme/app/issues/7",
+      childThreadId: ThreadId.make("issue-seven"),
+    };
+    const green = detail({
+      checks: [{ ...check("test", "success"), required: true }],
+      isDraft: false,
+      platformReviewDecision: null,
+      mergeGate: "ready",
+      unresolvedReviewThreads: 0,
+    });
+    const waiting = evaluatePullRequestWatch(watch({ followUp }), green, noRemarks);
+    assert.equal(waiting.next.followUp?.phase, "waiting-approval");
+    const botComment = remark("review-bot", "2026-10-02T12:01:00.000Z", "No issues found.");
+    const stillWaiting = evaluatePullRequestWatch(waiting.next, green, [botComment]);
+    assert.equal(stillWaiting.next.followUp?.phase, "waiting-approval");
+    const approved = { ...green, platformReviewDecision: "approved" as const };
+    const ready = evaluatePullRequestWatch(stillWaiting.next, approved, noRemarks);
+    assert.equal(ready.next.followUp?.phase, "awaiting-acceptance");
+    assert.isFalse(ready.exhausted);
+    assert.include(
+      ready.changes.map((change) => change.kind),
+      "follow-up",
+    );
+    const moved = evaluatePullRequestWatch(
+      ready.next,
+      {
+        ...approved,
+        headSha: "bbbbbbbbbb",
+        checks: [],
+        platformReviewDecision: null,
+        mergeGate: "unknown",
+      },
+      noRemarks,
+    );
+    assert.equal(moved.next.followUp?.phase, "waiting-ci");
+    for (const checks of [[], [check("test", "pending")]]) {
+      assert.equal(
+        evaluatePullRequestWatch(
+          ready.next,
+          { ...approved, checks, mergeGate: "unknown" },
+          noRemarks,
+        ).next.followUp?.phase,
+        "waiting-ci",
+      );
+    }
+    assert.equal(
+      evaluatePullRequestWatch(ready.next, { ...green, mergeGate: "unknown" }, noRemarks).next
+        .followUp?.phase,
+      "waiting-approval",
+    );
+    assert.equal(
+      evaluatePullRequestWatch(ready.next, { ...approved, mergeGate: "unknown" }, noRemarks).next
+        .followUp?.phase,
+      "unreadable",
+    );
+    assert.equal(
+      evaluatePullRequestWatch(
+        ready.next,
+        { ...green, checks: [], mergeGate: undefined },
+        noRemarks,
+      ).next.followUp?.phase,
+      "unreadable",
+    );
+    const blocked = evaluatePullRequestWatch(
+      ready.next,
+      { ...approved, platformReviewDecision: "review-required", unresolvedReviewThreads: 1 },
+      noRemarks,
+    );
+    assert.equal(blocked.next.followUp?.phase, "blocked");
+    assert.deepEqual(
+      evaluatePullRequestWatch(blocked.next, { ...approved, isDraft: true }, noRemarks).next
+        .followUp?.phase,
+      "blocked",
+    );
+    const unknown = evaluatePullRequestWatch(
+      ready.next,
+      { ...approved, unresolvedReviewThreads: undefined },
+      null,
+    );
+    assert.equal(unknown.next.followUp?.phase, "unreadable");
+  });
+
   it.each(["pending", "success"] as const)(
     "reports a required rebase once with %s CI",
     (status) => {

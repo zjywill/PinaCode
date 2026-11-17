@@ -2770,6 +2770,7 @@ const make = Effect.gen(function* () {
           parentNodeId: parentRun.rootNodeId,
           task: taskPrompt(input),
           ...(input.session === undefined ? {} : { session: input.session }),
+          ...(input.issueUrl === undefined ? {} : { issueUrl: input.issueUrl }),
           ...(input.title === undefined ? {} : { title: input.title }),
           modelSelection: target.modelSelection,
           runtimeMode,

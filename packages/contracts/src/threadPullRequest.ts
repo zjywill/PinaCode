@@ -6,6 +6,7 @@ import {
   NonNegativeInt,
   PositiveInt,
   ProjectId,
+  ThreadId,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
 import {
@@ -80,8 +81,26 @@ export const ThreadPullRequestKey = Schema.Struct({
 });
 export type ThreadPullRequestKey = typeof ThreadPullRequestKey.Type;
 
+export const PullRequestFollowUp = Schema.Struct({
+  issueUrl: TrimmedNonEmptyString,
+  childThreadId: ThreadId,
+  phase: Schema.optional(
+    Schema.Literals([
+      "waiting-ci",
+      "waiting-approval",
+      "blocked",
+      "unreadable",
+      "awaiting-acceptance",
+      "paused",
+    ]),
+  ),
+  blockers: Schema.optional(Schema.Array(Schema.String)),
+});
+export type PullRequestFollowUp = typeof PullRequestFollowUp.Type;
+
 export const ThreadPullRequestWatch = Schema.Struct({
   startedAt: IsoDateTime,
+  followUp: Schema.optional(PullRequestFollowUp),
   headSha: Schema.NullOr(TrimmedNonEmptyString),
   failedChecks: Schema.Array(TrimmedNonEmptyString),
   passed: Schema.Boolean,
@@ -135,3 +154,18 @@ export const ThreadPullRequestLink = Schema.Struct({
   endedWatch: Schema.optional(ThreadPullRequestWatch),
 });
 export type ThreadPullRequestLink = typeof ThreadPullRequestLink.Type;
+
+export const PullRequestWorkflowState = Schema.Struct({
+  sessions: Schema.Array(
+    Schema.Struct({
+      issueUrl: Schema.NullOr(Schema.String),
+      childThreadId: ThreadId,
+      worktreePath: Schema.NullOr(Schema.String),
+      providerInstanceId: Schema.String,
+      model: Schema.NullOr(Schema.String),
+      status: Schema.String,
+    }),
+  ),
+  pullRequests: Schema.Array(ThreadPullRequestLink),
+});
+export type PullRequestWorkflowState = typeof PullRequestWorkflowState.Type;

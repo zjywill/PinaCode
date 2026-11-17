@@ -9,6 +9,7 @@ import {
   ProjectId,
   ThreadId,
   type ScopedThreadRef,
+  type ThreadPullRequestLink,
 } from "@t3tools/contracts";
 import { isMacPlatform } from "@t3tools/shared/keybindings";
 import { describe, expect, it, vi } from "vite-plus/test";
@@ -257,6 +258,163 @@ describe("sidebar thread rename", () => {
 
       await expect.element(input).not.toBeInTheDocument();
       expect(updateMetadata).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe("delegated session navigation", () => {
+  it.each([false, true])(
+    "collapses only the presentation and keeps children discoverable (folders: %s)",
+    async (folders) => {
+      using stack = new DisposableStack();
+      const previousSettings = getClientSettings();
+      stack.defer(() => __setClientSettingsForTests(previousSettings));
+      __setClientSettingsForTests({
+        ...DEFAULT_CLIENT_SETTINGS,
+        boringSidebarEnabled: folders,
+        sidebarWorkingShelfEnabled: false,
+      });
+      const style = document.createElement("style");
+      style.textContent = appCss;
+      document.head.append(style);
+      stack.defer(() => style.remove());
+      const activeProject = project("active");
+      const parent = makeThreadFixture({
+        ...threadShell(activeProject.id, 100),
+        title: "Release coordinator",
+      });
+      const child = makeThreadFixture({
+        ...threadShell(activeProject.id, 101),
+        title: "Issue 3 — retain PR follow-up",
+        lineage: {
+          rootThreadId: parent.id,
+          parentThreadId: parent.id,
+          relationshipToParent: "delegation",
+        },
+      });
+      const waiting = makeThreadFixture({
+        ...threadShell(activeProject.id, 102),
+        title: "Issue 4 — review feedback",
+        lineage: {
+          rootThreadId: parent.id,
+          parentThreadId: parent.id,
+          relationshipToParent: "delegation",
+        },
+      });
+      const link: ThreadPullRequestLink = {
+        host: "github.com",
+        repository: "example/project",
+        number: 3,
+        url: "https://github.com/example/project/pull/3",
+        source: "agent",
+        linkedAt: "2026-01-01T00:00:00.000Z",
+        snapshot: null,
+        stack: null,
+        watch: {
+          startedAt: "2026-01-01T00:00:00.000Z",
+          headSha: "latest-head",
+          failedChecks: [],
+          passed: true,
+          passedChecks: ["test"],
+          remarksThrough: "2026-01-01T00:00:00.000Z",
+          remarkIds: [],
+          conflicting: false,
+          wakes: 0,
+          followUp: {
+            issueUrl: "https://github.com/example/project/issues/3",
+            childThreadId: child.id,
+            phase: "waiting-approval",
+            blockers: ["Independent reviewer approval required"],
+          },
+        },
+      };
+      const coordinator = { ...parent, pullRequests: [link] };
+      vi.mocked(useProjects).mockReturnValue([activeProject]);
+      vi.mocked(useQuietThreadShells).mockReturnValue([child, coordinator, waiting]);
+      vi.mocked(useThreadRouteTarget).mockReturnValue({
+        kind: "server",
+        threadRef: { environmentId: parent.environmentId, threadId: parent.id },
+      });
+      vi.mocked(useHandleNewThread).mockReturnValue({
+        activeDraftThread: null,
+        activeThread: null,
+        defaultProjectRef: { environmentId: parent.environmentId, projectId: parent.projectId },
+        defaultProjectFallbackReady: true,
+        handleNewThread: vi.fn().mockResolvedValue(null),
+        routeDraftId: null,
+        routeThreadRef: { environmentId: parent.environmentId, threadId: parent.id },
+      });
+      const view = () => (
+        <SidebarProvider style={{ height: 650, minHeight: 650 }}>
+          <Sidebar routeReveal={{ observedKey: null, pendingKey: null }} />
+        </SidebarProvider>
+      );
+      await using screen = await render(view());
+      const toggle = screen.getByRole("button", {
+        name: "Collapse delegated sessions for Release coordinator",
+        exact: true,
+      });
+      await expect.element(toggle).toBeInTheDocument();
+      await expect
+        .element(screen.getByText("Waiting for approval", { exact: true }))
+        .toBeInTheDocument();
+      await expect
+        .element(screen.getByText("2 active · 1 blocked", { exact: true }))
+        .toBeInTheDocument();
+      await expect.element(screen.getByText(child.title, { exact: true })).toBeInTheDocument();
+      const childRow = screen.container.querySelector<HTMLElement>(
+        `[data-thread-item="local:${child.id}"]`,
+      )!;
+      const parentRow = screen.container.querySelector<HTMLElement>(
+        `[data-thread-item="local:${parent.id}"]`,
+      )!;
+      expect(childRow.getBoundingClientRect().left).toBeGreaterThan(
+        parentRow.getBoundingClientRect().left,
+      );
+      await userEvent.click(screen.getByText(child.title, { exact: true }));
+      await vi.waitFor(() => expect(screen.router?.state.location.pathname).toContain(child.id));
+      await userEvent.click(screen.getByText(parent.title, { exact: true }));
+      await vi.waitFor(() => expect(screen.router?.state.location.pathname).toContain(parent.id));
+      await userEvent.click(toggle);
+      await expect.element(screen.getByText(child.title, { exact: true })).not.toBeInTheDocument();
+      await expect.element(screen.getByText(parent.title, { exact: true })).toBeInTheDocument();
+      const added = makeThreadFixture({
+        ...waiting,
+        id: ThreadId.make("afternoon-issue"),
+        title: "Afternoon issue",
+      });
+      vi.mocked(useQuietThreadShells).mockReturnValue([child, coordinator, waiting, added]);
+      await screen.rerender(view());
+      await expect
+        .element(screen.getByText("3 active · 1 blocked", { exact: true }))
+        .toBeInTheDocument();
+      await expect.element(screen.getByText(added.title, { exact: true })).not.toBeInTheDocument();
+      vi.mocked(useQuietThreadShells).mockReturnValue([child]);
+      await screen.rerender(view());
+      await expect.element(screen.getByText(child.title, { exact: true })).toBeInTheDocument();
+      expect(
+        screen.container.querySelector<HTMLElement>(`[data-thread-item="local:${child.id}"]`)!.style
+          .marginInlineStart,
+      ).toBe("");
+      if (folders) {
+        vi.mocked(useQuietThreadShells).mockReturnValue([
+          { ...coordinator, pinnedAt: "2026-01-01T00:00:00.000Z" },
+          child,
+        ]);
+        await screen.rerender(view());
+        await expect.element(screen.getByText(child.title, { exact: true })).toBeInTheDocument();
+        await expect
+          .element(screen.getByText("1 active · 1 blocked", { exact: true }))
+          .toBeInTheDocument();
+        const modifier = isMacPlatform(navigator.platform) ? "Meta" : "Control";
+        using _reviewTimers = fakeTimers();
+        await userEvent.keyboard(`{${modifier}>}`);
+        await act(() => vi.advanceTimersByTime(THREAD_JUMP_HINT_SHOW_DELAY_MS));
+        await expect
+          .element(screen.getByText(`${modifier === "Meta" ? "⌘" : "Ctrl+"}2`, { exact: true }))
+          .toBeInTheDocument();
+        await userEvent.keyboard(`{/${modifier}}`);
+      }
     },
   );
 });

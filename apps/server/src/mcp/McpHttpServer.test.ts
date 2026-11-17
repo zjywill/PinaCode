@@ -1806,11 +1806,13 @@ it.effect("lists pull request watch tools only to threads that are not delegated
           "pinacode_link_pull_request",
           "pinacode_watch_pull_request",
           "pinacode_unwatch_pull_request",
+          "pinacode_pr_workflow",
         ]),
       );
       expect(childTools).toContain("pinacode_link_pull_request");
       expect(childTools).not.toContain("pinacode_watch_pull_request");
       expect(childTools).not.toContain("pinacode_unwatch_pull_request");
+      expect(childTools).not.toContain("pinacode_pr_workflow");
     }),
   ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );

@@ -1930,6 +1930,12 @@ export const make = Effect.gen(function* () {
             reviewers: changeRequest.reviewers,
             labels: changeRequest.labels,
             checks: changeRequest.checks,
+            ...(changeRequest.platformReviewDecision === undefined
+              ? {}
+              : { platformReviewDecision: changeRequest.platformReviewDecision }),
+            ...(changeRequest.mergeGate === undefined
+              ? {}
+              : { mergeGate: changeRequest.mergeGate }),
             mergeCapabilities: changeRequest.mergeCapabilities,
             viewerPermissions: changeRequest.viewerPermissions,
             ...(viewer === null || viewer.trim().length === 0 ? {} : { viewer }),

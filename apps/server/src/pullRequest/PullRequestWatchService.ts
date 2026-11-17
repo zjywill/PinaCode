@@ -3,6 +3,8 @@ import {
   ThreadId,
   type OrchestrationV2ThreadShell,
   type PullRequestUnavailableError,
+  type PullRequestFollowUp,
+  type PullRequestWorkflowState,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -22,6 +24,7 @@ import {
   type ResolvedTarget,
 } from "./pullRequestTarget.ts";
 import {
+  parentOwnsPullRequestFollowUp,
   threadPullRequestKeysEqual,
   threadPullRequestsOf,
 } from "../sourceControl/threadPullRequests.ts";
@@ -49,7 +52,7 @@ export class PullRequestWatchFromSubagentError extends Schema.TaggedError<PullRe
   {},
 ) {
   override get message(): string {
-    return "This thread is a subagent, so it cannot watch pull requests. Its parent thread owns the pull request: finish your task and report back instead.";
+    return "This delegated session's parent owns PR monitoring and the coordinator workflow. Do the assigned work in this session and report back instead.";
   }
 }
 
@@ -62,6 +65,15 @@ export class PullRequestWatchThreadNotFoundError extends Schema.TaggedError<Pull
   }
 }
 
+export class PullRequestFollowUpInvalidError extends Schema.TaggedError<PullRequestFollowUpInvalidError>()(
+  "PullRequestFollowUpInvalidError",
+  { childThreadId: ThreadId },
+) {
+  override get message(): string {
+    return "Follow-up requires the PR to be linked to this coordinator's original independent session and worktree; an existing PR cannot be reassigned to a different session or issue.";
+  }
+}
+
 export class PullRequestWatchService extends Context.Service<
   PullRequestWatchService,
   {
@@ -69,6 +81,7 @@ export class PullRequestWatchService extends Context.Service<
       readonly threadId: ThreadId;
       readonly target: PullRequestTarget;
       readonly watching: boolean;
+      readonly followUp?: Pick<PullRequestFollowUp, "issueUrl" | "childThreadId">;
     }) => Effect.Effect<
       ResolvedTarget & { readonly watching: boolean; readonly wasWatching: boolean },
       | PullRequestWatchFailedError
@@ -77,6 +90,15 @@ export class PullRequestWatchService extends Context.Service<
       | PullRequestWatchThreadNotFoundError
       | PullRequestTargetError
       | PullRequestUnavailableError
+      | PullRequestFollowUpInvalidError
+    >;
+    readonly readWorkflow: (
+      threadId: ThreadId,
+    ) => Effect.Effect<
+      PullRequestWorkflowState,
+      | PullRequestWatchFailedError
+      | PullRequestWatchThreadNotFoundError
+      | PullRequestWatchFromSubagentError
     >;
   }
 >()("pinacode/pullRequest/PullRequestWatchService") {}
@@ -104,6 +126,7 @@ const make = Effect.gen(function* () {
     readonly threadId: ThreadId;
     readonly target: PullRequestTarget;
     readonly watching: boolean;
+    readonly followUp?: Pick<PullRequestFollowUp, "issueUrl" | "childThreadId">;
   }) {
     const { watching } = input;
     const thread = yield* requireThread(input.threadId);
@@ -116,10 +139,37 @@ const make = Effect.gen(function* () {
       threadPullRequestsOf(shell).find(
         (link) => link.source !== "stack-dismissed" && threadPullRequestKeysEqual(link, target),
       );
-    if (watching && thread.lineage.relationshipToParent === "subagent") {
+    const parent =
+      watching &&
+      thread.lineage.relationshipToParent === "delegation" &&
+      thread.lineage.parentThreadId !== null
+        ? yield* engine
+            .getThreadShell(thread.lineage.parentThreadId)
+            .pipe(Effect.mapError((cause) => new PullRequestWatchFailedError({ cause })))
+        : null;
+    if (
+      watching &&
+      (thread.lineage.relationshipToParent === "subagent" ||
+        parentOwnsPullRequestFollowUp(parent?.pullRequests ?? [], thread.id, target))
+    ) {
       return yield* new PullRequestWatchFromSubagentError();
     }
     const before = watchedLink(thread);
+    if (watching && input.followUp !== undefined) {
+      const child = yield* requireThread(input.followUp.childThreadId);
+      const previous = (before?.watch ?? before?.endedWatch)?.followUp;
+      if (
+        child.lineage.relationshipToParent !== "delegation" ||
+        child.lineage.parentThreadId !== thread.id ||
+        child.projectId !== thread.projectId ||
+        child.worktreePath === null ||
+        child.archivedAt !== null ||
+        watchedLink(child) === undefined ||
+        (previous !== undefined &&
+          (previous.childThreadId !== child.id || previous.issueUrl !== input.followUp.issueUrl))
+      )
+        return yield* new PullRequestFollowUpInvalidError({ childThreadId: child.id });
+    }
     if (watching && before?.snapshot?.state === "merged") {
       return yield* new PullRequestNotOpenError({ state: "merged" });
     }
@@ -157,6 +207,7 @@ const make = Effect.gen(function* () {
         repository: target.repository,
         number: target.number,
         watching,
+        ...(input.followUp === undefined ? {} : { followUp: input.followUp }),
         ...(watching ? { link: { url: target.url, source: "agent" as const } } : {}),
       })
       .pipe(
@@ -174,7 +225,67 @@ const make = Effect.gen(function* () {
     };
   });
 
-  return PullRequestWatchService.of({ setWatching });
+  const readWorkflow = Effect.fn("PullRequestWatchService.readWorkflow")(function* (
+    threadId: ThreadId,
+  ) {
+    const thread = yield* requireThread(threadId);
+    if (
+      thread.lineage.relationshipToParent === "subagent" ||
+      thread.lineage.relationshipToParent === "delegation"
+    ) {
+      return yield* new PullRequestWatchFromSubagentError();
+    }
+    const { subagents } = yield* engine
+      .getThreadRecords(threadId, ["subagents"])
+      .pipe(Effect.mapError((cause) => new PullRequestWatchFailedError({ cause })));
+    const followUps = threadPullRequestsOf(thread).map(
+      (link) => (link.watch ?? link.endedWatch)?.followUp,
+    );
+    const sessions = yield* Effect.forEach(
+      [
+        ...new Map(
+          subagents
+            .map((task) => ({
+              ...task,
+              issueUrl:
+                task.issueUrl ??
+                followUps.find((binding) => binding?.childThreadId === task.childThreadId)
+                  ?.issueUrl,
+            }))
+            .filter((task) => task.childThreadId !== null)
+            .map((task) => [task.childThreadId, task]),
+        ).values(),
+      ],
+      (task) =>
+        engine.getThreadShell(task.childThreadId!).pipe(
+          Effect.mapError((cause) => new PullRequestWatchFailedError({ cause })),
+          Effect.map((child) =>
+            task.issueUrl === undefined && child?.lineage.relationshipToParent !== "delegation"
+              ? null
+              : {
+                  issueUrl: task.issueUrl ?? null,
+                  childThreadId: task.childThreadId!,
+                  worktreePath: child?.worktreePath ?? null,
+                  providerInstanceId: child?.providerInstanceId ?? task.providerInstanceId,
+                  model: child?.modelSelection.model ?? task.model,
+                  status:
+                    child?.deletedAt != null
+                      ? "deleted"
+                      : child?.archivedAt != null
+                        ? "archived"
+                        : (child?.status ?? "unavailable"),
+                },
+          ),
+        ),
+      { concurrency: 4 },
+    );
+    return {
+      sessions: sessions.filter((session) => session !== null),
+      pullRequests: threadPullRequestsOf(thread),
+    };
+  });
+
+  return PullRequestWatchService.of({ setWatching, readWorkflow });
 });
 
 export const layer = Layer.effect(PullRequestWatchService, make);

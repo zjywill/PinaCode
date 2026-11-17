@@ -31,17 +31,18 @@ describe("buildRuntimeInstructions", () => {
     const instructions = buildRuntimeInstructions({ harness: "Codex" });
 
     assert.notInclude(instructions, "Creation, pending checks, or a merge ask alone is not enough");
-    assert.include(instructions, "Links and watches persist across pushes.");
+    assert.include(instructions, "Links and watches persist across pushes and turn endings.");
     // The wake message itself carries the do-not-re-watch rule.
     assert.notInclude(instructions, "On a wake");
     assert.include(
       instructions,
-      "Call pinacode_watch_pull_request when asked to monitor or babysit, or when work you were asked to do, such as a merge, still waits on checks or reviews, even after an earlier unwatch",
+      "Call pinacode_watch_pull_request when asked to monitor or babysit, or when work you were asked to do, such as a merge, still waits on checks or reviews",
     );
     assert.notInclude(instructions, "merge it now");
     assert.include(instructions, "Otherwise act now or hand back.");
-    assert.include(instructions, "then watch and end your turn");
-    assert.include(instructions, "never watch, even if the brief says babysit");
+    assert.include(instructions, "then watch while waiting");
+    assert.include(instructions, "Short-lived subagents never watch.");
+    assert.include(instructions, "Independent sessions may watch their own PR unless");
     assert.include(
       instructions,
       "After PR work, a child's last line is: PR <full URL>, head <SHA>, checks and reviews <state>.",
@@ -50,6 +51,13 @@ describe("buildRuntimeInstructions", () => {
       instructions,
       "For PR waits, no sleep, loops, gh --watch, Monitor or ScheduleWakeup.",
     );
-    assert.include(instructions, "call pinacode_unwatch_pull_request");
+    assert.include(
+      instructions,
+      "For an ordinary watch, unwatch when the user's monitoring goal is met",
+    );
+    assert.include(
+      instructions,
+      "For a watch registered with followUp, progress reports and readiness keep monitoring active",
+    );
   });
 });
