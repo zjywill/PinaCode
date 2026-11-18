@@ -26,7 +26,7 @@ export interface ConnectionDiagnosis {
   readonly hops: ReadonlyArray<ConnectionDiagnosisHop>;
   readonly steps: ReadonlyArray<string>;
   readonly facts: ReadonlyArray<readonly [label: string, value: string]>;
-  /** The troubleshooting guide section for this failure. Null for direct routes, except a pending T3 Connect sign-in. */
+  /** The troubleshooting guide section for this failure. Null for direct routes, except a pending Pina Connect sign-in. */
   readonly moreInfoUrl: string | null;
 }
 
@@ -235,10 +235,14 @@ function steps(host: string, located: Located, failure: ConnectionAttemptError |
           ]
         : [`Make sure ${host} is awake and online.`, checkHost];
     case "server":
-      return [
-        `Make sure Pina Code is running on ${host}.`,
-        "Retry. If it keeps failing, copy the diagnostics.",
-      ];
+      return failure?.reason === "authentication"
+        ? [
+            `This device's sign-in to ${host} expired or was revoked. Pair it again with a new pairing link from ${host}.`,
+          ]
+        : [
+            `Make sure Pina Code is running on ${host}.`,
+            "Retry. If it keeps failing, copy the diagnostics.",
+          ];
   }
 }
 

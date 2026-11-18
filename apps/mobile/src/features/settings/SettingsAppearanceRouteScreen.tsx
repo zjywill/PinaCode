@@ -1,4 +1,6 @@
-import { I18nProvider, useGT } from "../../i18n/I18nProvider";
+import { useGT } from "gt-react-native";
+
+import { I18nProvider } from "../../i18n/I18nProvider";
 import { Platform } from "react-native";
 import { AppIconSection } from "./appearance/sections/AppIconSection";
 import { AndroidNavigationAppearanceSection } from "./appearance/sections/AndroidNavigationAppearanceSection";

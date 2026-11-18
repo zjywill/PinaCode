@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useGT } from "../../../../i18n/I18nProvider";
+import { useGT } from "gt-react-native";
 import { Alert, Image, Platform, View } from "react-native";
 import { requireOptionalNativeModule } from "expo";
 import { APP_ICON_NAMES, type AppIconName } from "@t3tools/contracts";

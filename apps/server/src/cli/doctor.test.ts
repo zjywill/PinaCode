@@ -68,6 +68,7 @@ it.effect(
                     reclaimableBytes: 1000,
                     incrementalVacuumEnabled: false,
                     legacyDatabaseBytes: 4000,
+                    legacyOnlyRecords: { projects: 0, threads: 0 },
                   }),
                 compact: () =>
                   startServer.pipe(
@@ -111,7 +112,7 @@ it.effect(
       ).pipe(Effect.flip);
       assert.equal(
         refused.message,
-        `Stop T3 Code server process ${state.pid}, which the background service did not start, before repairing the database.`,
+        `Stop Pina Code server process ${state.pid}, which the background service did not start, before repairing the database.`,
       );
       assert.deepEqual(calls, ["pause", "resume"]);
     }).pipe(Effect.provide(layerHost)),
@@ -151,6 +152,7 @@ it.effect("warns how long reclaiming can take and reports each step with its ela
                 reclaimableBytes: 0,
                 incrementalVacuumEnabled: false,
                 legacyDatabaseBytes: null,
+                legacyOnlyRecords: null,
               }),
             compact: (_databasePath, onStep) =>
               Effect.gen(function* () {
