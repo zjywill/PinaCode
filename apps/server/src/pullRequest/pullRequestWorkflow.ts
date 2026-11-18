@@ -1,4 +1,4 @@
-import { PINACODE_PR_WORKFLOW_SKILL } from "@t3tools/contracts";
+import { PINACODE_PR_WORKFLOW_SKILL, type ThreadPullRequestLink } from "@t3tools/contracts";
 import { matchInlineSkills } from "@t3tools/shared/inlineSkills";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Source runs load the same skill that the build embeds.
 import * as NodeFS from "node:fs";
@@ -10,15 +10,27 @@ export const PULL_REQUEST_WORKFLOW_SKILL =
     ? NodeFS.readFileSync(new URL("./following-pull-requests/SKILL.md", import.meta.url), "utf8")
     : __T3CODE_PR_WORKFLOW_SKILL__;
 
-export function expandPullRequestWorkflowPrompt(text: string): string {
+export function hasOngoingPullRequestFollowUp(
+  links: ReadonlyArray<ThreadPullRequestLink>,
+): boolean {
+  return links.some(
+    (link) =>
+      link.source !== "stack-dismissed" &&
+      (link.watch?.followUp !== undefined ||
+        (link.endedWatch?.endReason === undefined &&
+          link.endedWatch?.followUp?.phase === "paused")),
+  );
+}
+
+export function expandPullRequestWorkflowPrompt(text: string, continuing = false): string {
   const mentions = [...matchInlineSkills(text, [PINACODE_PR_WORKFLOW_SKILL])];
-  if (mentions.length === 0) return text;
+  if (mentions.length === 0 && !continuing) return text;
   let request = text;
   for (const mention of mentions.toReversed()) {
     request = request.slice(0, mention.start) + request.slice(mention.end);
   }
   return `<pinacode_builtin_skill>
-${PULL_REQUEST_WORKFLOW_SKILL}
+${PULL_REQUEST_WORKFLOW_SKILL}${continuing ? "\nThis coordinator already has ongoing issue follow-up. Apply the intake rules to the current request.\n" : ""}
 </pinacode_builtin_skill>
 
 <user_request>

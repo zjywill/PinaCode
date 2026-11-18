@@ -1,4 +1,7 @@
-import { expandPullRequestWorkflowPrompt } from "../pullRequest/pullRequestWorkflow.ts";
+import {
+  expandPullRequestWorkflowPrompt,
+  hasOngoingPullRequestFollowUp,
+} from "../pullRequest/pullRequestWorkflow.ts";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
 import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
 import {
@@ -894,8 +897,23 @@ export const layer: Layer.Layer<
       });
       let effectiveHandoffs = handoffs;
       let resumeFellBack = false;
+      const pullRequests = projection.thread.pullRequests ?? [];
+      const continuingPullRequestWorkflow =
+        providerMessage.createdBy === "user" &&
+        !isCompactionCommandMessage(providerMessage) &&
+        parseGoalCommand(providerMessage) === null &&
+        (hasOngoingPullRequestFollowUp(pullRequests) ||
+          projection.subagents.some(
+            (task) =>
+              task.issueUrl !== undefined &&
+              task.childThreadId !== null &&
+              !pullRequests.some(
+                (link) =>
+                  (link.watch ?? link.endedWatch)?.followUp?.childThreadId === task.childThreadId,
+              ),
+          ));
       const userText = projectComposerContextForProvider({
-        text: expandPullRequestWorkflowPrompt(providerMessage.text),
+        text: expandPullRequestWorkflowPrompt(providerMessage.text, continuingPullRequestWorkflow),
         records: providerMessage.context?.records ?? [],
       });
       // Native goal commands go verbatim; handoff history waits a turn.

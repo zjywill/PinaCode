@@ -4983,10 +4983,10 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
           ...key,
           watching: false,
         });
-        assert.isUndefined(
-          (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]?.endedWatch?.followUp
-            ?.phase,
-        );
+        const stoppedAfterPause = (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]
+          ?.endedWatch;
+        assert.equal(stoppedAfterPause?.endReason, "stopped");
+        assert.deepEqual(stoppedAfterPause?.followUp, paused?.followUp);
         yield* orchestrator.dispatch({
           type: "thread.pull-request.watch",
           commandId: CommandId.make("follow-up-resume"),
@@ -5008,8 +5008,14 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         });
         assert.isUndefined(yield* sweep);
         const stopped = (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0];
-        assert.isUndefined(stopped?.endedWatch?.followUp?.phase);
-        assert.deepEqual(stopped?.endedWatch?.followUp?.childThreadId, childThreadId);
+        assert.equal(stopped?.endedWatch?.endReason, "stopped");
+        assert.equal(stopped?.endedWatch?.headSha, "new-head");
+        assert.equal(stopped?.endedWatch?.followUp?.phase, "unreadable");
+        assert.include(
+          stopped?.endedWatch?.followUp?.blockers?.[0] ?? "",
+          "Host readiness read failed",
+        );
+        assert.equal(stopped?.endedWatch?.followUp?.childThreadId, childThreadId);
         assert.equal(
           (yield* orchestrator.getThreadShell(childThreadId))?.worktreePath,
           "/workspace/issue-seven",
@@ -5032,6 +5038,27 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
           ...key,
           watching: false,
         });
+        for (const state of ["closed", "merged"] as const) {
+          detail = { ...detail, state: "open", mergeability: "mergeable" };
+          yield* TestClock.adjust("2 minutes");
+          yield* orchestrator.dispatch({
+            type: "thread.pull-request.watch",
+            commandId: CommandId.make(`follow-up-watch-${state}`),
+            threadId,
+            ...key,
+            watching: true,
+          });
+          const pending = yield* sweep;
+          assert.equal(pending?.followUp?.phase, "waiting-ci");
+          detail = { ...detail, state };
+          yield* TestClock.adjust("2 minutes");
+          assert.isUndefined(yield* sweep);
+          const ended = (yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]
+            ?.endedWatch;
+          assert.equal(ended?.endReason, state);
+          assert.equal(ended?.headSha, "new-head");
+          assert.deepEqual(ended?.followUp, pending?.followUp);
+        }
       }),
   );
 

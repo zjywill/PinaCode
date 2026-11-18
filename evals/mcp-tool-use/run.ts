@@ -42,6 +42,7 @@ import { taskPrompt } from "../../apps/server/src/mcp/delegatedTaskModes.ts";
 import {
   PULL_REQUEST_WORKFLOW_SKILL,
   expandPullRequestWorkflowPrompt,
+  hasOngoingPullRequestFollowUp,
 } from "../../apps/server/src/pullRequest/pullRequestWorkflow.ts";
 import * as McpInvocationContext from "../../apps/server/src/mcp/McpInvocationContext.ts";
 import { advertisedJsonSchema } from "../../apps/server/src/mcp/advertisedJsonSchema.ts";
@@ -1102,13 +1103,14 @@ export const buildMessages = (sample: Sample) => {
     }
     if (turn.text) push(turn.role, text(turn.text));
   }
+  const workflowPrompt = expandPullRequestWorkflowPrompt(
+    testCase.prompt,
+    hasOngoingPullRequestFollowUp(testCase.setup.workflowState?.pullRequests ?? []),
+  );
   const userText =
     testCase.promptContext === undefined
-      ? expandPullRequestWorkflowPrompt(testCase.prompt)
-      : projectComposerContextForProvider({
-          text: expandPullRequestWorkflowPrompt(testCase.prompt),
-          ...testCase.promptContext,
-        });
+      ? workflowPrompt
+      : projectComposerContextForProvider({ text: workflowPrompt, ...testCase.promptContext });
   const prompt =
     sideChatContext === undefined ? userText : withInlineContext(sideChatContext, userText);
   const childPrompt = () =>

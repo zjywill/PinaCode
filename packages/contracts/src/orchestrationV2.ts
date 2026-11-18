@@ -3671,6 +3671,7 @@ const OrchestrationV2InternalCommand = Schema.Union([
     checksPendingBefore: Schema.optional(Schema.Boolean),
     /** With `watch: null`, the state the ended watch keeps instead of its last saved one. */
     endedWatch: Schema.optional(ThreadPullRequestWatch),
+    endReason: ThreadPullRequestWatch.fields.endReason,
     /** More watches of this thread recorded together, which `wake` also reports on. */
     others: Schema.optional(
       Schema.Array(
@@ -3680,6 +3681,7 @@ const OrchestrationV2InternalCommand = Schema.Union([
           watch: Schema.NullOr(ThreadPullRequestWatch),
           checksPendingBefore: Schema.optional(Schema.Boolean),
           endedWatch: Schema.optional(ThreadPullRequestWatch),
+          endReason: ThreadPullRequestWatch.fields.endReason,
           includesRemarks: Schema.optional(Schema.Boolean),
         }),
       ),

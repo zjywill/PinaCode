@@ -22,7 +22,10 @@ export function parentOwnsPullRequestFollowUp(
 ): boolean {
   return links.some((link) => {
     const watch =
-      link.watch ?? (link.endedWatch?.followUp?.phase === "paused" ? link.endedWatch : undefined);
+      link.watch ??
+      (link.endedWatch?.endReason === undefined && link.endedWatch?.followUp?.phase === "paused"
+        ? link.endedWatch
+        : undefined);
     return (
       link.source !== "stack-dismissed" &&
       threadPullRequestKeysEqual(link, target) &&

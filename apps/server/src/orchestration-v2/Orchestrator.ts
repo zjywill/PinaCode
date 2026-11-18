@@ -1131,7 +1131,7 @@ function isStalePullRequestWatchStamp(
     (candidate) =>
       candidate.source !== "stack-dismissed" && threadPullRequestKeysEqual(candidate, stamp),
   );
-  if (link === undefined) return true;
+  if (link === undefined || link.endedWatch?.endReason === "stopped") return true;
   if (stamp.watchEnded === true) {
     // The final notice outlives its watch, but a replacement watch supersedes it.
     const latestWatch = link.watch ?? link.endedWatch;
@@ -5199,20 +5199,16 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           if (
             watch === existing.watch &&
             links === linked &&
-            stopped?.followUp?.phase === undefined
+            (stopped?.followUp === undefined || stopped.endReason !== undefined)
           )
             return thread;
           const final =
-            stopped?.followUp !== undefined
-              ? {
-                  ...stopped,
-                  followUp: {
-                    issueUrl: stopped.followUp.issueUrl,
-                    childThreadId: stopped.followUp.childThreadId,
-                  },
-                }
+            stopped?.followUp !== undefined && stopped.endReason === undefined
+              ? { ...stopped, endReason: "stopped" as const }
               : command.type === "thread.pull-request-watch.sync" && watch === undefined
-                ? command.endedWatch
+                ? command.endReason !== undefined && existing.watch?.followUp !== undefined
+                  ? { ...existing.watch, endReason: command.endReason }
+                  : command.endedWatch
                 : undefined;
           return {
             ...thread,
