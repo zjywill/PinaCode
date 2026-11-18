@@ -327,6 +327,7 @@ export const make = Effect.gen(function* () {
     next: ThreadPullRequestWatch | null,
     wake?: Wake,
     endedWatch?: ThreadPullRequestWatch,
+    endReason?: ThreadPullRequestWatch["endReason"],
   ) {
     const uuid = yield* random.uuidV4();
     yield* engine.dispatch({
@@ -338,6 +339,7 @@ export const make = Effect.gen(function* () {
       watch: next,
       ...checksPendingBeforeOf(target),
       ...(endedWatch === undefined ? {} : { endedWatch }),
+      ...(endReason === undefined ? {} : { endReason }),
       ...(wake === undefined
         ? {}
         : { wake: { ...wake, messageId: MessageId.make(`message:pr-watch:${uuid}`) } }),
@@ -468,7 +470,13 @@ export const make = Effect.gen(function* () {
   const hold = (wake: HeldWake) => Effect.sync(() => void held.push(wake));
 
   const sendOne = (item: HeldWake) =>
-    record(item.target, item.next, item.wake, item.endedWatch).pipe(
+    record(
+      item.target,
+      item.next,
+      item.wake,
+      item.endedWatch,
+      item.reason === "closed" ? item.reason : undefined,
+    ).pipe(
       Effect.tap(() => woke(item.target)),
       Effect.tap(() => (item.reason === undefined ? Effect.void : ended(item.target, item.reason))),
       Effect.catchCause((cause) => {
@@ -494,12 +502,14 @@ export const make = Effect.gen(function* () {
       watch: first.next,
       ...checksPendingBeforeOf(first.target),
       ...(first.endedWatch === undefined ? {} : { endedWatch: first.endedWatch }),
+      ...(first.reason === "closed" && { endReason: first.reason }),
       others: rest.map((item) => ({
         ...identityOf(item.target.link),
         startedAt: item.target.watch.startedAt,
         watch: item.next,
         ...checksPendingBeforeOf(item.target),
         ...(item.endedWatch === undefined ? {} : { endedWatch: item.endedWatch }),
+        ...(item.reason === "closed" && { endReason: item.reason }),
         ...(item.wake.includesRemarks === true ? { includesRemarks: true } : {}),
       })),
       wake: {
@@ -714,7 +724,9 @@ export const make = Effect.gen(function* () {
       return yield* eachTarget(group, (target) =>
         detail.state === "closed"
           ? closed(group.key, target)
-          : record(target, null).pipe(Effect.tap(() => ended(target, "merged"))),
+          : record(target, null, undefined, undefined, "merged").pipe(
+              Effect.tap(() => ended(target, "merged")),
+            ),
       );
     }
 
@@ -868,7 +880,7 @@ export const make = Effect.gen(function* () {
     yield* Effect.forEach(
       ending,
       ([target, reason]) =>
-        record(target, null).pipe(
+        record(target, null, undefined, undefined, reason === "merged" ? reason : undefined).pipe(
           Effect.tap(() => ended(target, reason)),
           Effect.catchCause(
             logFailure("pull request watch stop failed", {

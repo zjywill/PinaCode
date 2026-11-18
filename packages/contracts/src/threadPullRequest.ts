@@ -100,6 +100,7 @@ export type PullRequestFollowUp = typeof PullRequestFollowUp.Type;
 
 export const ThreadPullRequestWatch = Schema.Struct({
   startedAt: IsoDateTime,
+  endReason: Schema.optional(Schema.Literals(["merged", "closed", "stopped"])),
   followUp: Schema.optional(PullRequestFollowUp),
   headSha: Schema.NullOr(TrimmedNonEmptyString),
   failedChecks: Schema.Array(TrimmedNonEmptyString),

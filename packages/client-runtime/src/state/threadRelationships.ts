@@ -75,18 +75,18 @@ export function groupDelegationList<T>(input: {
       const followUp = watch?.followUp;
       if (followUp === undefined) continue;
       const key = scopedThreadKey(scopeThreadRef(parent.environmentId, followUp.childThreadId));
+      const endReason = link.endedWatch?.endReason;
       const terminal =
-        link.snapshot?.state === "merged"
+        endReason === "merged" || link.snapshot?.state === "merged"
           ? "Merged"
-          : link.snapshot?.state === "closed"
+          : endReason === "closed" || link.snapshot?.state === "closed"
             ? "Closed"
-            : link.watch === undefined && followUp.phase !== "paused"
+            : link.watch === undefined && (endReason === "stopped" || followUp.phase !== "paused")
               ? "Stopped"
               : null;
       const phase = followUp.phase;
-      const label =
-        terminal ??
-        (phase === "waiting-ci"
+      const phaseLabel =
+        phase === "waiting-ci"
           ? "Waiting for CI"
           : phase === "waiting-approval"
             ? "Waiting for approval"
@@ -98,10 +98,10 @@ export function groupDelegationList<T>(input: {
                   ? "Paused"
                   : phase === "blocked"
                     ? "Blocked"
-                    : "Verifying");
+                    : "Verifying";
       const state = {
-        label,
-        detail: followUp.blockers?.join("; ") || null,
+        label: terminal ?? phaseLabel,
+        detail: followUp.blockers?.join("; ") || (terminal !== null && phase ? phaseLabel : null),
         active: terminal === null,
         blocked:
           terminal === null &&

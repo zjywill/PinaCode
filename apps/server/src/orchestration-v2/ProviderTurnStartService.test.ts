@@ -445,6 +445,7 @@ it.each([
 
 function makeLocalCommandHarness(input: {
   readonly text: string;
+  readonly pullRequests?: OrchestrationV2ThreadProjection["thread"]["pullRequests"];
   readonly manualContinuation?: boolean;
   readonly nativeResumeUnsupported?: boolean;
   readonly steeringRestart?: boolean;
@@ -566,6 +567,7 @@ function makeLocalCommandHarness(input: {
       projectId: ProjectId.make("project-native-account-command"),
       branch: input.worktreePath === undefined ? null : "feature/restore",
       worktreePath: input.worktreePath ?? null,
+      pullRequests: input.pullRequests,
       lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId },
     } as OrchestrationV2ThreadProjection["thread"],
     runs: [
@@ -2181,6 +2183,58 @@ effectIt.effect("delivers the explicitly selected app skill before starting the 
       });
       yield* ordinary.start;
       expect(ordinary.startTurn.mock.calls[0]?.[0].message.text).toBe(request);
+    }
+  }),
+);
+
+effectIt.effect("delivers the workflow for appending an issue to ongoing follow-up", () =>
+  Effect.gen(function* () {
+    const now = "2026-11-18T01:00:00.000Z";
+    const watch = {
+      startedAt: now,
+      headSha: "head",
+      failedChecks: [],
+      passed: false,
+      passedChecks: [],
+      remarksThrough: now,
+      remarkIds: [],
+      conflicting: false,
+      wakes: 0,
+      followUp: {
+        issueUrl: "https://github.com/acme/app/issues/7",
+        childThreadId: ThreadId.make("original-child"),
+        phase: "waiting-ci" as const,
+      },
+    };
+    const link = {
+      host: "github.com",
+      repository: "acme/app",
+      number: 17,
+      url: "https://github.com/acme/app/pull/17",
+      source: "agent" as const,
+      linkedAt: now,
+      snapshot: null,
+      stack: null,
+    };
+    const request = "首页这个 issue 也处理下。";
+    for (const [pullRequest, active] of [
+      [{ ...link, watch }, true],
+      [{ ...link, endedWatch: { ...watch, endReason: "stopped" as const } }, false],
+      [{ ...link, watch: { ...watch, followUp: undefined } }, false],
+    ] as const) {
+      const harness = makeLocalCommandHarness({
+        text: request,
+        sideChat: { contextRun: "delivered" },
+        pullRequests: [pullRequest],
+      });
+      yield* harness.start;
+      const text = harness.startTurn.mock.calls[0]?.[0].message.text;
+      if (active) {
+        expect(text).toContain("# Following pull requests");
+        expect(text).toContain(request);
+      } else {
+        expect(text).toBe(request);
+      }
     }
   }),
 );

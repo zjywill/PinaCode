@@ -129,9 +129,26 @@ describe("thread relationships", () => {
     threads[2] = { ...parent, pullRequests: [{ ...link, endedWatch: watch }] };
     expect(group().rows.get("local:child")?.progress).toBe("Paused");
     expect(group().rows.get("local:parent")).toMatchObject({ activeCount: 2, blockedCount: 1 });
-    watch.followUp.phase = undefined;
-    expect(group().rows.get("local:child")?.progress).toBe("Stopped");
+    watch.followUp.blockers = ["Comment-only wake limit reached"];
+    threads[2] = {
+      ...parent,
+      pullRequests: [{ ...link, endedWatch: { ...watch, endReason: "stopped" } }],
+    };
+    expect(group().rows.get("local:child")).toMatchObject({
+      progress: "Stopped",
+      detail: "Comment-only wake limit reached",
+    });
     expect(group().rows.get("local:parent")).toMatchObject({ activeCount: 1, blockedCount: 0 });
+    watch.followUp.phase = "waiting-ci";
+    watch.followUp.blockers = ["CI pending"];
+    threads[2] = {
+      ...parent,
+      pullRequests: [{ ...link, endedWatch: { ...watch, endReason: "merged" } }],
+    };
+    expect(group().rows.get("local:child")).toMatchObject({
+      progress: "Merged",
+      detail: "CI pending",
+    });
   });
 
   it.each([
