@@ -4579,19 +4579,20 @@ it.layer(Layer.merge(layerTest, ProviderContinuationRequests.layer))(
 
 it.layer(layerTest)("delegated tasks across a server restart", (it) => {
   it.effect.each([
-    { name: "releases", key: "", pendingBackgroundTasks: [], released: true },
+    { name: "queues cleanup", key: "", pendingBackgroundTasks: [], released: true },
     {
-      name: "keeps while an unawaited background command runs",
+      name: "skips cleanup while an unawaited background command runs",
       key: "-background",
       pendingBackgroundTasks: [{ taskId: "dev-server", kind: "command" as const }],
       released: false,
     },
   ])(
-    "queues a child result without creating a provider history handoff and $name its process",
+    "queues a child result without creating a provider history handoff and $name",
     ({ key, pendingBackgroundTasks, released }) =>
       Effect.gen(function* () {
         const orchestrator = yield* Orchestrator.OrchestratorV2;
         const eventSink = yield* EventSink.EventSinkV2;
+        const outbox = yield* EffectOutbox.EffectOutboxV2;
         const now = yield* DateTime.now;
         const threadId = ThreadId.make(`thread:result-message${key}-parent`);
         const projectId = ProjectId.make(`project:result-message${key}`);
@@ -4622,6 +4623,9 @@ it.layer(layerTest)("delegated tasks across a server restart", (it) => {
         const providerThreadId = ProviderThreadId.make(
           `provider-thread:result-message${key}-child`,
         );
+        const providerSessionId = ProviderSessionId.make(
+          `provider-session:result-message${key}-child`,
+        );
         yield* eventSink.write({
           commandId: CommandId.make(`command:result-message${key}-child-provider`),
           events: [
@@ -4631,7 +4635,7 @@ it.layer(layerTest)("delegated tasks across a server restart", (it) => {
               threadId: child.childThreadId,
               occurredAt: now,
               payload: {
-                id: ProviderSessionId.make(`provider-session:result-message${key}-child`),
+                id: providerSessionId,
                 driver,
                 providerInstanceId: modelSelection.instanceId,
                 status: "ready",
@@ -4679,11 +4683,17 @@ it.layer(layerTest)("delegated tasks across a server restart", (it) => {
         assert.isNotNull(task.result);
         assert.isEmpty(recovered.contextHandoffs);
         assert.equal(recovered.contextTransfers.length, 1);
-        // A one-process-per-thread child releases its process once its result is recorded,
-        // unless background work it did not await would die with it.
+        const releaseCommandId = CommandId.make(
+          `${EffectOutbox.DELEGATED_TASK_RELEASE_COMMAND_PREFIX}${child.childRunId}:${providerSessionId}`,
+        );
+        const cleanup = yield* outbox.listByCommandId(releaseCommandId);
+        assert.deepEqual(
+          cleanup.map((effect) => effect.request),
+          released ? [{ type: "provider-session.release-delegate", providerSessionId }] : [],
+        );
         assert.equal(
-          (yield* orchestrator.getThreadProjection(child.childThreadId)).providerSessions.length,
-          released ? 0 : 1,
+          (yield* orchestrator.getThreadProjection(child.childThreadId)).providerSessions[0]?.id,
+          providerSessionId,
         );
 
         const delivery = recovered.runs.find((candidate) => candidate.id === runId)!

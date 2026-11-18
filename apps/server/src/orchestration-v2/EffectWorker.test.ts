@@ -41,6 +41,7 @@ import * as ProviderTurnControlService from "./ProviderTurnControlService.ts";
 import * as ProviderTurnStartService from "./ProviderTurnStartService.ts";
 import * as RuntimeRequestService from "./RuntimeRequestService.ts";
 import * as ThreadTitleRegenerationService from "./ThreadTitleRegenerationService.ts";
+import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 
@@ -89,6 +90,7 @@ function layerExecutorFor(input: {
   readonly events: Ref.Ref<ReadonlyArray<string>>;
   readonly failFirstStart?: Ref.Ref<boolean>;
   readonly threads?: Partial<ThreadManagementService.ThreadManagementService["Service"]>;
+  readonly projection?: Partial<ProjectionStore.ProjectionStoreV2["Service"]>;
   readonly continueAfterRestart?: boolean;
   readonly interrupt?: ProviderTurnControlService.ProviderTurnControlServiceV2Shape["interrupt"];
   readonly rollback?: CheckpointRollbackService.CheckpointRollbackServiceV2Shape["execute"];
@@ -123,7 +125,7 @@ function layerExecutorFor(input: {
         release: () => record("release"),
         detach: () => record("detach"),
         otherWorkingThreads: () => Effect.succeed([]),
-        releaseUnlessBusy: () => Effect.succeed(true),
+        releaseUnlessBusy: () => record("release-idle").pipe(Effect.as(true)),
         subscribePromptSuggestion: () => Stream.empty,
       }),
     ),
@@ -174,7 +176,7 @@ function layerExecutorFor(input: {
       Layer.mergeAll(
         layerDependencies,
         Layer.mock(ThreadManagementService.ThreadManagementService)(input.threads ?? {}),
-        Layer.mock(ProjectionStore.ProjectionStoreV2)({}),
+        Layer.mock(ProjectionStore.ProjectionStoreV2)(input.projection ?? {}),
         ServerSettings.layerTest(
           input.continueAfterRestart === true ? { continueThreadsAfterServerUpdate: true } : {},
         ),
@@ -182,6 +184,69 @@ function layerExecutorFor(input: {
     ),
   );
 }
+
+it.effect.each([
+  { status: "starting", legacy: false, held: false, result: [] },
+  { status: "running", legacy: false, held: false, result: [] },
+  { status: "running", legacy: true, held: false, result: [] },
+  { status: "queued", legacy: false, held: false, result: [] },
+  { status: "queued", legacy: false, held: true, result: ["release-idle"] },
+  { status: "completed", legacy: false, held: false, result: ["release-idle"] },
+] as const)(
+  "guards delayed delegate cleanup when the follow-up is $status (legacy: $legacy, held: $held)",
+  ({ status, legacy, held, result }) =>
+    Effect.gen(function* () {
+      const now = yield* DateTime.now;
+      const events = yield* Ref.make<ReadonlyArray<string>>([]);
+      const followupStatus = yield* Ref.make<typeof status | "completed">("completed");
+      const layer = layerExecutorFor({
+        events,
+        projection: {
+          getThreadRecords: (_threadId, _fields, filter) =>
+            Ref.get(followupStatus).pipe(
+              Effect.map(
+                (status) =>
+                  ({
+                    runs: filter?.runStatuses?.includes(status)
+                      ? [{ status, queueHeld: held, ordinal: 2 }]
+                      : [],
+                    providerThreads: [],
+                  }) as unknown as OrchestrationV2ThreadProjection,
+              ),
+            ),
+        },
+      });
+      yield* Effect.gen(function* () {
+        const executor = yield* EffectWorker.OrchestrationEffectExecutorV2;
+        const threadDispatch = yield* ThreadCommandExecutor.ThreadCommandExecutor;
+        const cleanup = {
+          ...restartEffect(now, { type: "detach" }),
+          commandId: CommandId.make(
+            `${EffectOutbox.DELEGATED_TASK_RELEASE_COMMAND_PREFIX}${runId}:${oldSessionId}`,
+          ),
+          request: legacy
+            ? {
+                type: "provider-session.detach",
+                providerSessionId: oldSessionId,
+                detail: EffectOutbox.DELEGATED_TASK_RELEASE_DETAIL,
+              }
+            : { type: "provider-session.release-delegate", providerSessionId: oldSessionId },
+        } satisfies EffectOutbox.OrchestrationEffectV2;
+        const cleanupFiber = yield* threadDispatch.withLock(
+          threadId,
+          Effect.gen(function* () {
+            const fiber = yield* executor
+              .execute(cleanup)
+              .pipe(Effect.forkChild({ startImmediately: true }));
+            yield* Ref.set(followupStatus, status);
+            return fiber;
+          }),
+        );
+        yield* Fiber.join(cleanupFiber);
+        assert.deepEqual(yield* Ref.get(events), result);
+      }).pipe(Effect.provide(Layer.merge(layer, ThreadCommandExecutor.layer)));
+    }),
+);
 
 it.effect.each([
   {

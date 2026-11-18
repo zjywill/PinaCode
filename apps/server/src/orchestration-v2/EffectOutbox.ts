@@ -32,6 +32,9 @@ import * as SqlClient from "effect/sql/SqlClient";
 
 import { forkParked } from "../serverActivation.ts";
 
+export const DELEGATED_TASK_RELEASE_COMMAND_PREFIX = "command:system:delegated-task-release:";
+export const DELEGATED_TASK_RELEASE_DETAIL = "Delegated task finished.";
+
 export const OrchestrationEffectRequestV2 = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("provider-runtime.continue"),
@@ -43,6 +46,10 @@ export const OrchestrationEffectRequestV2 = Schema.Union([
     providerSessionId: ProviderSessionId,
     detail: Schema.optional(Schema.String),
     revokeMcpCredential: Schema.optional(Schema.Boolean),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("provider-session.release-delegate"),
+    providerSessionId: ProviderSessionId,
   }),
   Schema.Struct({
     type: Schema.Literal("provider-session.apply-model-selection"),
@@ -142,6 +149,7 @@ export type OrchestrationEffectRequestV2 = typeof OrchestrationEffectRequestV2.T
 export const REPLAY_SAFE_EFFECT_TYPES_AFTER_PROCESS_LOSS = [
   "provider-runtime.continue",
   "provider-session.detach",
+  "provider-session.release-delegate",
   "provider-thread.rollback",
   "checkpoint.capture",
   "scheduled-tasks.cleanup",

@@ -14493,6 +14493,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             child.providerThreads.some((thread) => (thread.pendingBackgroundTasks ?? []).length > 0)
           )
             return;
+          const effects: PendingOrchestrationEffectV2[] = [];
           for (const session of child.providerSessions) {
             // Shared processes unload their threads themselves; only a per-thread process lingers.
             if (
@@ -14501,15 +14502,22 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
               session.capabilities.sessions.supportsMultipleProviderThreadsPerSession
             )
               continue;
-            yield* dispatchWithReceiptEffect({
-              type: "provider-session.detach",
-              commandId: CommandId.make(
-                `command:system:delegated-task-release:${resultRunId}:${session.id}`,
-              ),
+            const commandId = CommandId.make(
+              `${EffectOutbox.DELEGATED_TASK_RELEASE_COMMAND_PREFIX}${resultRunId}:${session.id}`,
+            );
+            effects.push({
+              // Reuse the old detach key so recovery cannot enqueue both forms.
+              id: `effect:${commandId}:provider-session.detach:${session.id}`,
+              commandId,
               threadId: childThreadId,
-              providerSessionId: session.id,
-              reason: "Delegated task finished.",
+              request: {
+                type: "provider-session.release-delegate",
+                providerSessionId: session.id,
+              },
             });
+          }
+          if (effects.length > 0) {
+            yield* eventSink.writeWithEffects({ events: [], effects });
           }
         }),
       );

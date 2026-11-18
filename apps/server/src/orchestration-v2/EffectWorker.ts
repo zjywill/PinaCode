@@ -1,4 +1,4 @@
-import { CommandId, type RunId } from "@t3tools/contracts";
+import { CommandId, type ProviderSessionId, type RunId, type ThreadId } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -29,6 +29,7 @@ import * as ProviderTurnControlService from "./ProviderTurnControlService.ts";
 import * as ProviderTurnStartService from "./ProviderTurnStartService.ts";
 import * as RuntimeRequestService from "./RuntimeRequestService.ts";
 import * as ThreadTitleRegenerationService from "./ThreadTitleRegenerationService.ts";
+import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { continueRestartedRun } from "./RestartContinuation.ts";
@@ -115,7 +116,34 @@ export const layerExecutor: Layer.Layer<
     const threadTitleRegeneration =
       yield* ThreadTitleRegenerationService.ThreadTitleRegenerationService;
     const threads = yield* ThreadManagementService.ThreadManagementService;
+    const threadDispatch = yield* ThreadCommandExecutor.ThreadCommandExecutor;
     const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+    const releaseFinishedDelegate = Effect.fn(
+      "OrchestrationEffectExecutorV2.releaseFinishedDelegate",
+    )(
+      function* (threadId: ThreadId, providerSessionId: ProviderSessionId) {
+        const { runs, providerThreads } = yield* projectionStore.getThreadRecords(
+          threadId,
+          ["runs", "providerThreads"],
+          { runStatuses: [...ThreadManagementService.ACTIVE_RUN_STATUSES, "queued"] },
+        );
+        if (
+          runs.some((run) => run.status !== "queued" || run.queueHeld !== true) ||
+          providerThreads.some((thread) => (thread.pendingBackgroundTasks ?? []).length > 0)
+        ) {
+          return;
+        }
+        yield* providerSessions.releaseUnlessBusy({
+          providerSessionId,
+          ownProviderThreadIds: [],
+          throughRunOrdinal: 0,
+          reason: "manual_shutdown",
+          detail: EffectOutbox.DELEGATED_TASK_RELEASE_DETAIL,
+        });
+      },
+      // Hold the dispatch lock through release so a wake cannot select this runtime mid-close.
+      (release, threadId) => threadDispatch.withLock(threadId, release),
+    );
     const settings = yield* ServerSettings.ServerSettingsService;
     const startRun = (
       effect: EffectOutbox.OrchestrationEffectV2,
@@ -184,26 +212,35 @@ export const layerExecutor: Layer.Layer<
               ),
             );
           }
-          case "provider-session.detach":
-            return providerSessions
-              .detach({
-                providerSessionId: effect.request.providerSessionId,
-                threadId: effect.threadId,
-                ...(effect.request.detail === undefined ? {} : { detail: effect.request.detail }),
-                ...(effect.request.revokeMcpCredential === undefined
-                  ? {}
-                  : { revokeMcpCredential: effect.request.revokeMcpCredential }),
-              })
-              .pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new OrchestrationEffectExecutionError({
-                      effectId: effect.id,
-                      effectType: effect.request.type,
-                      cause,
-                    }),
-                ),
-              );
+          case "provider-session.release-delegate":
+          case "provider-session.detach": {
+            const request = effect.request;
+            // Older delegate cleanup rows used detach and had already removed the binding.
+            const delegateRelease =
+              request.type === "provider-session.release-delegate" ||
+              (request.detail === EffectOutbox.DELEGATED_TASK_RELEASE_DETAIL &&
+                effect.commandId.startsWith(EffectOutbox.DELEGATED_TASK_RELEASE_COMMAND_PREFIX));
+            const release = delegateRelease
+              ? releaseFinishedDelegate(effect.threadId, request.providerSessionId)
+              : providerSessions.detach({
+                  providerSessionId: request.providerSessionId,
+                  threadId: effect.threadId,
+                  ...(request.detail === undefined ? {} : { detail: request.detail }),
+                  ...(request.revokeMcpCredential === undefined
+                    ? {}
+                    : { revokeMcpCredential: request.revokeMcpCredential }),
+                });
+            return release.pipe(
+              Effect.mapError(
+                (cause) =>
+                  new OrchestrationEffectExecutionError({
+                    effectId: effect.id,
+                    effectType: request.type,
+                    cause,
+                  }),
+              ),
+            );
+          }
           case "provider-session.apply-model-selection":
             return providerTurnControl
               .applyModelSelection({
@@ -716,7 +753,7 @@ export const layerExecutor: Layer.Layer<
       }),
     });
   }),
-);
+).pipe(Layer.provide(ThreadCommandExecutor.layer));
 
 // A running effect blocks later work on its thread and its lease is never reclaimed in-process,
 // so a stop that hangs must give up and fall through to the normal retry/fail path.
