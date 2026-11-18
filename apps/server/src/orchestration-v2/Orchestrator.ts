@@ -4394,7 +4394,11 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       }
     }
     if (command.type === "thread.settle") {
-      const projection = yield* loadProjectionForCommand(command, ["runs", "runtimeRequests"]);
+      const projection = yield* loadProjectionForCommand(
+        command,
+        ["runs", "runtimeRequests", "subagents"],
+        { omitSettledSubagents: true },
+      );
       if (
         command.expectedLatestRunId !== undefined &&
         projection.runs.reduce<OrchestrationV2Run | undefined>(
@@ -4441,13 +4445,21 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       const blockingRequestExists = pendingRequests.some(
         (request) => request.kind !== "user_input" || request.responseCapability.type !== "message",
       );
+      const waitingForDelegatedTask = projection.subagents.some(
+        (task) =>
+          task.origin === "app_owned" &&
+          isOrchestrationV2WorkActive(task.status) &&
+          task.completionDelivery?.state !== "disposed",
+      );
       const blocker = blockingRequestExists
         ? "is waiting on an approval or question. Answer it before settling."
-        : runningRunExists
-          ? "is still running. Stop it before settling."
-          : queuedMessageExists
-            ? "has a queued message. Send it or remove it from the queue before settling."
-            : null;
+        : waitingForDelegatedTask
+          ? "is waiting for a delegated task to finish. Wait for it or stop the task before settling."
+          : runningRunExists
+            ? "is still running. Stop it before settling."
+            : queuedMessageExists
+              ? "has a queued message. Send it or remove it from the queue before settling."
+              : null;
       if (blocker !== null) {
         return yield* new OrchestratorDispatchError({
           commandId: command.commandId,

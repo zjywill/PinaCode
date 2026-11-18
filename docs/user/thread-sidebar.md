@@ -199,6 +199,9 @@ section is off. Each device keeps its own choice.
 Choose **Settle thread** from its menu to move finished work out of the active list
 without deleting the conversation. **Un-settle thread** restores it to active work
 and prevents automatic settlement until new activity resumes the usual rules.
+If the thread is waiting for a delegated task, let the task finish or stop it before settling.
+An independently working child thread can continue while its parent is settled. Un-settling
+a thread reopens only that thread.
 Manually settling an idle thread dismisses unanswered async questions without
 sending an answer or restarting the agent. Settling also closes the thread's
 terminals that wait at an idle prompt, and keeps their output. A terminal that

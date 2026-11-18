@@ -1987,9 +1987,9 @@ it.layer(layerContinuationWorkerTest)("interrupted completion wakes", (it) => {
     }),
   );
 
-  it.effect("settling with a queued completion wake disposes its running siblings", () =>
+  it.effect("settling waits for a required sibling before cancelling a held completion wake", () =>
     Effect.gen(function* () {
-      const { orchestrator, sink, now, threadId, originRunId, sibling, wake, completeSibling } =
+      const { orchestrator, sink, now, threadId, sibling, wake, completeSibling } =
         yield* queueCompletionWakeBesideRunningSibling("sibling-settle");
       const busy = (yield* orchestrator.getThreadProjection(threadId)).runs.find(
         (run) => run.status === "running",
@@ -2013,24 +2013,21 @@ it.layer(layerContinuationWorkerTest)("interrupted completion wakes", (it) => {
         ],
       });
 
-      const settled = yield* orchestrator.dispatch({
-        type: "thread.settle",
-        commandId: CommandId.make("sibling-settle-settle"),
-        threadId,
-      });
-      assert.deepEqual(
-        settled.storedEvents.flatMap(({ event }) =>
-          event.type === "run.updated" && event.payload.id === wake.id
-            ? [event.payload.status]
-            : [],
-        ),
-        ["cancelled"],
-      );
-      const afterSettle = yield* orchestrator.getThreadProjection(threadId);
+      const blocked = yield* orchestrator
+        .dispatch({
+          type: "thread.settle",
+          commandId: CommandId.make("sibling-settle-blocked"),
+          threadId,
+        })
+        .pipe(Effect.flip);
+      assert.instanceOf(blocked, Orchestrator.OrchestratorDispatchError);
       assert.equal(
-        afterSettle.subagents.find((task) => task.id === sibling.id)?.completionDelivery?.state,
-        "disposed",
+        blocked.cause,
+        `Thread ${threadId} is waiting for a delegated task to finish. Wait for it or stop the task before settling.`,
       );
+      const waiting = yield* orchestrator.getThreadProjection(threadId);
+      assert.isNull(waiting.thread.settledOverride);
+      assert.equal(waiting.runs.find((run) => run.id === wake.id)?.status, "queued");
 
       const afterSequence = yield* completeSibling;
       yield* sink.stream({ afterSequence, eventType: "subagent.updated" }).pipe(
@@ -2043,21 +2040,58 @@ it.layer(layerContinuationWorkerTest)("interrupted completion wakes", (it) => {
         Stream.take(1),
         Stream.runDrain,
       );
-      const afterLateResult = yield* orchestrator.getThreadProjection(threadId);
+      const independentId = ThreadId.make("sibling-settle-independent");
+      yield* sink.write({
+        events: [
+          {
+            type: "thread.created",
+            id: EventId.make("sibling-settle-independent-created"),
+            threadId: independentId,
+            occurredAt: now,
+            payload: {
+              ...waiting.thread,
+              id: independentId,
+              lineage: {
+                parentThreadId: threadId,
+                rootThreadId: independentId,
+                relationshipToParent: "delegation",
+              },
+            },
+          },
+          runEvent({
+            threadId: independentId,
+            runId: RunId.make("sibling-settle-independent-run"),
+            ordinal: 1,
+            status: "running",
+            now,
+          }),
+        ],
+      });
+
+      yield* orchestrator.dispatch({
+        type: "thread.settle",
+        commandId: CommandId.make("sibling-settle-settle"),
+        threadId,
+      });
+      const settled = yield* orchestrator.getThreadProjection(threadId);
+      assert.equal(settled.thread.settledOverride, "settled");
+      assert.equal(settled.runs.find((run) => run.id === wake.id)?.status, "cancelled");
+      const independent = yield* orchestrator.getThreadProjection(independentId);
+      assert.equal(independent.runs[0]?.status, "running");
+
+      yield* orchestrator.dispatch({
+        type: "thread.unsettle",
+        commandId: CommandId.make("sibling-settle-reopen-parent"),
+        threadId,
+        reason: "user",
+      });
       assert.equal(
-        afterLateResult.subagents.find((task) => task.id === sibling.id)?.completionDelivery?.state,
-        "disposed",
+        (yield* orchestrator.getThreadProjection(threadId)).thread.settledOverride,
+        "active",
       );
-      assert.deepEqual(
-        afterLateResult.runs.map((run) => run.id),
-        afterSettle.runs.map((run) => run.id),
-      );
-      assert.equal(
-        afterLateResult.runs.find((run) => run.id === originRunId)?.delegatedCompletion
-          ?.disposition,
-        "disposed",
-      );
-      assert.equal(afterLateResult.thread.settledOverride, "settled");
+      const afterUnsettle = yield* orchestrator.getThreadProjection(independentId);
+      assert.deepEqual(afterUnsettle.thread, independent.thread);
+      assert.deepEqual(afterUnsettle.runs, independent.runs);
     }),
   );
 });
