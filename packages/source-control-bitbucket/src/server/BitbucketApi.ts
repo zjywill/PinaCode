@@ -20,7 +20,7 @@ import {
   type SourceControlRepositoryVisibility,
 } from "@t3tools/contracts";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import { sanitizeBranchFragment } from "@t3tools/shared/git";
+import { sanitizeBranchFragment, WORKTREE_BRANCH_PREFIX } from "@t3tools/shared/git";
 import { isSshRemoteUrl } from "@t3tools/shared/sourceControl";
 import { recognizeRemoteWith } from "@t3tools/source-control-core/shared/definition";
 import { definition } from "../shared/definition.ts";
@@ -526,12 +526,18 @@ function checkoutBranchName(input: {
   readonly pullRequestId: number;
   readonly headBranch: string;
   readonly isCrossRepository: boolean;
+  readonly localBranches: ReadonlyArray<string>;
 }): string {
   if (!input.isCrossRepository) {
     return input.headBranch;
   }
 
-  return `t3code/pr-${input.pullRequestId}/${sanitizeBranchFragment(input.headBranch)}`;
+  const suffix = `pr-${input.pullRequestId}/${sanitizeBranchFragment(input.headBranch)}`;
+  const branch = `${WORKTREE_BRANCH_PREFIX}/${suffix}`;
+  const legacy = `t3code/${suffix}`;
+  return !input.localBranches.includes(branch) && input.localBranches.includes(legacy)
+    ? legacy
+    : branch;
 }
 
 function repositoryNameWithOwner(
@@ -1211,12 +1217,13 @@ export const make = Effect.gen(function* () {
           ...(input.context ? { context: input.context } : {}),
         });
         const remoteBranch = pullRequest.source.branch.name;
+        const localBranchNames = yield* git.listLocalBranchNames(input.cwd);
         const localBranch = checkoutBranchName({
           pullRequestId: pullRequest.id,
           headBranch: remoteBranch,
           isCrossRepository,
+          localBranches: localBranchNames,
         });
-        const localBranchNames = yield* git.listLocalBranchNames(input.cwd);
         const localBranchExists = localBranchNames.includes(localBranch);
 
         if (input.force === true || !localBranchExists) {

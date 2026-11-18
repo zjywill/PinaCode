@@ -55,6 +55,11 @@ it("drops theme defaults from a client's settings patch", () => {
   ).toEqual({ newWorktreesStartFromOrigin: false });
 });
 
+it("defaults new worktree branches to pinacode while preserving a saved prefix", () => {
+  expect(decodeServerSettings({}).branchNamePrefix).toBe("pinacode");
+  expect(decodeServerSettings({ branchNamePrefix: "t3" }).branchNamePrefix).toBe("t3");
+});
+
 describe("storage cleanup settings", () => {
   it("keeps cleanup disabled for existing installations", () => {
     expect(decodeServerSettings({}).worktreeCleanup).toBeNull();

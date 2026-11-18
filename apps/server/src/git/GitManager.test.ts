@@ -5702,7 +5702,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
     }),
   );
 
-  it.effect.each([{ blocker: null }, { blocker: "t3code" }, { blocker: "t3code/pr-81" }])(
+  it.effect.each([{ blocker: null }, { blocker: "pinacode" }, { blocker: "pinacode/pr-81" }])(
     "preserves fork upstream tracking when preparing a worktree PR thread (local branch $blocker)",
     ({ blocker }) =>
       Effect.gen(function* () {
@@ -5720,7 +5720,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
         yield* runGit(repoDir, ["push", "-u", "fork-seed", "feature/pr-fork"]);
         yield* runGit(repoDir, ["checkout", "main"]);
         const mainHead = (yield* runGit(repoDir, ["rev-parse", "main"])).stdout.trim();
-        // A local branch owning a parent of the generated `t3code/pr-<n>/<head>` ref must not block checkout.
+        // A local branch owning a parent of the generated `pinacode/pr-<n>/<head>` ref must not block checkout.
         if (blocker !== null) yield* runGit(repoDir, ["branch", blocker]);
 
         const { manager } = yield* makeManager({
@@ -5751,6 +5751,9 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
           mode: "worktree",
         });
 
+        expect(result.branch).toBe(
+          blocker === null ? "pinacode/pr-81/feature/pr-fork" : "pinacode-pr-81-feature-pr-fork",
+        );
         expect(result.worktreePath).not.toBeNull();
         const upstreamRef = (yield* runGit(result.worktreePath as string, [
           "rev-parse",
@@ -6522,7 +6525,7 @@ it.layer(layerGitManagerTest)("GitManager", (it) => {
           "@{upstream}",
         ])).stdout.trim(),
       ).toBe("origin/main");
-      expect(result.branch).toBe("t3code/pr-94/main");
+      expect(result.branch).toBe("pinacode/pr-94/main");
       expect(result.worktreePath && NodeFS.realpathSync.native(result.worktreePath)).toBe(
         NodeFS.realpathSync.native(mainWorktreePath),
       );

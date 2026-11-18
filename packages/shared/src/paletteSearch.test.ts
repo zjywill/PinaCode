@@ -198,10 +198,12 @@ describe("scoreThreadSearch", () => {
     expect(rankTitles("lakebed", named)).toEqual(["Lakebed", "Lakebed perf audit"]);
   });
 
-  it("finds a branch pasted with the app's worktree prefix", () => {
-    const subject = thread("Cmd+K search", { branch: "t3/cmdk-search-v2" });
-    expect(scoreThreadSearch(foldSearchQuery("t3/cmdk-search-v2"), subject, NOW)).not.toBeNull();
-    expect(scoreThreadSearch(foldSearchQuery("t3/cmdk"), subject, NOW)).not.toBeNull();
+  it.each(["pinacode", "t3", "t3code"])("finds a branch pasted with the %s prefix", (prefix) => {
+    const subject = thread("Cmd+K search", { branch: `${prefix}/cmdk-search-v2` });
+    expect(
+      scoreThreadSearch(foldSearchQuery(`${prefix}/cmdk-search-v2`), subject, NOW),
+    ).not.toBeNull();
+    expect(scoreThreadSearch(foldSearchQuery(`${prefix}/cmdk`), subject, NOW)).not.toBeNull();
   });
 
   it("ranks a title holding the words above the app's own branch prefix and project name", () => {

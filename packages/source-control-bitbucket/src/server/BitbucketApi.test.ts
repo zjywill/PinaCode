@@ -812,8 +812,12 @@ it.effect("keeps Bitbucket response bodies out of checkout diagnostics", () => {
   }).pipe(Effect.provide(layer));
 });
 
-it.effect("checks out fork pull requests through an ensured fork remote", () => {
+it.effect.each([
+  { existing: [], branch: "pinacode/pr-42/main" },
+  { existing: ["t3code/pr-42/main"], branch: "t3code/pr-42/main" },
+])("checks out a fork pull request on $branch", ({ existing, branch }) => {
   const { git, layer } = makeLayer({
+    git: { listLocalBranchNames: () => Effect.succeed(existing) },
     response: (request) => {
       if (request.url.endsWith("/repositories/octocat/t3code")) {
         return Response.json({
@@ -858,17 +862,17 @@ it.effect("checks out fork pull requests through an ensured fork remote", () => 
       cwd: "/repo",
       remoteName: "octocat",
       remoteBranch: "main",
-      localBranch: "t3code/pr-42/main",
+      localBranch: branch,
     });
     assert.deepStrictEqual(git.setBranchUpstream.mock.calls[0]?.[0], {
       cwd: "/repo",
-      branch: "t3code/pr-42/main",
+      branch,
       remoteName: "octocat",
       remoteBranch: "main",
     });
     assert.deepStrictEqual(git.switchRef.mock.calls[0]?.[0], {
       cwd: "/repo",
-      refName: "t3code/pr-42/main",
+      refName: branch,
     });
   }).pipe(Effect.provide(layer));
 });
