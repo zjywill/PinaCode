@@ -181,7 +181,7 @@ const config: ExpoConfig = {
   slug: "pinacode",
   platforms: ["ios", "android"],
   scheme: variant.scheme,
-  version: repoEnv.T3CODE_MOBILE_VERSION ?? "1.0.4",
+  version: repoEnv.T3CODE_MOBILE_VERSION ?? "1.0.5",
   runtimeVersion: {
     // Skip costly fingerprinting on dev launches; preview and production OTAs require matching native projects.
     policy: runtimeVersionPolicy,
@@ -197,7 +197,7 @@ const config: ExpoConfig = {
   },
   ios: {
     icon: variant.assets.iosIcon,
-    buildNumber: "14",
+    buildNumber: "15",
     supportsTablet: true,
     requireFullScreen: process.env.T3_SHOWCASE_CAPTURE_BUILD === "1",
     bundleIdentifier: iosBundleIdentifier,
@@ -236,7 +236,7 @@ const config: ExpoConfig = {
     },
   },
   android: {
-    versionCode: 4,
+    versionCode: 5,
     icon: variant.assets.androidIcon,
     package: variant.androidPackage,
     adaptiveIcon: {
