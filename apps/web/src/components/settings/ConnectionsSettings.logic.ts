@@ -1,9 +1,12 @@
+import { msg } from "gt-react";
 import * as DateTime from "effect/DateTime";
 
 import { resolveDesktopPairingUrl, resolveHostedPairingUrl } from "./pairingUrls";
 import { getPairingTokenFromUrl, setPairingTokenOnUrl } from "@t3tools/shared/remote";
+import { m, type MessageResolver } from "../../i18n/messages";
 import { readHostedPairingRequest } from "../../hostedPairing";
 import {
+  isLoopbackHostname,
   type ServerClientSessionRecord,
   type ServerPairingLinkRecord,
 } from "~/environments/primary";
@@ -88,12 +91,15 @@ export function isWslSettingsRowVisible(input: {
  * Once client/server versions match, this passive Version label follows the sidebar update action,
  * including retryable failures. Rechecks retain downloaded-update labels; `state` is null outside desktop.
  */
-export function resolveLocalVersionStatusLabel(state: DesktopUpdateState | null): string {
-  if (!state) return "Up to date";
+export function resolveLocalVersionStatusLabel(
+  state: DesktopUpdateState | null,
+  resolve: MessageResolver = m,
+): string {
+  if (!state) return resolve(msg("Up to date"));
   if (state.status === "downloading") {
     return state.availableVersion
-      ? `Downloading update ${state.availableVersion}`
-      : "Downloading update";
+      ? resolve(msg("Downloading update {version}", { version: state.availableVersion }))
+      : resolve(msg("Downloading update"));
   }
   const action = resolveDesktopUpdateButtonAction(state);
   if (
@@ -102,14 +108,16 @@ export function resolveLocalVersionStatusLabel(state: DesktopUpdateState | null)
     (state.status === "checking" && state.downloadedVersion !== null)
   ) {
     const version = getDesktopUpdateDownloadedVersion(state);
-    return version ? `Update ${version} downloaded` : "Update downloaded";
+    return version
+      ? resolve(msg("Update {version} downloaded", { version }))
+      : resolve(msg("Update downloaded"));
   }
   if (action === "download") {
     return state.availableVersion
-      ? `Update ${state.availableVersion} available`
-      : "Update available";
+      ? resolve(msg("Update {version} available", { version: state.availableVersion }))
+      : resolve(msg("Update available"));
   }
-  return "Up to date";
+  return resolve(msg("Up to date"));
 }
 
 export type QrEndpointOption = {
@@ -294,11 +302,20 @@ export function sortDesktopPairingLinks(links: ReadonlyArray<ServerPairingLinkRe
 export function summarizeAuthorizedClients(
   sessions: ReadonlyArray<ServerClientSessionRecord>,
   links: ReadonlyArray<ServerPairingLinkRecord>,
+  resolve: MessageResolver = m,
 ): string {
   const parts = [
-    `${sessions.length} ${sessions.length === 1 ? "client" : "clients"}`,
+    resolve(
+      msg("{count, plural, one {{count} client} other {{count} clients}}", {
+        count: sessions.length,
+      }),
+    ),
     links.length > 0
-      ? `${links.length} ${links.length === 1 ? "pairing link" : "pairing links"}`
+      ? resolve(
+          msg("{count, plural, one {{count} pairing link} other {{count} pairing links}}", {
+            count: links.length,
+          }),
+        )
       : null,
   ];
   return parts.filter((part): part is string => part !== null).join(" · ");
@@ -420,8 +437,15 @@ export function resolveAdvertisedEndpointPairingUrl(
   return resolveDesktopPairingUrl(endpoint.httpBaseUrl, credential);
 }
 
-export function resolveCurrentOriginPairingUrl(credential: string): string {
-  const url = new URL("/pair", window.location.href);
+export function resolveCurrentOriginPairingUrl(
+  credential: string,
+  currentHref: string = window.location.href,
+): string | null {
+  const url = new URL("/pair", currentHref);
+  // The packaged desktop window uses a scheme that other devices cannot open.
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || isLoopbackHostname(url.hostname)) {
+    return null;
+  }
   return setPairingTokenOnUrl(url, credential).toString();
 }
 
@@ -434,19 +458,23 @@ export function isHostedAppPairingUrl(value: string): boolean {
   }
 }
 
-export function endpointShareHint(endpoint: AdvertisedEndpoint, url: string): string {
+export function endpointShareHint(
+  endpoint: AdvertisedEndpoint,
+  url: string,
+  resolve: MessageResolver = m,
+): string {
   if (isHostedAppPairingUrl(url)) {
-    return "Opens the hosted app, no install needed";
+    return resolve(msg("Opens the hosted app, no install needed"));
   }
   switch (endpoint.reachability) {
     case "lan":
-      return "Devices on the same network";
+      return resolve(msg("Devices on the same network"));
     case "private-network":
-      return "Devices on your private network";
+      return resolve(msg("Devices on your private network"));
     case "public":
-      return "Reachable from anywhere";
+      return resolve(msg("Reachable from anywhere"));
     case "loopback":
-      return "Clients on this machine";
+      return resolve(msg("Clients on this machine"));
   }
 }
 
@@ -470,22 +498,28 @@ export function resolveAccessEnvironmentId(input: {
 }
 
 /** A short name for a T3 Connect device: its label, or what it runs on. */
-export function connectDeviceName({
-  client,
-}: {
-  readonly client?: AuthClientMetadata | undefined;
-}): string {
-  return client?.label ?? client?.os ?? client?.browser ?? "this device";
+export function connectDeviceName(
+  {
+    client,
+  }: {
+    readonly client?: AuthClientMetadata | undefined;
+  },
+  resolve: MessageResolver = m,
+): string {
+  return client?.label ?? client?.os ?? client?.browser ?? resolve(msg("this device"));
 }
 
 /** How a T3 Connect device describes itself. It can say anything, so the code is what to trust. */
-export function describeConnectDeviceClient({
-  client,
-}: {
-  readonly client?: AuthClientMetadata | undefined;
-}): string {
+export function describeConnectDeviceClient(
+  {
+    client,
+  }: {
+    readonly client?: AuthClientMetadata | undefined;
+  },
+  resolve: MessageResolver = m,
+): string {
   const bits = [client?.label, client?.os, client?.browser, client?.ipAddress].filter(
     (value): value is string => typeof value === "string" && value.length > 0,
   );
-  return bits.length > 0 ? [...new Set(bits)].join(" · ") : "Unknown device";
+  return bits.length > 0 ? [...new Set(bits)].join(" · ") : resolve(msg("Unknown device"));
 }

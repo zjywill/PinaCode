@@ -1,6 +1,4 @@
 import { useGT } from "gt-react-native";
-
-import { I18nProvider } from "../../i18n/I18nProvider";
 import { Platform } from "react-native";
 import { AppIconSection } from "./appearance/sections/AppIconSection";
 import { AndroidNavigationAppearanceSection } from "./appearance/sections/AndroidNavigationAppearanceSection";
@@ -15,14 +13,6 @@ import { ThemeAppearanceSection } from "./appearance/sections/ThemeAppearanceSec
 import { ToolCallsAppearanceSection } from "./appearance/sections/ToolCallsAppearanceSection";
 
 export function SettingsAppearanceRouteScreen() {
-  return (
-    <I18nProvider>
-      <AppearanceSettings />
-    </I18nProvider>
-  );
-}
-
-function AppearanceSettings() {
   const gt = useGT();
   const insets = useSafeAreaInsets();
 

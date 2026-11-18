@@ -3,7 +3,7 @@ import { useGT } from "gt-react";
 import { APP_ICON_NAMES, type AppIconName } from "@t3tools/contracts";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SettingsRow } from "./settingsLayout";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 import Default from "../../../../../assets/pinacode/alternates/preview/DefaultApple.png";
 import Gold from "../../../../../assets/pinacode/alternates/preview/Gold.png";
 import Amethyst from "../../../../../assets/pinacode/alternates/preview/Amethyst.png";
@@ -19,6 +19,7 @@ export function DockIconSetting({
   select: (name: AppIconName) => Promise<void>;
 }) {
   const gt = useGT();
+  const searchableSetting = useSearchableSetting();
   const labels = {
     Default: gt("Default"),
     Gold: gt("Gold"),

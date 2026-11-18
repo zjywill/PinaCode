@@ -13,6 +13,8 @@ const AcpRegistryAgentId = TrimmedNonEmptyString.check(
 const ACP_REGISTRY_CDN_HOSTNAME = "cdn.agentclientprotocol.com";
 const ACP_REGISTRY_AGENT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]*$/;
 
+export const DIMCODE_ALPHA_LABEL = "DimCode Alpha";
+
 export function isDimCodeAlphaCommand(config: unknown): boolean {
   return (
     typeof config === "object" &&

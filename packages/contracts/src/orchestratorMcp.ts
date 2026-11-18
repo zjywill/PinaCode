@@ -179,7 +179,10 @@ export const OrchestratorMcpDelegateTaskInput = Schema.Struct({
         "'independent': a separately listed PinaCode session in its own worktree. Completion wakes you to review. Send fixes to the same childThreadId; every revision wakes you again. Default 'child'.",
     }),
   ),
-  target: Schema.optional(OrchestratorMcpTarget),
+  // Some providers send the whole target object as JSON text.
+  target: Schema.optional(
+    Schema.Union([OrchestratorMcpTarget, Schema.fromJsonString(OrchestratorMcpTarget)]),
+  ),
   title: Schema.optional(OrchestratorMcpTitle),
   role: Schema.optional(OrchestratorMcpTaskRole),
   isolation: Schema.optional(
