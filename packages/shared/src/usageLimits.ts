@@ -10,6 +10,7 @@ import {
   type ServerProviderSlashCommand,
   isProviderAvailable,
   officialAcpRegistryIconUrlForAgentId,
+  ProviderDriverKind,
   PROVIDER_DISPLAY_NAMES,
   type ServerProvider,
   type ServerProviderUsageLimits,
@@ -520,8 +521,10 @@ export function collectLimitPools(
 ): readonly LimitPool[] {
   const groups = new Map<string, LimitAccount[]>();
   for (const account of accounts) {
+    // The native and ACP reads are the same Dim subscription, so they share one pool.
     const key =
-      account.driver === "acpRegistry" && account.iconUrl === dimCodeIconUrl
+      account.driver === "dim" ||
+      (account.driver === "acpRegistry" && account.iconUrl === dimCodeIconUrl)
         ? "acpRegistry:dimcode"
         : account.driver;
     const group = groups.get(key);
@@ -529,7 +532,9 @@ export function collectLimitPools(
     else groups.set(key, [account]);
   }
   return [...groups].map(([key, members]) => {
-    const driver = members[0]!.driver;
+    // The DimCode pool keeps its ACP identity and icon whatever order its accounts arrived in.
+    const driver: ServerProvider["driver"] =
+      key === "acpRegistry:dimcode" ? ProviderDriverKind.make("acpRegistry") : members[0]!.driver;
     const orderWindow = members
       .flatMap((account) => account.limits.windows)
       .sort((left, right) => WINDOW_KIND_ORDER[left.kind] - WINDOW_KIND_ORDER[right.kind])[0];

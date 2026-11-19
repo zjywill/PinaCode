@@ -152,6 +152,17 @@ import { assertSimpleClaudeOutput } from "./simple/claude_output.ts";
 import { assertSkillInvocationCursorOutput } from "./skill_invocation/cursor_output.ts";
 import { skillInvocationInput } from "./skill_invocation/input.ts";
 import { assertSimpleOutput } from "./simple/codex_output.ts";
+import {
+  assertDimMessageSteeringOutput,
+  assertDimMultiTurnOutput,
+  assertDimPlanQuestionsOutput,
+  assertDimProviderThreadResumeOutput,
+  assertDimQueuedTurnOutput,
+  assertDimSimpleOutput,
+  assertDimToolCallDeniedWriteOutput,
+  assertDimToolCallReadOnlyOnRequestOutput,
+  assertDimTurnInterruptOutput,
+} from "./dim_output.ts";
 import { assertPiSimpleOutput } from "./simple/pi_output.ts";
 import { simpleInput } from "./simple/input.ts";
 import { malformedSessionUpdateInput } from "./malformed_session_update/input.ts";
@@ -256,6 +267,7 @@ import {
   OPENCODE_MODEL_SELECTION,
   OPENCODE2_MODEL_SELECTION,
   PI_MODEL_SELECTION,
+  DIM_MODEL_SELECTION,
   READ_ONLY_NEVER_POLICY,
   READ_ONLY_ON_REQUEST_POLICY,
   RESTRICTED_GRANULAR_POLICY,
@@ -816,6 +828,12 @@ export const ORCHESTRATOR_REPLAY_FIXTURES: ReadonlyArray<OrchestratorReplayFixtu
     buildInput: simpleInput,
     providers: [
       {
+        driver: ProviderDriverKind.make("dim"),
+        transcriptFile: new URL("./simple/dim_transcript.ndjson", import.meta.url),
+        modelSelection: DIM_MODEL_SELECTION,
+        assertOutput: assertDimSimpleOutput,
+      },
+      {
         driver: ProviderDriverKind.make("codex"),
         transcriptFile: new URL("./simple/codex_transcript.ndjson", import.meta.url),
         modelSelection: CODEX_MODEL_SELECTION,
@@ -912,6 +930,16 @@ export const ORCHESTRATOR_REPLAY_FIXTURES: ReadonlyArray<OrchestratorReplayFixtu
         expectedAbsentWorkspacePaths: [TOOL_CALL_DENIED_WRITE_TARGET],
         assertOutput: assertToolCallDeniedWriteFxOutput,
       },
+      {
+        driver: ProviderDriverKind.make("dim"),
+        transcriptFile: new URL("./tool_call_denied_write/dim_transcript.ndjson", import.meta.url),
+        modelSelection: DIM_MODEL_SELECTION,
+        runtimePolicyOverride: DENIED_WRITE_POLICY,
+        // Dim's auto-accept-edits (workspace-write) asks for approval on exec.
+        runtimeMode: "auto-accept-edits",
+        expectedAbsentWorkspacePaths: [TOOL_CALL_DENIED_WRITE_TARGET],
+        assertOutput: assertDimToolCallDeniedWriteOutput,
+      },
     ],
   },
   {
@@ -1005,6 +1033,18 @@ export const ORCHESTRATOR_REPLAY_FIXTURES: ReadonlyArray<OrchestratorReplayFixtu
         modelSelection: ACP_REGISTRY_MODEL_SELECTION,
         runtimePolicyOverride: READ_ONLY_ON_REQUEST_POLICY,
         assertOutput: assertToolCallReadOnlyOnRequestOutput,
+      },
+      {
+        driver: ProviderDriverKind.make("dim"),
+        transcriptFile: new URL(
+          "./tool_call_read_only_on_request/dim_transcript.ndjson",
+          import.meta.url,
+        ),
+        modelSelection: DIM_MODEL_SELECTION,
+        runtimePolicyOverride: READ_ONLY_ON_REQUEST_POLICY,
+        // Dim's auto-accept-edits (workspace-write) asks for approval on exec.
+        runtimeMode: "auto-accept-edits",
+        assertOutput: assertDimToolCallReadOnlyOnRequestOutput,
       },
     ],
   },
@@ -1475,6 +1515,12 @@ export const ORCHESTRATOR_REPLAY_FIXTURES: ReadonlyArray<OrchestratorReplayFixtu
     buildInput: multiTurnInput,
     providers: [
       {
+        driver: ProviderDriverKind.make("dim"),
+        transcriptFile: new URL("./multi_turn/dim_transcript.ndjson", import.meta.url),
+        modelSelection: DIM_MODEL_SELECTION,
+        assertOutput: assertDimMultiTurnOutput,
+      },
+      {
         driver: ProviderDriverKind.make("codex"),
         transcriptFile: new URL("./multi_turn/codex_transcript.ndjson", import.meta.url),
         modelSelection: CODEX_MODEL_SELECTION,
@@ -1600,6 +1646,12 @@ export const ORCHESTRATOR_REPLAY_FIXTURES: ReadonlyArray<OrchestratorReplayFixtu
     buildInput: providerThreadResumeInput,
     providers: [
       {
+        driver: ProviderDriverKind.make("dim"),
+        transcriptFile: new URL("./provider_thread_resume/dim_transcript.ndjson", import.meta.url),
+        modelSelection: DIM_MODEL_SELECTION,
+        assertOutput: assertDimProviderThreadResumeOutput,
+      },
+      {
         driver: ProviderDriverKind.make("pi"),
         transcriptFile: new URL("./provider_thread_resume/pi_transcript.ndjson", import.meta.url),
         modelSelection: PI_MODEL_SELECTION,
@@ -1637,6 +1689,12 @@ export const ORCHESTRATOR_REPLAY_FIXTURES: ReadonlyArray<OrchestratorReplayFixtu
     name: "queued_turn",
     buildInput: queuedTurnInput,
     providers: [
+      {
+        driver: ProviderDriverKind.make("dim"),
+        transcriptFile: new URL("./queued_turn/dim_transcript.ndjson", import.meta.url),
+        modelSelection: DIM_MODEL_SELECTION,
+        assertOutput: assertDimQueuedTurnOutput,
+      },
       {
         driver: ProviderDriverKind.make("codex"),
         transcriptFile: new URL("./queued_turn/codex_transcript.ndjson", import.meta.url),
@@ -1756,6 +1814,13 @@ export const ORCHESTRATOR_REPLAY_FIXTURES: ReadonlyArray<OrchestratorReplayFixtu
         runtimePolicyOverride: READ_ONLY_NEVER_POLICY,
         assertOutput: assertOpenCodePlanQuestionsOutput,
       },
+      {
+        driver: ProviderDriverKind.make("dim"),
+        transcriptFile: new URL("./plan_questions/dim_transcript.ndjson", import.meta.url),
+        modelSelection: DIM_MODEL_SELECTION,
+        runtimePolicyOverride: READ_ONLY_NEVER_POLICY,
+        assertOutput: assertDimPlanQuestionsOutput,
+      },
     ],
   },
   {
@@ -1782,6 +1847,12 @@ export const ORCHESTRATOR_REPLAY_FIXTURES: ReadonlyArray<OrchestratorReplayFixtu
     name: "message_steering",
     buildInput: messageSteeringInput,
     providers: [
+      {
+        driver: ProviderDriverKind.make("dim"),
+        transcriptFile: new URL("./message_steering/dim_transcript.ndjson", import.meta.url),
+        modelSelection: DIM_MODEL_SELECTION,
+        assertOutput: assertDimMessageSteeringOutput,
+      },
       {
         driver: ProviderDriverKind.make("codex"),
         transcriptFile: new URL("./message_steering/codex_transcript.ndjson", import.meta.url),
@@ -1824,6 +1895,12 @@ export const ORCHESTRATOR_REPLAY_FIXTURES: ReadonlyArray<OrchestratorReplayFixtu
     name: "turn_interrupt",
     buildInput: turnInterruptInput,
     providers: [
+      {
+        driver: ProviderDriverKind.make("dim"),
+        transcriptFile: new URL("./turn_interrupt/dim_transcript.ndjson", import.meta.url),
+        modelSelection: DIM_MODEL_SELECTION,
+        assertOutput: assertDimTurnInterruptOutput,
+      },
       {
         driver: ProviderDriverKind.make("codex"),
         transcriptFile: new URL("./turn_interrupt/codex_transcript.ndjson", import.meta.url),

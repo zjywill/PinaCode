@@ -121,7 +121,17 @@ const providerSvg = (viewBox, paths) =>
     )
     .join("")}</svg>`;
 const { dimCodeIcon } = await import("../../../packages/client-runtime/src/providerClients.ts");
+const { dimClient } = await import("../../../packages/provider-dim/src/client.ts");
 const providerLogos = [
+  {
+    driverKind: "dim",
+    tintsIcon: false,
+    accent: "#5AA00B",
+    svg: providerSvg(
+      dimClient.icon.viewBox,
+      dimClient.icon.paths.map((path) => ({ ...path, fill: "#5AA00B" })),
+    ),
+  },
   {
     driverKind: "dimcode",
     tintsIcon: true,

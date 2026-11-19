@@ -16,6 +16,7 @@ export const UsageProviderKind = Schema.Literals([
   "antigravity",
   "pi",
   "muse",
+  "dim",
 ]);
 export type UsageProviderKind = typeof UsageProviderKind.Type;
 

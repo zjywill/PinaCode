@@ -168,7 +168,7 @@ interface AddProviderInstanceDialogProps {
   readonly onCreated?: (instanceId: ProviderInstanceId, driver: ProviderDriverKind) => void;
   /** Opens with "Show more" expanded, so the ACP Registry search is in view. */
   readonly showMoreProviders?: boolean;
-  readonly initialPreset?: "dimcodeAlpha" | undefined;
+  readonly initialPreset?: "dimcodeAlpha" | "dim" | undefined;
 }
 
 export function AddProviderInstanceDialog({
@@ -199,7 +199,14 @@ export function AddProviderInstanceDialog({
     isManagedDriverAllowed(managedPolicy, option.driverKind),
   );
   const [selection, setSelection] = useState<string>(() => {
-    if (initialPreset && acpRegistryAllowed) return initialPreset;
+    if (initialPreset === "dimcodeAlpha") {
+      if (acpRegistryAllowed) return initialPreset;
+    } else if (
+      initialPreset !== undefined &&
+      isManagedDriverAllowed(managedPolicy, ProviderDriverKind.make(initialPreset))
+    ) {
+      return initialPreset;
+    }
     const first: ProviderOption | undefined = featuredDriverOptions[0] ?? moreDriverOptions[0];
     return first?.preset ?? first?.driverKind ?? DEFAULT_DRIVER_KIND;
   });

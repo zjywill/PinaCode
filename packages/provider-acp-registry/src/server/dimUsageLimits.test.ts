@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { dimUsageLimits } from "./dimUsageLimits.ts";
+import { dimUsageLimits } from "@t3tools/provider-dim/server";
 
 const checkedAt = "2026-11-14T00:00:00.000Z";
 

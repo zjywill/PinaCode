@@ -296,6 +296,8 @@ export interface ProviderOrchestratorReplayVariant {
   readonly transcriptEntriesThroughLabel?: string;
   readonly modelSelection: ModelSelection;
   readonly runtimePolicyOverride?: RuntimePolicyV2Override;
+  /** The thread's mode, when a provider exercises approvals only in a narrower mode. */
+  readonly runtimeMode?: RuntimeMode;
   readonly runContinuationWorker?: boolean;
   readonly expectedAbsentWorkspacePaths?: ReadonlyArray<string>;
   readonly assertOutput: (
@@ -373,6 +375,11 @@ export const OPENCODE2_MODEL_SELECTION = {
 export const PI_MODEL_SELECTION = {
   instanceId: ProviderInstanceId.make("pi"),
   model: "openrouter/deepseek/deepseek-v4-flash",
+} satisfies ModelSelection;
+
+export const DIM_MODEL_SELECTION = {
+  instanceId: ProviderInstanceId.make("dim"),
+  model: "default",
 } satisfies ModelSelection;
 
 export const ACP_REGISTRY_MODEL_SELECTION = {
@@ -492,6 +499,7 @@ export function materializeFixtureInput(input: {
   readonly fixtureInput: OrchestratorFixtureInput;
   readonly driver: ProviderDriverKind;
   readonly modelSelection: ModelSelection;
+  readonly runtimeMode?: RuntimeMode;
 }): Effect.Effect<
   MaterializedOrchestratorFixtureInput,
   IdAllocator.IdAllocatorV2Error,
@@ -549,9 +557,11 @@ export function materializeFixtureInput(input: {
         ...(input.fixtureInput.interactionMode === undefined
           ? {}
           : { interactionMode: input.fixtureInput.interactionMode }),
-        ...(input.fixtureInput.runtimeMode === undefined
-          ? {}
-          : { runtimeMode: input.fixtureInput.runtimeMode }),
+        ...(input.runtimeMode !== undefined
+          ? { runtimeMode: input.runtimeMode }
+          : input.fixtureInput.runtimeMode === undefined
+            ? {}
+            : { runtimeMode: input.fixtureInput.runtimeMode }),
       }),
     );
 
