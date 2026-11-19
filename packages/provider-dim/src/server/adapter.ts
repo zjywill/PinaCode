@@ -428,6 +428,10 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
       let pendingImport: string | null | undefined = input.initialNativeThreadId;
       const pendingApprovals = new Map<string, PendingApproval>();
       const pendingQuestions = new Map<string, PendingQuestion>();
+      const backgroundTasks = new Map<
+        string,
+        { readonly description: string | null; readonly nativeItemId: string | null }
+      >();
       const seenEventIds = new Set<string>();
       const seenOrder: string[] = [];
 
@@ -961,11 +965,48 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           .pipe(Effect.ignore);
       });
 
+      const updateBackgroundTasks = Effect.fn("DimAdapter.updateBackgroundTasks")(function* () {
+        if (threadState === null) return;
+        threadState.providerThread = {
+          ...threadState.providerThread,
+          pendingBackgroundTasks: [...backgroundTasks.entries()].map(([taskId, task]) => ({
+            kind: "command" as const,
+            taskId,
+            ...(task.description === null ? {} : { description: task.description }),
+            ...(task.nativeItemId === null ? {} : { nativeItemId: task.nativeItemId }),
+          })),
+          updatedAt: yield* DateTime.now,
+        };
+        yield* emit({
+          type: "provider_thread.updated",
+          driver: DIM_PROVIDER,
+          providerThread: threadState.providerThread,
+        });
+      });
+
       const handleEvent = Effect.fn("DimAdapter.handleEvent")(function* (event: DimSessionEvent) {
         let turn = activeTurn;
-        if (turn === null || threadState === null) return;
         if (!isRecord(event.event.data)) return;
         const name = `${event.event.type}/${event.event.name}`;
+        // Background exec outlives its turn, so these arrive with no active turn too.
+        if (threadState !== null && (name === "exec/started" || name === "exec/ended")) {
+          const taskId = recordString(event.event.data, "task_id");
+          if (taskId === undefined) return;
+          if (name === "exec/started") {
+            const title = recordString(event.event.data, "title")?.trim();
+            const description = recordString(event.event.data, "description")?.trim();
+            const label = title !== undefined && title !== "" ? title : description;
+            backgroundTasks.set(taskId, {
+              description: label !== undefined && label !== "" ? label : null,
+              nativeItemId: recordString(event.event.data, "call_id") ?? null,
+            });
+          } else {
+            backgroundTasks.delete(taskId);
+          }
+          yield* updateBackgroundTasks();
+          return;
+        }
+        if (turn === null || threadState === null) return;
         const data = event.event.data;
         const eventTurnId = recordString(data, "turn_id");
         const turnScoped = name === "turn/start" || name === "turn/end" || name.startsWith("step/");
@@ -2090,6 +2131,29 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         },
         events: Stream.fromQueue(events),
         canResumeAfterRestart: true,
+        hasPendingBackgroundWork: Effect.sync(() => backgroundTasks.size > 0),
+        stopTask: Effect.fn("DimAdapter.stopTask")(function* (taskInput: {
+          readonly providerThread: OrchestrationV2ProviderThread;
+          readonly taskId: string;
+        }) {
+          const session = threadState;
+          if (session === null || session.providerThread.id !== taskInput.providerThread.id) {
+            return yield* protocolError("Dim has no such background task");
+          }
+          yield* connection
+            .request("session.exec.stop", {
+              sessionId: session.sessionId,
+              branchId: DIM_BRANCH,
+              taskId: taskInput.taskId,
+            })
+            .pipe(
+              Effect.mapError((cause) =>
+                protocolError(
+                  `Dim did not stop background task ${taskInput.taskId}: ${cause.message}`,
+                ),
+              ),
+            );
+        }),
         getModelContextWindow: (selection) => {
           if (parseDimModelSlug(selection.model) === null) return undefined;
           return Ref.getUnsafe(contextWindows).get(selection.model);

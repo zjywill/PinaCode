@@ -240,6 +240,8 @@ class FakeDim {
             return yield* new DimTransportError({ detail: "model update failed" });
           }
           return { model: { providerId: "fixture", modelId: "fixture" }, outcome: "changed" };
+        case "session.exec.stop":
+          return { task_id: params["taskId"], status: "killed", result: {} };
         case "session.submit": {
           if (self.failSubmit) {
             return yield* new DimTransportError({ detail: "submit failed" });
@@ -976,6 +978,82 @@ describe("DimAdapter questions", () => {
       assert.strictEqual(runtimeRequest?.providerTurnId, null);
       assert.deepEqual(harness.fake.requestsOf("session.question.pending"), [
         { sessionId: SESSION_ID, branchId: "main" },
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+});
+
+describe("DimAdapter background work", () => {
+  const execStarted = (taskId: string) => ({
+    turn_id: "ours",
+    request_id: "request-1",
+    call_id: `call-${taskId}`,
+    task_id: taskId,
+    description: "fixture wait",
+    title: "fixture wait",
+    output_path: "/tmp/fixture.log",
+  });
+
+  it.effect("tracks background exec beyond the turn that started it", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      const thread = yield* ensureThread(harness.runtime);
+      yield* harness.runtime.startTurn(turnInput(thread));
+      harness.fake.pushEvent("input", "applied", { input_id: "input-1", mode: "queue" });
+      harness.fake.pushEvent("turn", "start", { turn_id: "ours" });
+      harness.fake.pushEvent("exec", "started", execStarted("task-1"));
+      const running = yield* harness.waitFor(
+        (event) =>
+          event.type === "provider_thread.updated" &&
+          (event.providerThread.pendingBackgroundTasks?.length ?? 0) > 0,
+      );
+      assert.deepEqual(
+        running.type === "provider_thread.updated"
+          ? running.providerThread.pendingBackgroundTasks
+          : undefined,
+        [
+          {
+            kind: "command",
+            taskId: "task-1",
+            description: "fixture wait",
+            nativeItemId: "call-task-1",
+          },
+        ],
+      );
+      assert.isTrue(yield* harness.runtime.hasPendingBackgroundWork!);
+
+      harness.fake.pushEvent("turn", "end", {
+        turn_id: "ours",
+        status: "completed",
+        reason: "end_turn",
+      });
+      yield* harness.waitFor(isTerminal);
+      harness.fake.pushEvent("exec", "ended", { task_id: "task-1", status: "completed" });
+      yield* harness.waitFor(
+        (event) =>
+          event.type === "provider_thread.updated" &&
+          (event.providerThread.pendingBackgroundTasks?.length ?? 0) === 0,
+      );
+      assert.isFalse(yield* harness.runtime.hasPendingBackgroundWork!);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("stops a background task through session.exec.stop", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      const thread = yield* ensureThread(harness.runtime);
+      yield* harness.runtime.startTurn(turnInput(thread));
+      harness.fake.pushEvent("input", "applied", { input_id: "input-1", mode: "queue" });
+      harness.fake.pushEvent("turn", "start", { turn_id: "ours" });
+      harness.fake.pushEvent("exec", "started", execStarted("task-1"));
+      yield* harness.waitFor(
+        (event) =>
+          event.type === "provider_thread.updated" &&
+          (event.providerThread.pendingBackgroundTasks?.length ?? 0) > 0,
+      );
+      yield* harness.runtime.stopTask!({ providerThread: thread, taskId: "task-1" });
+      assert.deepEqual(harness.fake.requestsOf("session.exec.stop"), [
+        { sessionId: SESSION_ID, branchId: "main", taskId: "task-1" },
       ]);
     }).pipe(Effect.scoped, Effect.provide(layers)),
   );
