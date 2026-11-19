@@ -35,21 +35,31 @@ it("keeps deep links and sharing on MainActivity and creates one enabled launche
     const aliases = app["activity-alias"].map((alias) => alias.$);
     expect(aliases.map((alias) => alias["android:name"])).toEqual([
       ".LauncherDefault",
+      ".LauncherPineapple",
       ".LauncherGold",
       ".LauncherAmethyst",
       ".LauncherDiamond",
-      ".LauncherPineapple",
+      ".LauncherNormal",
+      ".LauncherDiscoBall",
     ]);
     expect(aliases.filter((alias) => alias["android:enabled"] === "true")).toEqual([aliases[0]]);
-    for (const alias of aliases.slice(1)) {
+    for (const alias of aliases) {
       expect(alias["android:targetActivity"]).toBe(".MainActivity");
+      if ([".LauncherDefault", ".LauncherPineapple"].includes(alias["android:name"])) {
+        expect(alias["android:icon"]).toBe("@mipmap/ic_launcher");
+        expect(alias["android:roundIcon"]).toBe("@mipmap/ic_launcher_round");
+        continue;
+      }
       const resource = alias["android:icon"].slice("@mipmap/".length);
-      expect(
-        await NodeFSP.readFile(
-          NodePath.join(dir, "res/mipmap-anydpi-v26", resource + ".xml"),
-          "utf8",
-        ),
-      ).toContain("@drawable/" + resource);
+      expect(alias["android:roundIcon"]).toBe(alias["android:icon"]);
+      const adaptive = await NodeFSP.readFile(
+        NodePath.join(dir, "res/mipmap-anydpi-v26", resource + ".xml"),
+        "utf8",
+      );
+      expect(adaptive).toContain(`<foreground android:drawable="@drawable/${resource}"/>`);
+      await expect(
+        NodeFSP.access(NodePath.join(dir, "res/mipmap-xhdpi", resource + ".png")),
+      ).resolves.toBeUndefined();
     }
   } finally {
     await NodeFSP.rm(root, { recursive: true, force: true });

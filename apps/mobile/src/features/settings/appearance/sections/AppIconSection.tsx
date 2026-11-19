@@ -10,19 +10,40 @@ import { SymbolView } from "../../../../components/ui/AppSymbol";
 import { refreshLauncherShortcuts } from "../../../shortcuts/appShortcutsRuntime";
 import { SettingsSection } from "../../components/SettingsSection";
 
+const androidIconNames = [
+  "Pineapple",
+  "Normal",
+  "Gold",
+  "Amethyst",
+  "Diamond",
+  "DiscoBall",
+] as const;
+type MobileAppIconName = AppIconName | (typeof androidIconNames)[number];
+
 const previews = {
-  Default:
-    Platform.OS === "ios"
-      ? require("../../../../../../../assets/pinacode/alternates/preview/DefaultApple.png")
-      : require("../../../../../../../assets/pinacode/alternates/preview/Default.png"),
-  Gold: require("../../../../../../../assets/pinacode/alternates/preview/Gold.png"),
-  Amethyst: require("../../../../../../../assets/pinacode/alternates/preview/Amethyst.png"),
-  Diamond: require("../../../../../../../assets/pinacode/alternates/preview/Diamond.png"),
-  Pineapple: require("../../../../../../../assets/pinacode/alternates/preview/Pineapple.png"),
+  Default: require("../../../../../../../assets/pinacode/alternates/preview/DefaultApple.png"),
+  Gold:
+    Platform.OS === "android"
+      ? require("../../../../../../../assets/pinacode/alternates/android/preview/Gold.png")
+      : require("../../../../../../../assets/pinacode/alternates/preview/Gold.png"),
+  Amethyst:
+    Platform.OS === "android"
+      ? require("../../../../../../../assets/pinacode/alternates/android/preview/Amethyst.png")
+      : require("../../../../../../../assets/pinacode/alternates/preview/Amethyst.png"),
+  Diamond:
+    Platform.OS === "android"
+      ? require("../../../../../../../assets/pinacode/alternates/android/preview/Diamond.png")
+      : require("../../../../../../../assets/pinacode/alternates/preview/Diamond.png"),
+  Pineapple:
+    Platform.OS === "android"
+      ? require("../../../../../../../assets/pinacode/android/launcher.png")
+      : require("../../../../../../../assets/pinacode/alternates/preview/Pineapple.png"),
+  Normal: require("../../../../../../../assets/pinacode/alternates/android/preview/Normal.png"),
+  DiscoBall: require("../../../../../../../assets/pinacode/alternates/android/preview/DiscoBall.png"),
 };
 const native = requireOptionalNativeModule<{
-  current(): Promise<AppIconName | null>;
-  select(name: AppIconName): Promise<void>;
+  current(): Promise<MobileAppIconName | null>;
+  select(name: MobileAppIconName): Promise<void>;
 }>("T3AppIcon");
 
 export function AppIconSection() {
@@ -32,9 +53,11 @@ export function AppIconSection() {
     Gold: gt("Gold"),
     Amethyst: gt("Amethyst"),
     Diamond: gt("Diamond"),
-    Pineapple: gt("Pineapple crystal"),
+    Pineapple: Platform.OS === "android" ? gt("Pineapple") : gt("Pineapple crystal"),
+    Normal: gt("Normal"),
+    DiscoBall: gt("Disco Ball"),
   };
-  const [current, setCurrent] = useState<AppIconName | null>(null);
+  const [current, setCurrent] = useState<MobileAppIconName | null>(null);
   const [busy, setBusy] = useState(false);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Read the launcher choice owned by the operating system.
   useEffect(() => {
@@ -50,7 +73,7 @@ export function AppIconSection() {
     };
   }, []);
   if (!native || !current) return null;
-  async function select(name: AppIconName) {
+  async function select(name: MobileAppIconName) {
     if (busy || name === current || !native) return;
     setBusy(true);
     try {
@@ -100,13 +123,15 @@ export function AppIconSection() {
   return (
     <SettingsSection title={gt("App icon")}>
       <View accessibilityRole="radiogroup">
-        {APP_ICON_NAMES.map((name, index) => (
+        {androidIconNames.map((name, index) => (
           <ListChoiceRow
             key={name}
             label={labels[name]}
             disabled={busy}
             separated={index > 0}
-            leading={<Image source={previews[name]} style={{ width: 40, height: 40 }} />}
+            leading={
+              <Image source={previews[name]} style={{ width: 40, height: 40, borderRadius: 20 }} />
+            }
             selected={current === name}
             onPress={() => void select(name)}
           />

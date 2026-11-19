@@ -7,7 +7,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 class T3AppIconModule : Module() {
-  private val names = listOf("Default", "Gold", "Amethyst", "Diamond", "Pineapple")
+  private val names = listOf("Default", "Pineapple", "Gold", "Amethyst", "Diamond", "Normal", "DiscoBall")
   private val context get() = requireNotNull(appContext.reactContext)
   private fun component(name: String) = ComponentName(context, context.packageName + ".Launcher" + name)
 
@@ -15,20 +15,22 @@ class T3AppIconModule : Module() {
     Name("T3AppIcon")
 
     AsyncFunction("current") {
-      names.first { name ->
+      val active = names.first { name ->
         when (context.packageManager.getComponentEnabledSetting(component(name))) {
           PackageManager.COMPONENT_ENABLED_STATE_DEFAULT -> name == "Default"
           PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
           else -> false
         }
       }
+      if (active == "Default") "Pineapple" else active
     }
 
     AsyncFunction("select") { selected: String ->
       require(selected in names)
+      val target = if (selected == "Pineapple") "Default" else selected
       val manager = context.packageManager
-      val changes = (listOf(selected) + (names - selected)).map { name ->
-        val state = if (name == selected) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+      val changes = (listOf(target) + (names - target)).map { name ->
+        val state = if (name == target) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
                     else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
         component(name) to state
       }.filter { (alias, state) -> manager.getComponentEnabledSetting(alias) != state }

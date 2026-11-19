@@ -150,4 +150,4 @@ Delete the image file to remove it.
 
 ## App icon
 
-Open **Settings → Appearance** and select **App icon** on iPhone, iPad, or Android. On Mac, select **Dock icon** to change the icon shown while Pina Code is running. Choose **Default** to restore the original icon. Each device keeps its own choice.
+Open **Settings → Appearance** and select **App icon** on iPhone, iPad, or Android. On Android, choose **Pineapple** to restore the default yellow and green icon. On iPhone and iPad, choose **Default**. On Mac, select **Dock icon** to change the icon shown while Pina Code is running. Each device keeps its own choice.
