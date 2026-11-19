@@ -75,6 +75,15 @@ export type T3McpToolSummaryAction =
   | "link-issue"
   | "unlink-issue"
   | "list-thread-issues"
+  | "read-pr"
+  | "list-repo-prs"
+  | "create-pr"
+  | "update-pr"
+  | "respond-pr"
+  | "merge-pr"
+  | "review-pr"
+  | "ci-logs"
+  | "ci-rerun"
   | "browser"
   | "device"
   | "html-preview"
@@ -167,6 +176,43 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   pinacode_list_thread_issues: tool(
     ["Check", "Checking", "Checked", "linked issues"],
     "list-thread-issues",
+  ),
+  pinacode_pull_request_read: tool(
+    ["Read", "Reading", "Read", "a pull request"],
+    "read-pr",
+    "pull-request",
+  ),
+  pinacode_pull_request_list: tool(
+    ["List", "Listing", "Listed", "pull requests"],
+    "list-repo-prs",
+    "pull-request",
+  ),
+  pinacode_pull_request_create: tool(
+    ["Open", "Opening", "Opened", "a pull request"],
+    "create-pr",
+    "pull-request",
+  ),
+  pinacode_pull_request_update: tool(
+    ["Update", "Updating", "Updated", "a pull request"],
+    "update-pr",
+    "pull-request",
+  ),
+  pinacode_pull_request_respond: tool(
+    ["Respond", "Responding", "Responded", "on a pull request"],
+    "respond-pr",
+    "pull-request",
+  ),
+  pinacode_pull_request_review: tool(
+    ["Review", "Reviewing", "Reviewed", "a pull request"],
+    "review-pr",
+    "pull-request",
+  ),
+  pinacode_ci_logs: tool(["Read", "Reading", "Read", "CI logs"], "ci-logs", "pull-request"),
+  pinacode_ci_rerun: tool(["Re-run", "Re-running", "Re-ran", "CI"], "ci-rerun", "pull-request"),
+  pinacode_pull_request_merge: tool(
+    ["Merge", "Merging", "Merged", "a pull request"],
+    "merge-pr",
+    "pull-request",
   ),
   pinacode_orchestrator_capabilities: tool(
     ["Get", "Getting", "Got", "orchestration capabilities"],

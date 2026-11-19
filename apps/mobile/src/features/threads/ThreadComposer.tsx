@@ -694,7 +694,8 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
 
   const modelControl = (
     <Animated.View
-      className="min-w-0 shrink"
+      // Only the expanded label can truncate; shrinking the icon-only control clips the icon.
+      className={compactEditor.isExpanded ? "min-w-0 shrink" : "shrink-0"}
       layout={Platform.OS === "ios" ? modelControlTransition : undefined}
     >
       <ComposerModelControl
@@ -843,7 +844,9 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
                 style={[
                   {
                     minWidth:
-                      compactEditor.isExpanded || stripAttachments.length > 0
+                      compactEditor.isExpanded ||
+                      stripAttachments.length > 0 ||
+                      compactControl !== null
                         ? 0
                         : INLINE_EDITOR_MIN_WIDTH,
                   },
