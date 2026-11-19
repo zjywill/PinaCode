@@ -38,6 +38,8 @@ the alpha channel for updates. For global npm installations, choose **Update now
 Select a Dim model to load its reasoning levels before sending a message.
 **Dim access** changes Dim’s native session permissions independently of the thread’s runtime permissions.
 
+Pina Code can also talk to Dim directly, without ACP; see [Dim](./providers-dim.md).
+
 ## Add a local command
 
 In **Settings → Providers → Add provider**, select **Show more**, then **Local ACP command**. Enter the executable
