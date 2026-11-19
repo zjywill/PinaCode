@@ -206,6 +206,7 @@ interface ActiveDimTurn {
   readonly submissionId: string;
   inputEventId: string | null;
   startApplied: boolean;
+  readonly compact: boolean;
   pendingStopReason: string | null;
   stopSent: boolean;
   readonly itemOrdinals: Map<string, number>;
@@ -351,6 +352,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
       let appliedModel: string | null = null;
       let appliedEffort: string | null = null;
       let appliedPreset: "workspace-write" | "full-access" | null = null;
+      let sessionMethods: { sessionId: string; names: ReadonlySet<string> } | null = null;
       let mcpBindingId: string | null = null;
       let mcpAttachedFor: string | null = null;
       let mcpRenew: Fiber.Fiber<void, never> | null = null;
@@ -640,6 +642,45 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         });
       });
 
+      const compactionTitle = (status: OrchestrationV2TurnItem["status"]): string =>
+        status === "running"
+          ? "Compacting context..."
+          : status === "failed"
+            ? "Context compaction failed"
+            : status === "cancelled"
+              ? "Context compaction stopped"
+              : "Context compacted";
+
+      const emitCompactionItem = Effect.fn("DimAdapter.emitCompactionItem")(function* (
+        turn: ActiveDimTurn,
+        status: OrchestrationV2TurnItem["status"],
+        details: { readonly summary?: string } = {},
+      ) {
+        const emittedAt = yield* DateTime.now;
+        const nativeItemId = `compaction:${turn.providerTurn.id}`;
+        yield* emitNode(
+          turn,
+          nativeItemId,
+          "system",
+          status === "running" ? "running" : status,
+          turn.startedAt,
+          status === "running" ? null : emittedAt,
+        );
+        yield* emit({
+          type: "turn_item.updated",
+          driver: DIM_PROVIDER,
+          turnItem: {
+            ...itemBase(turn, nativeItemId, turn.startedAt, emittedAt),
+            status,
+            title: compactionTitle(status),
+            completedAt: status === "running" ? null : emittedAt,
+            type: "compaction",
+            driver: DIM_PROVIDER,
+            ...details,
+          },
+        });
+      });
+
       const finalizeTurn = Effect.fn("DimAdapter.finalizeTurn")(function* (end: {
         status: string;
         reason: string | null;
@@ -872,6 +913,32 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           });
           if (turn.pendingStopReason !== null) {
             yield* sendStop(turn, turn.pendingStopReason);
+          }
+          return;
+        }
+        if (name === "context/compaction-start") {
+          if (turn.compact) yield* emitCompactionItem(turn, "running");
+          return;
+        }
+        if (name === "context/compaction") {
+          if (!turn.compact) return;
+          const status = recordString(data, "status");
+          const error = recordString(data, "error") ?? recordString(data, "reason");
+          if (status === "completed" || status === "skipped") {
+            yield* emitCompactionItem(turn, "completed");
+            yield* finalizeTurn({ status: "completed", reason: null });
+            return;
+          }
+          if (status === "failed") {
+            turn.lastFailure = dimProviderFailure({ error: error ?? null });
+            yield* emitCompactionItem(turn, "failed");
+            yield* finalizeTurn({ status: "failed", reason: error ?? null });
+            return;
+          }
+          if (status === "cancelled") {
+            yield* emitCompactionItem(turn, "cancelled");
+            yield* finalizeTurn({ status: "cancelled", reason: error ?? null });
+            return;
           }
           return;
         }
@@ -1401,6 +1468,24 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         }),
       );
 
+      const probeSessionMethods = Effect.fn("DimAdapter.probeSessionMethods")(function* (
+        sessionId: string,
+      ) {
+        if (sessionMethods?.sessionId === sessionId) return sessionMethods.names;
+        const reply = yield* connection
+          .request("session.methods", { sessionId })
+          .pipe(Effect.orElseSucceed(() => undefined));
+        if (reply === undefined) return null;
+        const names = new Set(
+          (recordArray(reply, "methods") ?? []).flatMap((entry) => {
+            const name = recordString(entry, "name");
+            return name === undefined ? [] : [name];
+          }),
+        );
+        sessionMethods = { sessionId, names };
+        return names;
+      });
+
       const registerThread = Effect.fn("DimAdapter.registerThread")(function* (
         threadInput: ProviderAdapter.ProviderAdapterV2EnsureThreadInput,
       ) {
@@ -1553,6 +1638,85 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           ),
         );
 
+      const installTurn: (
+        turnInput: ProviderAdapter.ProviderAdapterV2TurnInput,
+        session: ThreadState,
+        compact: boolean,
+      ) => Effect.Effect<ActiveDimTurn> = Effect.fn("DimAdapter.installTurn")(function* (
+        turnInput: ProviderAdapter.ProviderAdapterV2TurnInput,
+        session: ThreadState,
+        compact: boolean,
+      ) {
+        const submissionId = yield* randomUuidV4;
+        const startedAt = yield* DateTime.now;
+        const syntheticNativeTurnId = `${session.providerThread.id}:attempt:${turnInput.attemptId}`;
+        const providerTurn: OrchestrationV2ProviderTurn = {
+          id: idAllocator.derive.providerTurn({
+            driver: DIM_PROVIDER,
+            nativeTurnId: syntheticNativeTurnId,
+          }),
+          providerThreadId: turnInput.providerThread.id,
+          nodeId: turnInput.rootNodeId,
+          runAttemptId: turnInput.attemptId,
+          nativeTurnRef: {
+            driver: DIM_PROVIDER,
+            nativeId: syntheticNativeTurnId,
+            strength: "weak",
+          },
+          nativeThreadRef: {
+            driver: DIM_PROVIDER,
+            nativeId: session.sessionId,
+            strength: "strong",
+          },
+          ordinal: turnInput.providerTurnOrdinal,
+          status: "running",
+          startedAt,
+          completedAt: null,
+        };
+        const turn: ActiveDimTurn = {
+          turnInput,
+          providerTurn,
+          dimTurnId: null,
+          startedAt,
+          submissionId,
+          inputEventId: null,
+          startApplied: false,
+          compact,
+          pendingStopReason: null,
+          stopSent: false,
+          itemOrdinals: new Map(),
+          nextOrdinal: turnInput.providerTurnOrdinal * 100 + 1,
+          textByRequest: new Map(),
+          thinkingByRequest: new Map(),
+          toolItems: new Map(),
+          steers: new Map(),
+          lastFailure: null,
+        };
+        activeTurn = turn;
+        yield* emit({
+          type: "provider_turn.updated",
+          driver: DIM_PROVIDER,
+          threadId: turnInput.threadId,
+          providerTurn,
+        });
+        if (threadState !== null) {
+          threadState.providerThread = {
+            ...threadState.providerThread,
+            status: "active",
+            firstRunOrdinal: threadState.providerThread.firstRunOrdinal ?? turnInput.runOrdinal,
+            lastRunOrdinal: turnInput.runOrdinal,
+            updatedAt: startedAt,
+          };
+          yield* emit({
+            type: "provider_thread.updated",
+            driver: DIM_PROVIDER,
+            providerThread: threadState.providerThread,
+          });
+        }
+        yield* updateSession("running");
+        return turn;
+      });
+
       const readHistory = Effect.fn("DimAdapter.readHistory")(function* (sessionId: string) {
         const collected: Array<DimSessionEvent["event"]> = [];
         let after: number | undefined;
@@ -1604,6 +1768,43 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
                 }),
             ),
           ),
+        compactThread: Effect.fn("DimAdapter.compactThread")(function* (
+          turnInput: ProviderAdapter.ProviderAdapterV2TurnInput,
+        ) {
+          const session = threadState;
+          if (session === null) {
+            return yield* protocolError("Dim session has no registered thread");
+          }
+          if (activeTurn !== null) {
+            return yield* protocolError("Dim provider thread already has an active turn");
+          }
+          if (turnInput.providerThread.id !== session.providerThread.id) {
+            return yield* protocolError("Dim turn requested for a different thread");
+          }
+          const known = yield* probeSessionMethods(session.sessionId);
+          if (known !== null && !known.has("session.context.compact")) {
+            return yield* protocolError("Dim does not support context compaction");
+          }
+          const turn = yield* installTurn(turnInput, session, true);
+          yield* emitCompactionItem(turn, "running");
+          const result = yield* connection
+            .request("session.context.compact", {
+              sessionId: session.sessionId,
+              branchId: DIM_BRANCH,
+            })
+            .pipe(Effect.result);
+          // The context/compaction event may have settled the turn already.
+          if (activeTurn === null) return;
+          if (result._tag === "Failure") {
+            const detail = result.failure.detail;
+            turn.lastFailure = dimProviderFailure({ error: detail });
+            yield* emitCompactionItem(turn, "failed");
+            yield* finalizeTurn({ status: "failed", reason: detail });
+            return;
+          }
+          yield* emitCompactionItem(turn, "completed");
+          yield* finalizeTurn({ status: "completed", reason: null });
+        }),
         startTurn: Effect.fn("DimAdapter.startTurn")(function* (
           turnInput: ProviderAdapter.ProviderAdapterV2TurnInput,
         ) {
@@ -1637,77 +1838,12 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           // A wider stored preset must be narrowed before this turn's first tool call.
           yield* ensurePreset(turnInput.runtimePolicy.runtimeMode).pipe(Effect.mapError(turnError));
           yield* applySelection(turnInput.modelSelection).pipe(Effect.mapError(turnError));
-          const submissionId = yield* randomUuidV4;
-          const startedAt = yield* DateTime.now;
-          const syntheticNativeTurnId = `${session.providerThread.id}:attempt:${turnInput.attemptId}`;
-          const providerTurn: OrchestrationV2ProviderTurn = {
-            id: idAllocator.derive.providerTurn({
-              driver: DIM_PROVIDER,
-              nativeTurnId: syntheticNativeTurnId,
-            }),
-            providerThreadId: turnInput.providerThread.id,
-            nodeId: turnInput.rootNodeId,
-            runAttemptId: turnInput.attemptId,
-            nativeTurnRef: {
-              driver: DIM_PROVIDER,
-              nativeId: syntheticNativeTurnId,
-              strength: "weak",
-            },
-            nativeThreadRef: {
-              driver: DIM_PROVIDER,
-              nativeId: session.sessionId,
-              strength: "strong",
-            },
-            ordinal: turnInput.providerTurnOrdinal,
-            status: "running",
-            startedAt,
-            completedAt: null,
-          };
-          const turn: ActiveDimTurn = {
-            turnInput,
-            providerTurn,
-            dimTurnId: null,
-            startedAt,
-            submissionId,
-            inputEventId: null,
-            startApplied: false,
-            pendingStopReason: null,
-            stopSent: false,
-            itemOrdinals: new Map(),
-            nextOrdinal: turnInput.providerTurnOrdinal * 100 + 1,
-            textByRequest: new Map(),
-            thinkingByRequest: new Map(),
-            toolItems: new Map(),
-            steers: new Map(),
-            lastFailure: null,
-          };
-          activeTurn = turn;
-          yield* emit({
-            type: "provider_turn.updated",
-            driver: DIM_PROVIDER,
-            threadId: turnInput.threadId,
-            providerTurn,
-          });
-          if (threadState !== null) {
-            threadState.providerThread = {
-              ...threadState.providerThread,
-              status: "active",
-              firstRunOrdinal: threadState.providerThread.firstRunOrdinal ?? turnInput.runOrdinal,
-              lastRunOrdinal: turnInput.runOrdinal,
-              updatedAt: startedAt,
-            };
-            yield* emit({
-              type: "provider_thread.updated",
-              driver: DIM_PROVIDER,
-              providerThread: threadState.providerThread,
-            });
-          }
-          yield* updateSession("running");
+          const turn = yield* installTurn(turnInput, session, false);
           const submitted = yield* connection
             .request("session.submit", {
               sessionId: session.sessionId,
               branchId: DIM_BRANCH,
-              submissionId,
+              submissionId: turn.submissionId,
               user: { content: [{ type: "text", text }] },
               mode: "queue",
             })

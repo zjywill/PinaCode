@@ -103,6 +103,15 @@ class FakeDim {
     readonly data: unknown;
   }> = [];
   forkSessionId = "dim-forked";
+  compactMode: "completed" | "skipped" | "failed" = "completed";
+  methods: string[] = [
+    "session.context.compact",
+    "session.context.usage",
+    "session.question.pending",
+    "session.question.respond",
+    "session.rename",
+    "session.exec.stop",
+  ];
   private nextEvent = 1;
   private nextInput = 1;
 
@@ -248,15 +257,44 @@ class FakeDim {
           }
           return { sessionId: self.forkSessionId, sequence: 1 };
         case "session.methods":
+          return { methods: self.methods.map((name) => ({ name, mutating: false })) };
+        case "session.context.compact": {
+          self.pushEvent("context", "compaction-start", { command: 1, through: 1 });
+          if (self.compactMode === "completed") {
+            self.pushEvent("context", "compaction", { status: "completed", through: 1 });
+            return { status: "completed", sequence: 2 };
+          }
+          if (self.compactMode === "skipped") {
+            self.pushEvent("context", "compaction", {
+              status: "skipped",
+              reason: "small",
+              through: 1,
+            });
+            return { status: "skipped", reason: "small" };
+          }
+          self.pushEvent("context", "compaction", {
+            status: "failed",
+            error: "Compacted context does not reduce input.",
+            through: 1,
+          });
+          return yield* new DimTransportError({
+            detail: "Compacted context does not reduce input.",
+          });
+        }
+        case "session.context.usage":
           return {
-            methods: [
-              { name: "session.context.compact", mutating: true },
-              { name: "session.context.usage", mutating: false },
-              { name: "session.question.pending", mutating: false },
-              { name: "session.question.respond", mutating: true },
-              { name: "session.rename", mutating: true },
-              { name: "session.exec.stop", mutating: true },
-            ],
+            through: 20,
+            contextWindow: 200_000,
+            outputTokens: 8_192,
+            thresholdTokens: 180_000,
+            estimatedInputTokens: 42_000,
+            baselineSource: "provider_baseline",
+          };
+        case "session.rename":
+          return {
+            title: params["title"],
+            titleSource: "manual",
+            revision: 1,
           };
         default:
           return {};
@@ -850,6 +888,87 @@ describe("DimAdapter fork", () => {
       assert.deepEqual(harness.fake.requestsOf("session.fork"), [
         { sessionId: SESSION_ID, at: 18 },
       ]);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+});
+
+describe("DimAdapter compaction", () => {
+  it.effect("maps a completed compaction to a completed turn", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      const thread = yield* ensureThread(harness.runtime);
+      yield* harness.runtime.compactThread!(turnInput(thread));
+      yield* harness.waitFor(isTerminal);
+      const seen = yield* Ref.get(harness.events);
+      const terminal = seen.find(isTerminal);
+      assert.strictEqual(
+        terminal?.type === "turn.terminal" ? terminal.status : undefined,
+        "completed",
+      );
+      assert.isTrue(
+        seen.some(
+          (event) =>
+            event.type === "turn_item.updated" &&
+            event.turnItem.type === "compaction" &&
+            event.turnItem.status === "completed",
+        ),
+      );
+      assert.deepEqual(harness.fake.requestsOf("session.context.compact"), [
+        { sessionId: SESSION_ID, branchId: "main" },
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("maps a failed compaction to a failed turn", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      const thread = yield* ensureThread(harness.runtime);
+      harness.fake.compactMode = "failed";
+      yield* harness.runtime.compactThread!(turnInput(thread));
+      yield* harness.waitFor(isTerminal);
+      const seen = yield* Ref.get(harness.events);
+      const terminal = seen.find(isTerminal);
+      assert.strictEqual(
+        terminal?.type === "turn.terminal" ? terminal.status : undefined,
+        "failed",
+      );
+      assert.strictEqual(
+        terminal?.type === "turn.terminal" ? terminal.failure?.message : undefined,
+        "Compacted context does not reduce input.",
+      );
+      assert.isTrue(
+        seen.some(
+          (event) =>
+            event.type === "turn_item.updated" &&
+            event.turnItem.type === "compaction" &&
+            event.turnItem.status === "failed",
+        ),
+      );
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("probes session methods lazily and caches the result", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      const thread = yield* ensureThread(harness.runtime);
+      assert.strictEqual(harness.fake.requestsOf("session.methods").length, 0);
+      yield* harness.runtime.compactThread!(turnInput(thread));
+      yield* harness.waitFor(isTerminal);
+      assert.deepEqual(harness.fake.requestsOf("session.methods"), [{ sessionId: SESSION_ID }]);
+      yield* harness.runtime.compactThread!(turnInput(thread));
+      yield* harness.waitFor(isTerminal);
+      assert.strictEqual(harness.fake.requestsOf("session.methods").length, 1);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("reports unsupported when the method is absent", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      harness.fake.methods = ["session.context.usage"];
+      const thread = yield* ensureThread(harness.runtime);
+      const failed = yield* harness.runtime.compactThread!(turnInput(thread)).pipe(Effect.flip);
+      assert.strictEqual(failed._tag, "ProviderAdapterProtocolError");
+      assert.strictEqual(harness.fake.requestsOf("session.context.compact").length, 0);
     }).pipe(Effect.scoped, Effect.provide(layers)),
   );
 });
