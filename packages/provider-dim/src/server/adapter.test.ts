@@ -4,6 +4,7 @@ import {
   NodeId,
   ProviderInstanceId,
   ProviderSessionId,
+  ProviderThreadId,
   ProviderTurnId,
   RunAttemptId,
   RunId,
@@ -343,6 +344,7 @@ const makeFakeDim = Effect.gen(function* () {
 const openHarness = (input?: {
   readonly runtimePolicy?: ReturnType<typeof runtimePolicy>;
   readonly modelSelection?: ModelSelection;
+  readonly initialNativeThreadId?: string;
 }) =>
   Effect.gen(function* () {
     const fake = yield* makeFakeDim;
@@ -355,6 +357,9 @@ const openHarness = (input?: {
       providerSessionId: PROVIDER_SESSION_ID,
       modelSelection: input?.modelSelection ?? modelSelection(),
       runtimePolicy: input?.runtimePolicy ?? runtimePolicy("full-access"),
+      ...(input?.initialNativeThreadId === undefined
+        ? {}
+        : { initialNativeThreadId: input.initialNativeThreadId }),
     });
     const events = yield* Ref.make<ReadonlyArray<Event>>([]);
     const wake = yield* Queue.unbounded<Event>();
@@ -1255,6 +1260,53 @@ const providerTurnStub = (
   status: "completed",
   startedAt: DateTime.nowUnsafe(),
   completedAt: DateTime.nowUnsafe(),
+});
+
+describe("DimAdapter import", () => {
+  const importedThread = (nativeId: string): OrchestrationV2ProviderThread => ({
+    id: ProviderThreadId.make("provider-thread-imported"),
+    driver: DIM_PROVIDER,
+    providerInstanceId: INSTANCE_ID,
+    providerSessionId: PROVIDER_SESSION_ID,
+    appThreadId: THREAD_ID,
+    ownerNodeId: null,
+    nativeThreadRef: { driver: DIM_PROVIDER, nativeId, strength: "strong" },
+    nativeConversationHeadRef: null,
+    status: "idle",
+    firstRunOrdinal: null,
+    lastRunOrdinal: null,
+    handoffIds: [],
+    forkedFrom: null,
+    pendingBackgroundTasks: [],
+    createdAt: DateTime.nowUnsafe(),
+    updatedAt: DateTime.nowUnsafe(),
+  });
+
+  it.effect("reads a snapshot for a session opened for import", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness({ initialNativeThreadId: SESSION_ID });
+      harness.fake.historyEvents = [
+        {
+          id: "e1",
+          sequence: 1,
+          create_at: 1,
+          type: "input",
+          name: "message",
+          data: {
+            submission_id: "submission-1",
+            user: { content: [{ type: "text", text: "hello from dim" }] },
+          },
+        },
+      ];
+      const snapshot = yield* harness.runtime.readThreadSnapshot({
+        providerThread: importedThread(SESSION_ID),
+      });
+      assert.deepEqual(
+        snapshot.messages.map((message) => ({ role: message.role, text: message.text })),
+        [{ role: "user", text: "hello from dim" }],
+      );
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
 });
 
 describe("DimAdapter fork", () => {

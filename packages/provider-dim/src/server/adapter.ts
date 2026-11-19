@@ -2382,14 +2382,20 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         ) {
           const session = threadState;
           const wanted = snapshotInput.providerThread.nativeThreadRef?.nativeId;
-          if (session === null || wanted === undefined || wanted !== session.sessionId) {
+          // An import opens the session for this native thread without registering it.
+          const importing = threadState === null && pendingImport === wanted;
+          if (
+            wanted === undefined ||
+            wanted === null ||
+            (session?.sessionId !== wanted && !importing)
+          ) {
             return yield* new ProviderAdapter.ProviderAdapterReadThreadSnapshotError({
               driver: DIM_PROVIDER,
               providerThreadId: snapshotInput.providerThread.id,
               cause: "Dim snapshot requested for a thread this session does not host",
             });
           }
-          const collected = yield* readHistory(session.sessionId).pipe(
+          const collected = yield* readHistory(wanted).pipe(
             Effect.mapError(
               (cause) =>
                 new ProviderAdapter.ProviderAdapterReadThreadSnapshotError({
