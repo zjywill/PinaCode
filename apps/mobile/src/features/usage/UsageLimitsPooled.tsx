@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { EnvironmentId } from "@t3tools/contracts";
-import { providerClients } from "@t3tools/client-runtime/provider-clients";
+import { dimCodeRegistryIconUrl, providerClients } from "@t3tools/client-runtime/provider-clients";
 import { normalizeProviderAccentColor } from "@t3tools/client-runtime/state/provider-instance-display";
 import {
   collectLimitAccounts,
@@ -505,7 +505,14 @@ export function UsageLimitsSection({
             <View className="gap-3">
               <View className="flex-row items-center gap-2 px-1">
                 <ProviderIcon
-                  iconUrl={pool.brand ? pool.accounts[0]?.iconUrl : undefined}
+                  iconUrl={
+                    pool.brand
+                      ? (pool.accounts.find((account) => account.driver === "acpRegistry")
+                          ?.iconUrl ??
+                        dimCodeRegistryIconUrl ??
+                        undefined)
+                      : undefined
+                  }
                   provider={pool.driver}
                   size={18}
                 />

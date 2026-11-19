@@ -10,5 +10,6 @@ export function providerColors(scheme: "light" | "dark"): Record<UsageProviderKi
     antigravity: "#8c7bd1",
     pi: "#4d9f8a",
     muse: "#0866ff",
+    dim: scheme === "dark" ? "#70C70E" : "#5AA00B",
   };
 }

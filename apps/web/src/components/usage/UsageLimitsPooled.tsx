@@ -13,6 +13,7 @@ import {
 } from "@t3tools/shared/usageLimits";
 import { T, useGT, useMessages } from "gt-react";
 import type { Popover as PopoverPrimitive } from "@base-ui/react/popover";
+import { dimCodeRegistryIconUrl } from "@t3tools/client-runtime/provider-clients";
 import { normalizeProviderAccentColor } from "@t3tools/client-runtime/state/provider-instance-display";
 import { AlertTriangleIcon, ExternalLinkIcon, TicketIcon } from "lucide-react";
 import {
@@ -645,7 +646,13 @@ function PoolSection({ pool, now }: { readonly pool: LimitPool; readonly now: nu
       <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
         <ProviderInstanceIcon
           driverKind={pool.driver}
-          acpRegistryIconUrl={pool.brand ? pool.accounts[0]?.iconUrl : undefined}
+          acpRegistryIconUrl={
+            pool.brand
+              ? (pool.accounts.find((account) => account.driver === "acpRegistry")?.iconUrl ??
+                dimCodeRegistryIconUrl ??
+                undefined)
+              : undefined
+          }
           displayName={label}
           indicatorBackground="var(--background)"
           className="size-5"
