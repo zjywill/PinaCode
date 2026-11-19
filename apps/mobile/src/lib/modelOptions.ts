@@ -84,6 +84,8 @@ function providerDisplayLabel(provider: {
   if (provider.driver === "codex") return "Codex";
   if (provider.driver === "claudeAgent") return "Claude";
   if (provider.driver === "pi") return "Pi";
+  // oxlint-disable-next-line t3code/no-untranslated-copy -- The provider's brand name.
+  if (provider.driver === "dim") return "Dim";
   return provider.instanceId;
 }
 
