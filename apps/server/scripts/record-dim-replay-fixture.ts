@@ -93,6 +93,13 @@ function messageText(messages: ReadonlyArray<{ role?: string; content?: unknown 
 
 /** A deterministic local model; every prompt the fixtures use gets a fixture-shaped answer. */
 async function startFakeModel(): Promise<FakeModel> {
+  // Tool-call prompts need one more model call after their tool result.
+  const phases = new Map<string, number>();
+  const phaseOf = (prompt: string) => {
+    const phase = phases.get(prompt) ?? 0;
+    phases.set(prompt, phase + 1);
+    return phase;
+  };
   const server = NodeHttp.createServer((request, response) => {
     let body = "";
     request.on("data", (chunk) => (body += chunk));
@@ -151,6 +158,58 @@ async function startFakeModel(): Promise<FakeModel> {
       }
       if (lastUser.includes("steering fixture initial response")) {
         tool("exec", { command: "sleep 3", title: "fixture wait" });
+        return;
+      }
+      if (lastUser.includes("Use request_user_input to ask one multiple-choice")) {
+        if (phaseOf("plan-questions") === 0) {
+          tool("ask_user", {
+            questions: [
+              {
+                id: "schema_vs_ui_flexibility",
+                header: "Schemas",
+                question: "Should this fixture prefer strict schemas or UI flexibility?",
+                options: [
+                  { label: "Strict schemas (Recommended)", description: "Typed contracts" },
+                  { label: "UI flexibility", description: "Loose client shapes" },
+                ],
+                multiSelect: false,
+                allowCustom: true,
+              },
+            ],
+          });
+          return;
+        }
+        reply("plan questions fixture complete");
+        return;
+      }
+      if (lastUser.includes("Use the Write tool once to create .claude-denied-write.txt")) {
+        if (phaseOf("denied-write") === 0) {
+          tool("exec", {
+            command: "printf 'approval fixture' > .claude-denied-write.txt",
+            title: "fixture write",
+          });
+          return;
+        }
+        reply("write permission denied");
+        return;
+      }
+      if (lastUser.includes("Create or overwrite .codex-probe-write-action.txt")) {
+        const phase = phaseOf("approved-write");
+        if (phase === 0) {
+          tool("write", {
+            path: ".codex-probe-write-action.txt",
+            content: "codex app-server approval fixture",
+          });
+          return;
+        }
+        if (phase === 1) {
+          tool("exec", {
+            command: "printf 'codex app-server approval fixture' > .codex-probe-write-action.txt",
+            title: "fixture write",
+          });
+          return;
+        }
+        reply("Wrote the file.");
         return;
       }
       if (lastUser.includes("first repeat the exact final answer")) {
@@ -310,6 +369,7 @@ async function main() {
             fixtureInput,
             driver: DIM_PROVIDER,
             modelSelection: variant!.modelSelection,
+            ...(variant!.runtimeMode === undefined ? {} : { runtimeMode: variant!.runtimeMode }),
           }).pipe(Effect.provide(IdAllocator.layer), provideDeterministicTestRuntime);
           yield* runOrchestratorV2ProviderReplayScenario(
             {

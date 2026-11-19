@@ -16,7 +16,10 @@ import {
   PROVIDER_THREAD_RESUME_FIRST_PROMPT,
   PROVIDER_THREAD_RESUME_SECOND_PROMPT,
   projectionFor,
+  TOOL_CALL_WRITE_PROMPT,
 } from "./shared.ts";
+import { TOOL_CALL_DENIED_WRITE_PROMPT } from "./tool_call_denied_write/input.ts";
+import { assertPlanQuestionsOutputBase } from "./plan_questions/codex_output.ts";
 import { assertSimpleOutput } from "./simple/codex_output.ts";
 import { assertMultiTurnOutput } from "./multi_turn/codex_output.ts";
 import { assertQueuedTurnOutput } from "./queued_turn/codex_output.ts";
@@ -121,4 +124,59 @@ export function assertDimProviderThreadResumeOutput(
     "the resumed session must remember the first answer",
   );
   assert.include(answers[1], "provider thread resume fixture second turn complete");
+}
+
+export function assertDimToolCallDeniedWriteOutput(
+  result: OrchestratorV2ScenarioResult,
+  transcript: ProviderReplayTranscript,
+) {
+  assertBaseProjection({ result, transcript, runCount: 1, runStatuses: ["completed"] });
+  const projection = assertDimBase(result, transcript);
+  assertSemanticProjectionIntegrity(projection);
+  assertVisibleTurnItemsMirrorLocalTurnItems(projection);
+  assertUserMessagesInclude(projection, [TOOL_CALL_DENIED_WRITE_PROMPT]);
+  assertRuntimeRequestCounts(projection, { total: 1, resolved: 1 });
+  assert.deepEqual(
+    projection.runtimeRequests.map((request) => request.decision),
+    ["decline"],
+  );
+  const commands = projection.turnItems.filter((item) => item.type === "command_execution");
+  assert.lengthOf(commands, 1);
+  assert.deepEqual(
+    commands.map((item) => item.status),
+    ["failed"],
+  );
+  assertAssistantTextIncludes(projection, "write permission denied");
+}
+
+export function assertDimToolCallReadOnlyOnRequestOutput(
+  result: OrchestratorV2ScenarioResult,
+  transcript: ProviderReplayTranscript,
+) {
+  assertBaseProjection({ result, transcript, runCount: 1, runStatuses: ["completed"] });
+  const projection = assertDimBase(result, transcript);
+  assertSemanticProjectionIntegrity(projection);
+  assertVisibleTurnItemsMirrorLocalTurnItems(projection);
+  assertUserMessagesInclude(projection, [TOOL_CALL_WRITE_PROMPT]);
+  assertRuntimeRequestCounts(projection, { total: 1, resolved: 1 });
+  assert.deepEqual(
+    projection.runtimeRequests.map((request) => request.decision),
+    ["accept"],
+  );
+  const writes = projection.turnItems.filter((item) => item.type === "file_change");
+  assert.lengthOf(writes, 1);
+  assert.strictEqual(writes[0]?.status, "completed");
+  assert.isString(writes[0]?.type === "file_change" ? writes[0].diffStr : undefined);
+  const commands = projection.turnItems.filter((item) => item.type === "command_execution");
+  assert.lengthOf(commands, 1);
+  assert.strictEqual(commands[0]?.status, "completed");
+  assertAssistantTextIncludes(projection, "Wrote the file.");
+}
+
+export function assertDimPlanQuestionsOutput(
+  result: OrchestratorV2ScenarioResult,
+  transcript: ProviderReplayTranscript,
+) {
+  assertDimBase(result, transcript);
+  assertPlanQuestionsOutputBase(result, transcript);
 }

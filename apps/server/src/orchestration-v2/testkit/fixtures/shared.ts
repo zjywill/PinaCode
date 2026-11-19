@@ -296,6 +296,8 @@ export interface ProviderOrchestratorReplayVariant {
   readonly transcriptEntriesThroughLabel?: string;
   readonly modelSelection: ModelSelection;
   readonly runtimePolicyOverride?: RuntimePolicyV2Override;
+  /** The thread's mode, when a provider exercises approvals only in a narrower mode. */
+  readonly runtimeMode?: RuntimeMode;
   readonly runContinuationWorker?: boolean;
   readonly expectedAbsentWorkspacePaths?: ReadonlyArray<string>;
   readonly assertOutput: (
@@ -497,6 +499,7 @@ export function materializeFixtureInput(input: {
   readonly fixtureInput: OrchestratorFixtureInput;
   readonly driver: ProviderDriverKind;
   readonly modelSelection: ModelSelection;
+  readonly runtimeMode?: RuntimeMode;
 }): Effect.Effect<
   MaterializedOrchestratorFixtureInput,
   IdAllocator.IdAllocatorV2Error,
@@ -554,9 +557,11 @@ export function materializeFixtureInput(input: {
         ...(input.fixtureInput.interactionMode === undefined
           ? {}
           : { interactionMode: input.fixtureInput.interactionMode }),
-        ...(input.fixtureInput.runtimeMode === undefined
-          ? {}
-          : { runtimeMode: input.fixtureInput.runtimeMode }),
+        ...(input.runtimeMode !== undefined
+          ? { runtimeMode: input.runtimeMode }
+          : input.fixtureInput.runtimeMode === undefined
+            ? {}
+            : { runtimeMode: input.fixtureInput.runtimeMode }),
       }),
     );
 

@@ -133,6 +133,7 @@ const runFixtureProvider = Effect.fn("runOrchestratorReplayFixture")(function* <
     fixtureInput,
     driver: input.driver.driver,
     modelSelection: input.driver.modelSelection,
+    ...(input.driver.runtimeMode === undefined ? {} : { runtimeMode: input.driver.runtimeMode }),
   }).pipe(Effect.provide(IdAllocator.layer), provideDeterministicTestRuntime);
   const scenario = {
     name: `${input.fixtureName}/${input.driver.driver}`,

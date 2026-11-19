@@ -155,9 +155,12 @@ import { assertSimpleOutput } from "./simple/codex_output.ts";
 import {
   assertDimMessageSteeringOutput,
   assertDimMultiTurnOutput,
+  assertDimPlanQuestionsOutput,
   assertDimProviderThreadResumeOutput,
   assertDimQueuedTurnOutput,
   assertDimSimpleOutput,
+  assertDimToolCallDeniedWriteOutput,
+  assertDimToolCallReadOnlyOnRequestOutput,
   assertDimTurnInterruptOutput,
 } from "./dim_output.ts";
 import { assertPiSimpleOutput } from "./simple/pi_output.ts";
@@ -927,6 +930,16 @@ export const ORCHESTRATOR_REPLAY_FIXTURES: ReadonlyArray<OrchestratorReplayFixtu
         expectedAbsentWorkspacePaths: [TOOL_CALL_DENIED_WRITE_TARGET],
         assertOutput: assertToolCallDeniedWriteFxOutput,
       },
+      {
+        driver: ProviderDriverKind.make("dim"),
+        transcriptFile: new URL("./tool_call_denied_write/dim_transcript.ndjson", import.meta.url),
+        modelSelection: DIM_MODEL_SELECTION,
+        runtimePolicyOverride: DENIED_WRITE_POLICY,
+        // Dim's auto-accept-edits (workspace-write) asks for approval on exec.
+        runtimeMode: "auto-accept-edits",
+        expectedAbsentWorkspacePaths: [TOOL_CALL_DENIED_WRITE_TARGET],
+        assertOutput: assertDimToolCallDeniedWriteOutput,
+      },
     ],
   },
   {
@@ -1020,6 +1033,18 @@ export const ORCHESTRATOR_REPLAY_FIXTURES: ReadonlyArray<OrchestratorReplayFixtu
         modelSelection: ACP_REGISTRY_MODEL_SELECTION,
         runtimePolicyOverride: READ_ONLY_ON_REQUEST_POLICY,
         assertOutput: assertToolCallReadOnlyOnRequestOutput,
+      },
+      {
+        driver: ProviderDriverKind.make("dim"),
+        transcriptFile: new URL(
+          "./tool_call_read_only_on_request/dim_transcript.ndjson",
+          import.meta.url,
+        ),
+        modelSelection: DIM_MODEL_SELECTION,
+        runtimePolicyOverride: READ_ONLY_ON_REQUEST_POLICY,
+        // Dim's auto-accept-edits (workspace-write) asks for approval on exec.
+        runtimeMode: "auto-accept-edits",
+        assertOutput: assertDimToolCallReadOnlyOnRequestOutput,
       },
     ],
   },
@@ -1788,6 +1813,13 @@ export const ORCHESTRATOR_REPLAY_FIXTURES: ReadonlyArray<OrchestratorReplayFixtu
         modelSelection: OPENCODE_MODEL_SELECTION,
         runtimePolicyOverride: READ_ONLY_NEVER_POLICY,
         assertOutput: assertOpenCodePlanQuestionsOutput,
+      },
+      {
+        driver: ProviderDriverKind.make("dim"),
+        transcriptFile: new URL("./plan_questions/dim_transcript.ndjson", import.meta.url),
+        modelSelection: DIM_MODEL_SELECTION,
+        runtimePolicyOverride: READ_ONLY_NEVER_POLICY,
+        assertOutput: assertDimPlanQuestionsOutput,
       },
     ],
   },
