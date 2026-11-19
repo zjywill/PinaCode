@@ -14,7 +14,6 @@ export const dimCodeIcon: ProviderIcon = {
   ],
 };
 
-// Placeholder label until the product name is settled.
 export const dimClient = defineProviderClient({
   driverKind: ProviderDriverKind.make("dim"),
   label: "Dim",
