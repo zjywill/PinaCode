@@ -14,9 +14,16 @@ export const dimCodeIcon: ProviderIcon = {
   ],
 };
 
+// Same mark as DimCode Alpha, in Dim's brand green; the ACP entry keeps the monochrome pairing.
+export const dimIcon: ProviderIcon = {
+  viewBox: dimCodeIcon.viewBox,
+  fill: { light: "#5AA00B", dark: "#70C70E" },
+  paths: dimCodeIcon.paths,
+};
+
 export const dimClient = defineProviderClient({
   driverKind: ProviderDriverKind.make("dim"),
   label: "Dim",
   settingsSchema: DimSettings,
-  icon: dimCodeIcon,
+  icon: dimIcon,
 });
