@@ -1,15 +1,19 @@
 import {
+  EnvironmentId,
   MessageId,
   NodeId,
   ProviderInstanceId,
   ProviderSessionId,
+  ProviderTurnId,
   RunAttemptId,
   RunId,
   ThreadId,
   type ModelSelection,
   type OrchestrationV2AppThread,
   type OrchestrationV2ProviderThread,
+  type OrchestrationV2ProviderTurn,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import { assert, describe, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
@@ -27,7 +31,7 @@ import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderS
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as TestProviderHost from "@t3tools/provider-testing/TestProviderHost";
 
-import { makeDimAdapterV2 } from "./adapter.ts";
+import { DIM_PROVIDER, makeDimAdapterV2 } from "./adapter.ts";
 import type { DimNotice } from "./protocol.ts";
 import type { DimConnection } from "./transport.ts";
 import { DimTransportError } from "./transport.ts";
@@ -54,6 +58,27 @@ const modelSelection = (model = "default", effort?: string): ModelSelection => (
   ...(effort === undefined ? {} : { options: [{ id: "effort", value: effort }] }),
 });
 
+function attachedThread(nativeId: string): OrchestrationV2ProviderThread {
+  return {
+    id: ProviderThreadId.make("provider-thread-attached"),
+    driver: DIM_PROVIDER,
+    providerInstanceId: INSTANCE_ID,
+    providerSessionId: PROVIDER_SESSION_ID,
+    appThreadId: THREAD_ID,
+    ownerNodeId: null,
+    nativeThreadRef: { driver: DIM_PROVIDER, nativeId, strength: "strong" },
+    nativeConversationHeadRef: null,
+    status: "idle",
+    firstRunOrdinal: null,
+    lastRunOrdinal: null,
+    handoffIds: [],
+    forkedFrom: null,
+    pendingBackgroundTasks: [],
+    createdAt: DateTime.nowUnsafe(),
+    updatedAt: DateTime.nowUnsafe(),
+  };
+}
+
 const runtimePolicy = (runtimeMode: RuntimeMode) => ({
   runtimeMode,
   interactionMode: "default" as const,
@@ -68,6 +93,16 @@ class FakeDim {
   failSubmit = false;
   failModelUpdate = false;
   failPermissionUpdate = false;
+  failFork = false;
+  historyEvents: Array<{
+    readonly id: string;
+    readonly sequence: number;
+    readonly create_at: number;
+    readonly type: string;
+    readonly name: string;
+    readonly data: unknown;
+  }> = [];
+  forkSessionId = "dim-forked";
   private nextEvent = 1;
   private nextInput = 1;
 
@@ -201,7 +236,28 @@ class FakeDim {
         case "session.mcp_temporary.detach":
           return {};
         case "session.history":
-          return { events: [], through: 0, nextAfter: 0, done: true };
+          return {
+            events: self.historyEvents,
+            through: self.historyEvents.at(-1)?.sequence ?? 0,
+            nextAfter: self.historyEvents.at(-1)?.sequence ?? 0,
+            done: true,
+          };
+        case "session.fork":
+          if (self.failFork) {
+            return yield* new DimTransportError({ detail: "fork failed" });
+          }
+          return { sessionId: self.forkSessionId, sequence: 1 };
+        case "session.methods":
+          return {
+            methods: [
+              { name: "session.context.compact", mutating: true },
+              { name: "session.context.usage", mutating: false },
+              { name: "session.question.pending", mutating: false },
+              { name: "session.question.respond", mutating: true },
+              { name: "session.rename", mutating: true },
+              { name: "session.exec.stop", mutating: true },
+            ],
+          };
         default:
           return {};
       }
@@ -661,5 +717,139 @@ describe("DimAdapter close", () => {
       yield* Fiber.join(fiber);
       assert.strictEqual(fake.requestsOf("session.stop").length, 0);
     }).pipe(Effect.provide(layers)),
+  );
+});
+
+const providerTurnStub = (
+  providerThreadId: OrchestrationV2ProviderThread["id"],
+  nativeTurnId: string,
+): OrchestrationV2ProviderTurn => ({
+  id: ProviderTurnId.make(`provider-turn:${nativeTurnId}`),
+  providerThreadId,
+  nodeId: NodeId.make(`node:${nativeTurnId}`),
+  runAttemptId: null,
+  nativeTurnRef: { driver: DIM_PROVIDER, nativeId: nativeTurnId, strength: "strong" },
+  ordinal: 1,
+  status: "completed",
+  startedAt: DateTime.nowUnsafe(),
+  completedAt: DateTime.nowUnsafe(),
+});
+
+describe("DimAdapter fork", () => {
+  it.effect("forks at the selected turn's turn/end sequence", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      const thread = yield* ensureThread(harness.runtime);
+      const mcp = yield* McpProviderSessions.McpProviderSessions;
+      yield* mcp.set({
+        environmentId: EnvironmentId.make("env-test"),
+        threadId: ThreadId.make("thread-forked"),
+        providerSessionId: PROVIDER_SESSION_ID,
+        providerInstanceId: INSTANCE_ID,
+        endpoint: "http://127.0.0.1:1234/mcp",
+        authorizationHeader: "Bearer test",
+        browserToolsAvailable: false,
+      });
+      harness.fake.historyEvents = [
+        {
+          id: "e2",
+          sequence: 2,
+          create_at: 2,
+          type: "turn",
+          name: "start",
+          data: { turn_id: "turn-a" },
+        },
+        {
+          id: "e8",
+          sequence: 8,
+          create_at: 8,
+          type: "turn",
+          name: "end",
+          data: { turn_id: "turn-a", status: "completed", reason: "end_turn" },
+        },
+        {
+          id: "e18",
+          sequence: 18,
+          create_at: 18,
+          type: "turn",
+          name: "end",
+          data: { turn_id: "turn-b", status: "completed", reason: "end_turn" },
+        },
+      ];
+      const sourceTurn = providerTurnStub(thread.id, "turn-a");
+      const forked = yield* harness.runtime.forkThread({
+        sourceProviderThread: thread,
+        sourceProviderTurns: [sourceTurn],
+        providerTurnId: sourceTurn.id,
+        targetThreadId: ThreadId.make("thread-forked"),
+      });
+      assert.deepEqual(harness.fake.requestsOf("session.fork"), [{ sessionId: SESSION_ID, at: 8 }]);
+      assert.strictEqual(forked.nativeThreadRef?.nativeId, harness.fake.forkSessionId);
+      assert.strictEqual(forked.appThreadId, ThreadId.make("thread-forked"));
+      assert.deepEqual(forked.forkedFrom, {
+        providerThreadId: thread.id,
+        providerTurnId: sourceTurn.id,
+      });
+      assert.isTrue(
+        harness.fake
+          .requestsOf("session.attach")
+          .some((params) => params["sessionId"] === harness.fake.forkSessionId),
+      );
+      assert.isTrue(
+        harness.fake
+          .requestsOf("session.mcp_temporary.attach")
+          .some((params) => params["sessionId"] === harness.fake.forkSessionId),
+      );
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("detaches a source session the runtime only borrowed for the fork", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      harness.fake.historyEvents = [
+        {
+          id: "e2",
+          sequence: 2,
+          create_at: 2,
+          type: "turn",
+          name: "end",
+          data: { turn_id: "turn-a", status: "completed", reason: "end_turn" },
+        },
+      ];
+      const source = attachedThread("dim-source");
+      yield* harness.runtime.forkThread({
+        sourceProviderThread: source,
+        targetThreadId: ThreadId.make("thread-forked"),
+      });
+      assert.deepEqual(harness.fake.requestsOf("session.attach"), [
+        { sessionId: "dim-source" },
+        { sessionId: harness.fake.forkSessionId },
+      ]);
+      assert.deepEqual(harness.fake.requestsOf("session.detach"), [{ sessionId: "dim-source" }]);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("forks at the newest turn/end when no turn is selected", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      const thread = yield* ensureThread(harness.runtime);
+      harness.fake.historyEvents = [
+        {
+          id: "e18",
+          sequence: 18,
+          create_at: 18,
+          type: "turn",
+          name: "end",
+          data: { turn_id: "turn-b", status: "completed", reason: "end_turn" },
+        },
+      ];
+      yield* harness.runtime.forkThread({
+        sourceProviderThread: thread,
+        targetThreadId: ThreadId.make("thread-forked"),
+      });
+      assert.deepEqual(harness.fake.requestsOf("session.fork"), [
+        { sessionId: SESSION_ID, at: 18 },
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
   );
 });

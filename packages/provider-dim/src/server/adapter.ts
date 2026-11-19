@@ -44,8 +44,10 @@ import {
   dimProviderFailure,
   dimToolItemKind,
   dimToolResults,
+  dimLatestTurnEndSequence,
   dimToolUse,
   dimTurnEnd,
+  dimTurnEndSequence,
   dimUserInput,
 } from "./events.ts";
 import {
@@ -83,8 +85,8 @@ const DIM_CAPABILITIES: OrchestrationV2ProviderCapabilities = {
     canCreateEmptyThread: true,
     canReadThreadSnapshot: true,
     canRollbackThread: false,
-    canForkThread: false,
-    canForkFromTurn: false,
+    canForkThread: true,
+    canForkFromTurn: true,
     canForkFromSubagentThread: false,
     exposesNativeThreadId: true,
   },
@@ -1551,6 +1553,25 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           ),
         );
 
+      const readHistory = Effect.fn("DimAdapter.readHistory")(function* (sessionId: string) {
+        const collected: Array<DimSessionEvent["event"]> = [];
+        let after: number | undefined;
+        for (let page = 0; page < 100; page += 1) {
+          const answer = yield* decodeHistory(
+            yield* connection.request("session.history", {
+              sessionId,
+              branchId: DIM_BRANCH,
+              limit: 256,
+              ...(after === undefined ? {} : { after }),
+            }),
+          );
+          collected.push(...answer.events);
+          if (answer.done || answer.nextAfter === after) break;
+          after = answer.nextAfter;
+        }
+        return collected;
+      });
+
       const runtime: ProviderAdapter.ProviderAdapterV2SessionRuntime = {
         instanceId: options.instanceId,
         driver: DIM_PROVIDER,
@@ -1871,32 +1892,16 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
               cause: "Dim snapshot requested for a thread this session does not host",
             });
           }
-          const collected: Array<DimSessionEvent["event"]> = [];
-          let after: number | undefined;
-          for (let page = 0; page < 100; page += 1) {
-            const answer = yield* decodeHistory(
-              yield* connection
-                .request("session.history", {
-                  sessionId: session.sessionId,
-                  branchId: DIM_BRANCH,
-                  limit: 256,
-                  ...(after === undefined ? {} : { after }),
-                })
-                .pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new ProviderAdapter.ProviderAdapterReadThreadSnapshotError({
-                        driver: DIM_PROVIDER,
-                        providerThreadId: snapshotInput.providerThread.id,
-                        cause,
-                      }),
-                  ),
-                ),
-            );
-            collected.push(...answer.events);
-            if (answer.done || answer.nextAfter === after) break;
-            after = answer.nextAfter;
-          }
+          const collected = yield* readHistory(session.sessionId).pipe(
+            Effect.mapError(
+              (cause) =>
+                new ProviderAdapter.ProviderAdapterReadThreadSnapshotError({
+                  driver: DIM_PROVIDER,
+                  providerThreadId: snapshotInput.providerThread.id,
+                  cause,
+                }),
+            ),
+          );
           const snapshot = buildDimThreadSnapshot({
             events: collected,
             threadId: snapshotInput.providerThread.appThreadId ?? input.threadId,
@@ -1946,15 +1951,128 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
             cause: "Dim does not support conversation rollback",
           });
         }),
-        forkThread: Effect.fn("DimAdapter.forkThread")(function* (
-          forkInput: ProviderAdapter.ProviderAdapterV2ForkThreadInput,
-        ) {
-          return yield* new ProviderAdapter.ProviderAdapterForkThreadError({
-            driver: DIM_PROVIDER,
-            providerThreadId: forkInput.sourceProviderThread.id,
-            cause: "Dim fork support arrives in a later release",
-          });
-        }),
+        forkThread: Effect.fn("DimAdapter.forkThread")(
+          function* (forkInput: ProviderAdapter.ProviderAdapterV2ForkThreadInput) {
+            if (activeTurn !== null) {
+              return yield* protocolError("Cannot fork while a Dim turn is active");
+            }
+            const source = forkInput.sourceProviderThread;
+            const sourceNativeId = source.nativeThreadRef?.nativeId;
+            if (sourceNativeId === null || sourceNativeId === undefined) {
+              return yield* protocolError("Dim fork source has no session id");
+            }
+            const attachedSource = threadState?.sessionId !== sourceNativeId;
+            if (attachedSource) {
+              yield* connection.request("session.attach", { sessionId: sourceNativeId });
+              threadState = {
+                sessionId: sourceNativeId,
+                cwd: sessionEntity.cwd,
+                providerThread: source,
+              };
+              yield* emit({
+                type: "provider_thread.updated",
+                driver: DIM_PROVIDER,
+                providerThread: source,
+              });
+            }
+            const history = yield* readHistory(sourceNativeId);
+            const sourceTurns = (forkInput.sourceProviderTurns ?? []).filter(
+              (turn) => turn.providerThreadId === source.id,
+            );
+            const targetTurn =
+              forkInput.providerTurnId === undefined
+                ? undefined
+                : sourceTurns.find((turn) => turn.id === forkInput.providerTurnId);
+            if (forkInput.providerTurnId !== undefined && targetTurn === undefined) {
+              return yield* protocolError("Dim fork target turn is missing");
+            }
+            const targetNativeTurnId =
+              targetTurn === undefined
+                ? undefined
+                : (targetTurn.nativeTurnRef?.nativeId ?? undefined);
+            if (targetTurn !== undefined && targetNativeTurnId === undefined) {
+              return yield* protocolError("Dim fork target turn has no native id");
+            }
+            const at =
+              targetNativeTurnId === undefined
+                ? dimLatestTurnEndSequence(history)
+                : dimTurnEndSequence(history, targetNativeTurnId);
+            if (at === undefined) {
+              return yield* protocolError("Dim fork needs a completed turn as its cut");
+            }
+            const reply = yield* connection.request("session.fork", {
+              sessionId: sourceNativeId,
+              at,
+            });
+            const forkedSessionId = recordString(reply, "sessionId");
+            if (forkedSessionId === undefined) {
+              return yield* protocolError("Dim session.fork returned no sessionId");
+            }
+            yield* connection.request("session.attach", { sessionId: forkedSessionId });
+            const now = yield* DateTime.now;
+            const providerThread: OrchestrationV2ProviderThread = {
+              id: idAllocator.derive.providerThread({
+                driver: DIM_PROVIDER,
+                providerInstanceId: options.instanceId,
+                nativeThreadId: forkedSessionId,
+              }),
+              driver: DIM_PROVIDER,
+              providerInstanceId: options.instanceId,
+              providerSessionId: input.providerSessionId,
+              appThreadId: forkInput.targetThreadId,
+              ownerNodeId: forkInput.ownerNodeId ?? null,
+              nativeThreadRef: {
+                driver: DIM_PROVIDER,
+                nativeId: forkedSessionId,
+                strength: "strong",
+              },
+              nativeConversationHeadRef: null,
+              status: "idle",
+              firstRunOrdinal: null,
+              lastRunOrdinal: null,
+              handoffIds: [],
+              forkedFrom: {
+                providerThreadId: source.id,
+                ...(forkInput.providerTurnId === undefined
+                  ? {}
+                  : { providerTurnId: forkInput.providerTurnId }),
+              },
+              pendingBackgroundTasks: [],
+              createdAt: now,
+              updatedAt: now,
+            };
+            threadState = { sessionId: forkedSessionId, cwd: sessionEntity.cwd, providerThread };
+            appliedModel = null;
+            appliedEffort = null;
+            appliedPreset = null;
+            yield* emit({
+              type: "provider_thread.updated",
+              driver: DIM_PROVIDER,
+              providerThread,
+            });
+            yield* updateSession("ready");
+            yield* attachMcp(forkInput.targetThreadId, forkedSessionId).pipe(Effect.ignore);
+            // The fork borrowed the source session only to read and cut its history.
+            if (attachedSource) {
+              yield* connection
+                .request("session.detach", { sessionId: sourceNativeId })
+                .pipe(Effect.ignore);
+            }
+            return providerThread;
+          },
+          (effect, forkInput) =>
+            effect.pipe(
+              Effect.mapError((cause) =>
+                isProviderAdapterProtocolError(cause)
+                  ? cause
+                  : new ProviderAdapter.ProviderAdapterForkThreadError({
+                      driver: DIM_PROVIDER,
+                      providerThreadId: forkInput.sourceProviderThread.id,
+                      cause,
+                    }),
+              ),
+            ),
+        ),
       };
 
       return runtime;

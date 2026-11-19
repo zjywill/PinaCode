@@ -458,3 +458,26 @@ export function buildDimThreadSnapshot(input: {
 
   return { messages, providerTurns, reasoningMessageIds: reasoningIds };
 }
+
+/** The branch sequence of a turn's `turn/end`, the rest point `session.fork` accepts. */
+export function dimTurnEndSequence(
+  events: ReadonlyArray<DimSessionEvent["event"]>,
+  turnId: string,
+): number | undefined {
+  for (const event of events) {
+    if (event.type !== "turn" || event.name !== "end") continue;
+    if (dimTurnEnd(event.data)?.turnId === turnId) return event.sequence;
+  }
+  return undefined;
+}
+
+/** The newest `turn/end` sequence in a branch history. */
+export function dimLatestTurnEndSequence(
+  events: ReadonlyArray<DimSessionEvent["event"]>,
+): number | undefined {
+  let latest: number | undefined;
+  for (const event of events) {
+    if (event.type === "turn" && event.name === "end") latest = event.sequence;
+  }
+  return latest;
+}
