@@ -97,6 +97,8 @@ class FakeDim {
   failUsage = false;
   usageGate: Deferred.Deferred<void> | null = null;
   failRename = false;
+  failQuestionRespond = false;
+  pendingQuestionBatches: ReadonlyArray<unknown> = [];
   historyEvents: Array<{
     readonly id: string;
     readonly sequence: number;
@@ -293,6 +295,13 @@ class FakeDim {
             detail: "Compacted context does not reduce input.",
           });
         }
+        case "session.question.pending":
+          return { branchId: "main", through: 0, batches: self.pendingQuestionBatches };
+        case "session.question.respond":
+          if (self.failQuestionRespond) {
+            return yield* new DimTransportError({ detail: "question respond failed" });
+          }
+          return {};
         case "session.context.usage":
           if (self.usageGate !== null) {
             yield* Deferred.succeed(self.usageGate, undefined);
@@ -475,6 +484,8 @@ describe("DimAdapter context usage", () => {
   const completeTurn = (harness: {
     readonly fake: FakeDim;
     readonly runtime: ProviderAdapter.ProviderAdapterV2SessionRuntime;
+    readonly events: Ref.Ref<ReadonlyArray<Event>>;
+    readonly waitFor: (predicate: (event: Event) => boolean) => Effect.Effect<Event>;
   }) =>
     Effect.gen(function* () {
       const thread = yield* ensureThread(harness.runtime);
@@ -619,6 +630,7 @@ describe("DimAdapter runtime policy and model preferences", () => {
       });
       assert.deepEqual(create["model"], { provider: "fixture", modelId: "model" });
       assert.deepEqual(create["modelPreferences"], { reasoningEffort: "max" });
+      assert.strictEqual(create["interactive"], true);
 
       yield* harness.runtime.startTurn(
         turnInput(thread, {
@@ -689,6 +701,214 @@ describe("DimAdapter runtime policy and model preferences", () => {
         allowedTools: ["echo", "wait"],
         disallowedTools: ["exec"],
       });
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+});
+
+describe("DimAdapter questions", () => {
+  const askUserInput = () => ({
+    questions: [
+      {
+        id: "q1",
+        header: "Pick one",
+        question: "Which option?",
+        options: [{ label: "Alpha", description: "first" }, { label: "Beta" }],
+        multiSelect: false,
+        allowCustom: true,
+      },
+      {
+        id: "q2",
+        header: "Pick many",
+        question: "Which ones?",
+        options: [{ label: "One" }, { label: "Two" }],
+        multiSelect: true,
+        allowCustom: false,
+      },
+    ],
+  });
+
+  const askQuestion = (
+    harness: {
+      readonly fake: FakeDim;
+      readonly runtime: ProviderAdapter.ProviderAdapterV2SessionRuntime;
+    },
+    input: ReturnType<typeof askUserInput>,
+  ) =>
+    Effect.gen(function* () {
+      const thread = yield* ensureThread(harness.runtime);
+      yield* harness.runtime.startTurn(turnInput(thread));
+      harness.fake.pushEvent("input", "applied", { input_id: "input-1", mode: "queue" });
+      harness.fake.pushEvent("turn", "start", { turn_id: "ours" });
+      harness.fake.pushEvent("step", "tool-call", {
+        turn_id: "ours",
+        request_id: "request-1",
+        calls: [{ id: "call-1", name: "ask_user", input }],
+      });
+      return thread;
+    });
+
+  it.effect("turns an ask_user call into a user_input request and answers it", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      yield* askQuestion(harness, askUserInput());
+      const request = yield* harness.waitFor((event) => event.type === "runtime_request.updated");
+      const runtimeRequest =
+        request.type === "runtime_request.updated" ? request.runtimeRequest : undefined;
+      assert.strictEqual(runtimeRequest?.kind, "user_input");
+      assert.strictEqual(runtimeRequest?.status, "pending");
+      assert.isNotNull(runtimeRequest?.providerTurnId);
+      const item = yield* harness.waitFor(
+        (event) =>
+          event.type === "turn_item.updated" && event.turnItem.type === "user_input_request",
+      );
+      assert.deepEqual(
+        item.type === "turn_item.updated" && item.turnItem.type === "user_input_request"
+          ? item.turnItem.questions
+          : undefined,
+        [
+          {
+            id: "q1",
+            header: "Pick one",
+            question: "Which option?",
+            options: [
+              { label: "Alpha", description: "first", value: "Alpha" },
+              { label: "Beta", description: "Beta", value: "Beta" },
+            ],
+          },
+          {
+            id: "q2",
+            header: "Pick many",
+            question: "Which ones?",
+            options: [
+              { label: "One", description: "One", value: "One" },
+              { label: "Two", description: "Two", value: "Two" },
+            ],
+            multiSelect: true,
+            allowCustomAnswer: false,
+          },
+        ],
+      );
+      const seen = yield* Ref.get(harness.events);
+      assert.isTrue(
+        seen.every(
+          (event) => event.type !== "turn_item.updated" || event.turnItem.type !== "dynamic_tool",
+        ),
+      );
+
+      yield* harness.runtime.respondToRuntimeRequest({
+        requestId: runtimeRequest!.id,
+        answers: { q1: "Beta", q2: ["One", "Two"] },
+      });
+      assert.deepEqual(harness.fake.requestsOf("session.question.respond"), [
+        {
+          sessionId: SESSION_ID,
+          branchId: "main",
+          requestId: "request-1",
+          callId: "call-1",
+          answers: [
+            { questionId: "q1", selected: ["Beta"] },
+            { questionId: "q2", selected: ["One", "Two"] },
+          ],
+        },
+      ]);
+      const resolved = yield* harness.waitFor(
+        (event) =>
+          event.type === "runtime_request.updated" && event.runtimeRequest.status === "resolved",
+      );
+      assert.strictEqual(
+        resolved.type === "runtime_request.updated" ? resolved.runtimeRequest.id : undefined,
+        runtimeRequest!.id,
+      );
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("maps a typed answer to a custom answer", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      yield* askQuestion(harness, askUserInput());
+      const request = yield* harness.waitFor((event) => event.type === "runtime_request.updated");
+      const requestId =
+        request.type === "runtime_request.updated" ? request.runtimeRequest.id : undefined;
+      yield* harness.runtime.respondToRuntimeRequest({
+        requestId: requestId!,
+        answers: { q1: "Something else", q2: ["One"] },
+      });
+      assert.deepEqual(harness.fake.requestsOf("session.question.respond")[0]!["answers"], [
+        { questionId: "q1", selected: [], custom: "Something else" },
+        { questionId: "q2", selected: ["One"] },
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("declines when the response carries no answers", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      yield* askQuestion(harness, askUserInput());
+      const request = yield* harness.waitFor((event) => event.type === "runtime_request.updated");
+      const requestId =
+        request.type === "runtime_request.updated" ? request.runtimeRequest.id : undefined;
+      yield* harness.runtime.respondToRuntimeRequest({
+        requestId: requestId!,
+        decision: "decline",
+      });
+      assert.deepEqual(harness.fake.requestsOf("session.question.respond"), [
+        {
+          sessionId: SESSION_ID,
+          branchId: "main",
+          requestId: "request-1",
+          callId: "call-1",
+          declined: true,
+        },
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("cancels a question the turn ends without answering", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      yield* askQuestion(harness, askUserInput());
+      yield* harness.waitFor((event) => event.type === "runtime_request.updated");
+      harness.fake.pushEvent("turn", "end", {
+        turn_id: "ours",
+        status: "cancelled",
+        reason: "interrupted",
+      });
+      yield* harness.waitFor(isTerminal);
+      const seen = yield* Ref.get(harness.events);
+      const cancelled = seen.find(
+        (event) =>
+          event.type === "runtime_request.updated" && event.runtimeRequest.status === "cancelled",
+      );
+      assert.isDefined(cancelled);
+      assert.strictEqual(harness.fake.requestsOf("session.question.respond").length, 0);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("restores pending questions when a thread is resumed", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      harness.fake.pendingQuestionBatches = [
+        {
+          event_id: "event-1",
+          sequence: 1,
+          request_id: "request-9",
+          calls: [{ id: "call-9", name: "ask_user", input: askUserInput() }],
+        },
+      ];
+      const thread = yield* ensureThread(harness.runtime);
+      yield* harness.runtime.resumeThread({
+        providerThread: thread,
+        modelSelection: modelSelection(),
+        runtimePolicy: runtimePolicy("full-access"),
+      });
+      const request = yield* harness.waitFor((event) => event.type === "runtime_request.updated");
+      const runtimeRequest =
+        request.type === "runtime_request.updated" ? request.runtimeRequest : undefined;
+      assert.strictEqual(runtimeRequest?.kind, "user_input");
+      assert.strictEqual(runtimeRequest?.providerTurnId, null);
+      assert.deepEqual(harness.fake.requestsOf("session.question.pending"), [
+        { sessionId: SESSION_ID, branchId: "main" },
+      ]);
     }).pipe(Effect.scoped, Effect.provide(layers)),
   );
 });

@@ -13,6 +13,7 @@ import { assert, describe, it } from "@effect/vitest";
 
 import {
   buildDimThreadSnapshot,
+  dimAskUserQuestions,
   dimEffortDescriptor,
   dimModelFromCatalog,
   dimProviderFailure,
@@ -154,6 +155,34 @@ describe("buildDimThreadSnapshot", () => {
     });
     assert.strictEqual(snapshot.providerTurns[0]!.status, "running");
     assert.isNull(snapshot.providerTurns[0]!.completedAt);
+  });
+});
+
+describe("dimAskUserQuestions", () => {
+  const input = (questionCount: number, optionCount: number) => ({
+    questions: Array.from({ length: questionCount }, (_, index) => ({
+      id: `q${index}`,
+      question: `Question ${index}?`,
+      options: Array.from({ length: optionCount }, (_, option) => ({
+        label: `Option ${index}-${option}`,
+      })),
+    })),
+  });
+
+  it("keeps questions past Dim's own count limits", () => {
+    const questions = dimAskUserQuestions(input(5, 7));
+    assert.strictEqual(questions?.length, 5);
+    assert.strictEqual(questions?.[0]?.options.length, 7);
+    assert.strictEqual(questions?.[0]?.header, "Question 0?");
+    assert.deepEqual(questions?.[0]?.options[0], {
+      label: "Option 0-0",
+      description: "Option 0-0",
+      value: "Option 0-0",
+    });
+  });
+
+  it("rejects an input without question text", () => {
+    assert.strictEqual(dimAskUserQuestions({ questions: [{ question: "", options: [] }] }), null);
   });
 });
 

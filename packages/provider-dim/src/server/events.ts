@@ -5,6 +5,7 @@ import type {
   OrchestrationV2ProviderFailure,
   OrchestrationV2ProviderThread,
   OrchestrationV2ProviderTurn,
+  OrchestrationV2UserInputQuestion,
   ProviderDriverKind,
   ProviderOptionDescriptor,
   ProviderRequestKind,
@@ -181,6 +182,56 @@ export function dimToolItemKind(name: string): DimToolItemKind {
   if (name === "exec" || name === "exec_stop") return "command_execution";
   if (name === "write" || name === "edit") return "file_change";
   return "dynamic_tool";
+}
+
+export function dimToolCalls(
+  data: unknown,
+): ReadonlyArray<{ callId: string; name: string; input: Record<string, unknown> }> {
+  return (recordArray(data, "calls") ?? []).flatMap((entry) => {
+    if (!isRecord(entry)) return [];
+    const callId = recordString(entry, "id");
+    const name = recordString(entry, "name");
+    if (callId === undefined || name === undefined) return [];
+    const input = recordField(entry, "input");
+    return [{ callId, name, input: isRecord(input) ? input : {} }];
+  });
+}
+
+/** Maps an `ask_user` input to T3 questions; Dim validates its own limits and rejects the rest. */
+export function dimAskUserQuestions(
+  input: unknown,
+): ReadonlyArray<OrchestrationV2UserInputQuestion> | null {
+  const raw = recordArray(input, "questions");
+  if (raw === undefined || raw.length === 0) return null;
+  const questions: Array<OrchestrationV2UserInputQuestion> = [];
+  for (const [index, entry] of raw.entries()) {
+    if (!isRecord(entry)) return null;
+    const question = recordString(entry, "question");
+    const options = recordArray(entry, "options");
+    if (question === undefined || question.trim() === "" || options === undefined) return null;
+    const mapped: Array<OrchestrationV2UserInputQuestion["options"][number]> = [];
+    for (const option of options) {
+      if (!isRecord(option)) return null;
+      const label = recordString(option, "label");
+      if (label === undefined || label.trim() === "") return null;
+      const description = recordString(option, "description");
+      mapped.push({
+        label,
+        description: description?.trim() ? description : label,
+        value: label,
+      });
+    }
+    const header = recordString(entry, "header")?.trim();
+    questions.push({
+      id: recordString(entry, "id") ?? String(index + 1),
+      header: header !== undefined && header !== "" ? header : question,
+      question,
+      options: mapped,
+      ...(entry["multiSelect"] === true ? { multiSelect: true } : {}),
+      ...(entry["allowCustom"] === false ? { allowCustomAnswer: false } : {}),
+    });
+  }
+  return questions;
 }
 
 export function dimApprovalKind(name: string): ProviderRequestKind {

@@ -10,8 +10,10 @@ import type {
   OrchestrationV2ProviderTurn,
   OrchestrationV2RuntimeRequest,
   OrchestrationV2TurnItem,
+  OrchestrationV2UserInputQuestion,
   ProviderApprovalDecision,
   ProviderInstanceId,
+  ProviderUserInputAnswers,
   RuntimeRequestId,
   ThreadId,
 } from "@t3tools/contracts";
@@ -43,6 +45,8 @@ import {
   dimModelOutputEnd,
   dimModelProgress,
   dimProviderFailure,
+  dimAskUserQuestions,
+  dimToolCalls,
   dimToolItemKind,
   dimToolResults,
   dimLatestTurnEndSequence,
@@ -248,6 +252,17 @@ interface PendingApproval {
   turnItem: OrchestrationV2TurnItem;
 }
 
+interface PendingQuestion {
+  /** The batch's `request_id` from `step/tool-call`. */
+  readonly dimRequestId: string;
+  readonly callId: string;
+  readonly requestId: RuntimeRequestId;
+  readonly questions: ReadonlyArray<OrchestrationV2UserInputQuestion>;
+  runtimeRequest: OrchestrationV2RuntimeRequest;
+  node: OrchestrationV2ExecutionNode;
+  turnItem: OrchestrationV2TurnItem;
+}
+
 interface ThreadState {
   readonly sessionId: string;
   readonly cwd: string;
@@ -271,6 +286,48 @@ function dimSelection(selection: ModelSelection): {
     model: parsed === null ? null : { provider: parsed.providerId, modelId: parsed.modelId },
     effort: typeof effort === "string" && effort !== "default" ? effort : null,
   };
+}
+
+/** The `session.question.respond` answers, or null when a question has no answer Dim accepts. */
+function dimQuestionAnswers(
+  questions: ReadonlyArray<OrchestrationV2UserInputQuestion>,
+  answers: ProviderUserInputAnswers,
+): ReadonlyArray<{ questionId: string; selected: ReadonlyArray<string>; custom?: string }> | null {
+  const mapped: Array<{
+    questionId: string;
+    selected: ReadonlyArray<string>;
+    custom?: string;
+  }> = [];
+  for (const question of questions) {
+    const raw = answers[question.id];
+    const values =
+      typeof raw === "string"
+        ? [raw]
+        : Array.isArray(raw)
+          ? raw.filter((value): value is string => typeof value === "string")
+          : [];
+    if (values.length === 0) return null;
+    const labels = new Set(question.options.map((option) => option.label));
+    const selected: string[] = [];
+    let custom: string | undefined;
+    for (const value of values) {
+      if (labels.has(value)) {
+        if (!selected.includes(value)) selected.push(value);
+      } else if (custom === undefined) {
+        custom = value;
+      } else {
+        return null;
+      }
+    }
+    if (question.multiSelect !== true && selected.length > 1) return null;
+    if (selected.length > 0 && question.multiSelect !== true) custom = undefined;
+    if (selected.length === 0 && custom === undefined) return null;
+    if (custom !== undefined && (question.allowCustomAnswer === false || custom.trim() === "")) {
+      return null;
+    }
+    mapped.push({ questionId: question.id, selected, ...(custom === undefined ? {} : { custom }) });
+  }
+  return mapped;
 }
 
 const decodeCreate = (
@@ -369,6 +426,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
       let mcpRenew: Fiber.Fiber<void, never> | null = null;
       let pendingImport: string | null | undefined = input.initialNativeThreadId;
       const pendingApprovals = new Map<string, PendingApproval>();
+      const pendingQuestions = new Map<string, PendingQuestion>();
       const seenEventIds = new Set<string>();
       const seenOrder: string[] = [];
 
@@ -802,6 +860,10 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
             status: interrupted ? "cancelled" : "completed",
           });
         }
+        for (const question of pendingQuestions.values()) {
+          pendingQuestions.delete(String(question.requestId));
+          yield* settleQuestion(question, "cancelled");
+        }
         const failure =
           status === "failed"
             ? (turn.lastFailure ?? dimProviderFailure({ error: end.reason }))
@@ -1070,7 +1132,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           const callId = recordString(data, "call_id");
           const toolName = recordString(data, "name");
           if (callId === undefined || toolName === undefined) return;
-          if (turn.toolItems.has(callId)) return;
+          if (toolName === "ask_user" || turn.toolItems.has(callId)) return;
           const startedAt = yield* DateTime.now;
           turn.toolItems.set(callId, {
             nativeItemId: `tool:${callId}`,
@@ -1084,7 +1146,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         }
         if (name === "step/tool-use") {
           const call = dimToolUse(data);
-          if (call === null) return;
+          if (call === null || call.name === "ask_user") return;
           const existing = turn.toolItems.get(call.callId);
           if (existing === undefined) {
             const startedAt = yield* DateTime.now;
@@ -1101,9 +1163,31 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           yield* emitToolItem(turn, turn.toolItems.get(call.callId)!, null);
           return;
         }
+        if (name === "step/tool-call") {
+          const dimRequestId = recordString(data, "request_id");
+          if (dimRequestId === undefined) return;
+          for (const call of dimToolCalls(data)) {
+            if (call.name !== "ask_user") continue;
+            const questions = dimAskUserQuestions(call.input);
+            if (questions === null) continue;
+            yield* emitQuestion(turn, dimRequestId, call.callId, questions);
+          }
+          return;
+        }
         if (name === "step/tool-result") {
           const completedAt = yield* DateTime.now;
+          const dimRequestId = recordString(data, "request_id");
           for (const result of dimToolResults(data)) {
+            if (dimRequestId !== undefined) {
+              const question = findPendingQuestion(dimRequestId, result.callId);
+              if (question !== undefined) {
+                pendingQuestions.delete(String(question.requestId));
+                yield* settleQuestion(
+                  question,
+                  turn.stopSent || turn.pendingStopReason !== null ? "cancelled" : "resolved",
+                );
+              }
+            }
             const tool = turn.toolItems.get(result.callId);
             if (tool === undefined) continue;
             tool.status = result.isError
@@ -1273,6 +1357,161 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         if (approval === undefined) return;
         pendingApprovals.delete(nativeRequestId);
         yield* settleApproval(approval, "cancelled");
+      });
+
+      const findPendingQuestion = (dimRequestId: string, callId: string) =>
+        [...pendingQuestions.values()].find(
+          (entry) => entry.dimRequestId === dimRequestId && entry.callId === callId,
+        );
+
+      const emitQuestion = Effect.fn("DimAdapter.emitQuestion")(function* (
+        turn: ActiveDimTurn | null,
+        dimRequestId: string,
+        callId: string,
+        questions: ReadonlyArray<OrchestrationV2UserInputQuestion>,
+      ) {
+        if (findPendingQuestion(dimRequestId, callId) !== undefined) return;
+        const createdAt = yield* DateTime.now;
+        const nativeRequestId = `${dimRequestId}:${callId}`;
+        const requestId = yield* idAllocator.allocate.runtimeRequest({
+          driver: DIM_PROVIDER,
+          ...(turn === null ? {} : { providerTurnId: turn.providerTurn.id }),
+          nativeRequestId,
+        });
+        const threadId =
+          turn?.turnInput.threadId ?? threadState?.providerThread.appThreadId ?? input.threadId;
+        const providerThreadId = threadState?.providerThread.id ?? null;
+        const providerTurnId = turn?.providerTurn.id ?? null;
+        const nativeRef = {
+          driver: DIM_PROVIDER,
+          nativeId: nativeRequestId,
+          strength: "strong" as const,
+        };
+        const runtimeRequest: OrchestrationV2RuntimeRequest = {
+          id: requestId,
+          nodeId: idAllocator.derive.approvalNode({ requestId }),
+          providerTurnId,
+          nativeRequestRef: nativeRef,
+          kind: "user_input",
+          status: "pending",
+          responseCapability: { type: "live", providerSessionId: sessionEntity.id },
+          createdAt,
+          resolvedAt: null,
+        };
+        const node: OrchestrationV2ExecutionNode = {
+          id: runtimeRequest.nodeId,
+          threadId,
+          runId: turn?.turnInput.runId ?? null,
+          parentNodeId: turn?.turnInput.rootNodeId ?? null,
+          rootNodeId: turn?.turnInput.rootNodeId ?? runtimeRequest.nodeId,
+          kind: "user_input_request",
+          status: "waiting",
+          countsForRun: false,
+          providerThreadId,
+          providerTurnId,
+          nativeItemRef: nativeRef,
+          runtimeRequestId: requestId,
+          checkpointScopeId: null,
+          startedAt: createdAt,
+          completedAt: null,
+        };
+        const turnItem: OrchestrationV2TurnItem = {
+          id: idAllocator.derive.approvalTurnItem({ requestId }),
+          threadId,
+          runId: turn?.turnInput.runId ?? null,
+          nodeId: node.id,
+          providerThreadId,
+          providerTurnId,
+          nativeItemRef: nativeRef,
+          parentItemId: null,
+          ordinal: turn === null ? 0 : itemOrdinal(turn, `question:${nativeRequestId}`),
+          status: "waiting",
+          title: questions[0]?.header ?? "Question",
+          startedAt: createdAt,
+          completedAt: null,
+          updatedAt: createdAt,
+          type: "user_input_request",
+          requestId,
+          questions,
+        };
+        pendingQuestions.set(String(requestId), {
+          dimRequestId,
+          callId,
+          requestId,
+          questions,
+          runtimeRequest,
+          node,
+          turnItem,
+        });
+        yield* emit({
+          type: "runtime_request.updated",
+          driver: DIM_PROVIDER,
+          threadId,
+          runtimeRequest,
+        });
+        yield* emit({ type: "node.updated", driver: DIM_PROVIDER, node });
+        yield* emit({ type: "turn_item.updated", driver: DIM_PROVIDER, turnItem });
+      });
+
+      const settleQuestion = Effect.fn("DimAdapter.settleQuestion")(function* (
+        question: PendingQuestion,
+        status: "resolved" | "cancelled",
+        resolution: {
+          readonly decision?: ProviderApprovalDecision;
+          readonly answers?: ProviderUserInputAnswers;
+        } = {},
+      ) {
+        const resolvedAt = yield* DateTime.now;
+        question.runtimeRequest = {
+          ...question.runtimeRequest,
+          status,
+          resolvedAt,
+          ...(resolution.decision === undefined ? {} : { decision: resolution.decision }),
+          ...(resolution.answers === undefined ? {} : { answers: resolution.answers }),
+        };
+        question.node = {
+          ...question.node,
+          status: status === "cancelled" ? "cancelled" : "completed",
+          completedAt: resolvedAt,
+        };
+        question.turnItem = {
+          ...question.turnItem,
+          status: status === "cancelled" ? "cancelled" : "completed",
+          completedAt: resolvedAt,
+          updatedAt: resolvedAt,
+        };
+        yield* emit({
+          type: "runtime_request.updated",
+          driver: DIM_PROVIDER,
+          threadId: question.node.threadId,
+          runtimeRequest: question.runtimeRequest,
+        });
+        yield* emit({ type: "node.updated", driver: DIM_PROVIDER, node: question.node });
+        yield* emit({
+          type: "turn_item.updated",
+          driver: DIM_PROVIDER,
+          turnItem: question.turnItem,
+        });
+      });
+
+      const restorePendingQuestions = Effect.fn("DimAdapter.restorePendingQuestions")(function* (
+        sessionId: string,
+      ) {
+        const reply = yield* connection
+          .request("session.question.pending", { sessionId, branchId: DIM_BRANCH })
+          .pipe(Effect.orElseSucceed(() => undefined));
+        if (reply === undefined) return;
+        for (const batch of recordArray(reply, "batches") ?? []) {
+          if (!isRecord(batch)) continue;
+          const dimRequestId = recordString(batch, "request_id");
+          if (dimRequestId === undefined) continue;
+          for (const call of dimToolCalls(batch)) {
+            if (call.name !== "ask_user") continue;
+            const questions = dimAskUserQuestions(call.input);
+            if (questions === null) continue;
+            yield* emitQuestion(null, dimRequestId, call.callId, questions);
+          }
+        }
       });
 
       const handleModelProgress = Effect.fn("DimAdapter.handleModelProgress")(function* (
@@ -1578,6 +1817,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
               providerSessionId: input.providerSessionId,
             };
             yield* ensurePreset(threadInput.runtimePolicy.runtimeMode);
+            yield* restorePendingQuestions(wantedSessionId);
             return threadState.providerThread;
           }
           yield* connection.request("session.attach", { sessionId: wantedSessionId });
@@ -1625,6 +1865,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           });
           yield* updateSession("ready");
           yield* attachMcp(threadInput.threadId, wantedSessionId).pipe(Effect.ignore);
+          yield* restorePendingQuestions(wantedSessionId);
           return providerThread;
         }
 
@@ -1641,6 +1882,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
               allowedTools: [],
               disallowedTools: [],
             },
+            interactive: true,
             origin: "client",
           }),
         );
@@ -2038,6 +2280,51 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         respondToRuntimeRequest: Effect.fn("DimAdapter.respondToRuntimeRequest")(function* (
           requestInput: ProviderAdapter.ProviderAdapterV2RuntimeRequestResponseInput,
         ) {
+          const question = pendingQuestions.get(String(requestInput.requestId));
+          if (question !== undefined) {
+            const session = threadState;
+            if (session === null) {
+              return yield* protocolError("Dim session is not attached");
+            }
+            const decisionDeclines =
+              requestInput.decision === "decline" || requestInput.decision === "cancel";
+            const providedAnswers = requestInput.answers;
+            const answers =
+              decisionDeclines || providedAnswers === undefined
+                ? null
+                : dimQuestionAnswers(question.questions, providedAnswers);
+            if (!decisionDeclines && providedAnswers !== undefined && answers === null) {
+              return yield* protocolError("Dim cannot use these answers for its questions");
+            }
+            yield* connection
+              .request("session.question.respond", {
+                sessionId: session.sessionId,
+                branchId: DIM_BRANCH,
+                requestId: question.dimRequestId,
+                callId: question.callId,
+                ...(answers === null ? { declined: true } : { answers }),
+              })
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new ProviderAdapter.ProviderAdapterRuntimeRequestResponseError({
+                      driver: DIM_PROVIDER,
+                      requestId: requestInput.requestId,
+                      cause,
+                    }),
+                ),
+              );
+            pendingQuestions.delete(String(question.requestId));
+            yield* settleQuestion(
+              question,
+              requestInput.decision === "cancel" ? "cancelled" : "resolved",
+              {
+                ...(requestInput.decision === undefined ? {} : { decision: requestInput.decision }),
+                ...(providedAnswers === undefined ? {} : { answers: providedAnswers }),
+              },
+            );
+            return;
+          }
           const approval = [...pendingApprovals.values()].find(
             (entry) => entry.requestId === requestInput.requestId,
           );
