@@ -103,6 +103,7 @@ import { useManagedPolicy } from "~/state/managedPolicy";
 import { ExpandableText } from "./ExpandableText";
 import { IntervalSecondsField } from "./IntervalSecondsField";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
+import { hasNativeSessions } from "./providerNativeSessions";
 import { useSecretSources } from "./SecretSourceInput";
 import { TextGeneratorsSettings } from "./TextGeneratorsSettings";
 import { UsageProviderSettings } from "./UsageProviderSettings";
@@ -1337,7 +1338,7 @@ function ProviderInstanceRow({
   const allProjects = useProjects();
   const secretSources = useSecretSources(environmentId);
   const acpProjects =
-    mode === "editor" && liveProvider?.driver === "acpRegistry"
+    mode === "editor" && hasNativeSessions(liveProvider)
       ? allProjects.filter((project) => project.environmentId === environmentId)
       : undefined;
   const instance = explicitInstance ?? { driver };

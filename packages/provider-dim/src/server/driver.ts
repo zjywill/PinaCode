@@ -34,6 +34,7 @@ import {
 import { DimSettings } from "../settings.ts";
 import { DIM_PROVIDER, makeDimAdapterV2 } from "./adapter.ts";
 import { makeDimDaemon } from "./daemon.ts";
+import { makeDimSessionManagement } from "./sessionManagement.ts";
 import { checkDimProviderStatus, makePendingDimProvider } from "./status.ts";
 
 const DRIVER_KIND = ProviderDriverKind.make("dim");
@@ -159,6 +160,8 @@ export const DimDriver: ProviderDriver<DimSettings, DimDriverEnv> = {
       snapshot,
       refreshModels: () => snapshot.refresh.pipe(Effect.asVoid),
       orchestrationAdapter: adapter,
+      // The server's session list/import RPCs dispatch on this, whatever the driver.
+      acpSessionManagement: makeDimSessionManagement(daemon),
       textGeneration: unsupportedTextGeneration(),
     } satisfies ProviderInstance;
   }),

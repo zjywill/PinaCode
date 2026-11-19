@@ -45,7 +45,7 @@ export const DIM_PRESENTATION = {
 } as const;
 
 export const DIM_NATIVE_SESSIONS = {
-  canList: false,
+  canList: true,
   canLoad: true,
   canResume: true,
   canDelete: false,
