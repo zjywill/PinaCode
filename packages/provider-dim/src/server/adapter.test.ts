@@ -96,6 +96,7 @@ class FakeDim {
   failFork = false;
   failUsage = false;
   usageGate: Deferred.Deferred<void> | null = null;
+  failRename = false;
   historyEvents: Array<{
     readonly id: string;
     readonly sequence: number;
@@ -309,6 +310,9 @@ class FakeDim {
             baselineSource: "provider_baseline",
           };
         case "session.rename":
+          if (self.failRename) {
+            return yield* new DimTransportError({ detail: "rename failed" });
+          }
           return {
             title: params["title"],
             titleSource: "manual",
@@ -540,6 +544,23 @@ describe("DimAdapter context usage", () => {
         "completed",
       );
       assert.strictEqual(usage, undefined);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+});
+
+describe("DimAdapter thread title", () => {
+  it.effect("renames the Dim session and ignores a failed rename", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      const thread = yield* ensureThread(harness.runtime);
+      harness.fake.failRename = true;
+      yield* harness.runtime.applyThreadTitle!({ providerThread: thread, title: "Fix the build" });
+      harness.fake.failRename = false;
+      yield* harness.runtime.applyThreadTitle!({ providerThread: thread, title: "Fix the build" });
+      assert.deepEqual(harness.fake.requestsOf("session.rename"), [
+        { sessionId: SESSION_ID, title: "Fix the build" },
+        { sessionId: SESSION_ID, title: "Fix the build" },
+      ]);
     }).pipe(Effect.scoped, Effect.provide(layers)),
   );
 });

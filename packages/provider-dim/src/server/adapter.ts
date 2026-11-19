@@ -2152,6 +2152,18 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
             );
           },
         ),
+        applyThreadTitle: Effect.fn("DimAdapter.applyThreadTitle")(function* (titleInput: {
+          readonly providerThread: OrchestrationV2ProviderThread;
+          readonly title: string;
+        }) {
+          const session = threadState;
+          if (session === null || session.providerThread.id !== titleInput.providerThread.id)
+            return;
+          // T3 already owns the title, so the Dim mirror is best effort.
+          yield* connection
+            .request("session.rename", { sessionId: session.sessionId, title: titleInput.title })
+            .pipe(Effect.ignore);
+        }),
         rollbackThread: Effect.fn("DimAdapter.rollbackThread")(function* (
           rollbackInput: ProviderAdapter.ProviderAdapterV2RollbackThreadInput,
         ) {
