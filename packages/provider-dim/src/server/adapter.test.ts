@@ -672,6 +672,154 @@ describe("DimAdapter streaming", () => {
       assert.isAtLeast(streaming.length, 2);
     }).pipe(Effect.scoped, Effect.provide(layers)),
   );
+
+  const pushProgress = (
+    harness: { readonly fake: FakeDim },
+    params: {
+      readonly requestId: string;
+      readonly text?: string;
+      readonly textOffset?: number;
+      readonly thinking?: string;
+      readonly thinkingOffset?: number;
+    },
+  ) =>
+    harness.fake.push({
+      method: "session.model.progress",
+      params: {
+        sessionId: SESSION_ID,
+        branchId: "main",
+        turnId: "turn-1",
+        text: "",
+        textOffset: 0,
+        thinking: "",
+        thinkingOffset: 0,
+        tools: [],
+        ...params,
+      },
+    });
+
+  const assistantMessages = (events: ReadonlyArray<Event>) =>
+    events.flatMap((event) =>
+      event.type === "message.updated" && event.message.role === "assistant" ? [event.message] : [],
+    );
+
+  it.effect("streams text that step/text has not committed yet", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      const thread = yield* ensureThread(harness.runtime);
+      yield* harness.runtime.startTurn(turnInput(thread));
+      harness.fake.pushEvent("input", "applied", { input_id: "input-1", mode: "queue" });
+      harness.fake.pushEvent("turn", "start", { turn_id: "turn-1" });
+      pushProgress(harness, { requestId: "request-1", text: "live text" });
+      yield* TestClock.adjust("60 millis");
+      const progress = yield* harness.waitFor(
+        (event) => event.type === "message.updated" && event.message.role === "assistant",
+      );
+      assert.strictEqual(
+        progress.type === "message.updated" ? progress.message.text : undefined,
+        "live text",
+      );
+      assert.isTrue(progress.type === "message.updated" ? progress.message.streaming : false);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("puts committed text before the live tail without repeating it", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      const thread = yield* ensureThread(harness.runtime);
+      yield* harness.runtime.startTurn(turnInput(thread));
+      harness.fake.pushEvent("input", "applied", { input_id: "input-1", mode: "queue" });
+      harness.fake.pushEvent("turn", "start", { turn_id: "turn-1" });
+      harness.fake.pushEvent("step", "text", {
+        turn_id: "turn-1",
+        request_id: "request-1",
+        delta: "ab",
+      });
+      pushProgress(harness, { requestId: "request-1", text: "cd", textOffset: 2 });
+      yield* TestClock.adjust("60 millis");
+      yield* harness.waitFor(
+        (event) =>
+          event.type === "message.updated" &&
+          event.message.role === "assistant" &&
+          event.message.text === "abcd",
+      );
+      harness.fake.pushEvent("step", "text", {
+        turn_id: "turn-1",
+        request_id: "request-1",
+        delta: "cd",
+      });
+      pushProgress(harness, { requestId: "request-1", text: "ef", textOffset: 4 });
+      yield* TestClock.adjust("60 millis");
+      yield* harness.waitFor(
+        (event) =>
+          event.type === "message.updated" &&
+          event.message.role === "assistant" &&
+          event.message.text === "abcdef",
+      );
+      harness.fake.pushEvent("step", "text", {
+        turn_id: "turn-1",
+        request_id: "request-1",
+        delta: "ef",
+      });
+      harness.fake.pushEvent("step", "model-output-end", {
+        turn_id: "turn-1",
+        request_id: "request-1",
+        status: "completed",
+        finish_reason: "end_turn",
+      });
+      harness.fake.pushEvent("turn", "end", {
+        turn_id: "turn-1",
+        status: "completed",
+        reason: "end_turn",
+      });
+      yield* harness.waitFor(isTerminal);
+      const messages = assistantMessages(yield* Ref.get(harness.events));
+      assert.strictEqual(messages.at(-1)?.text, "abcdef");
+      assert.isFalse(messages.at(-1)?.streaming);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("counts progress offsets in Unicode scalars", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      const thread = yield* ensureThread(harness.runtime);
+      yield* harness.runtime.startTurn(turnInput(thread));
+      harness.fake.pushEvent("input", "applied", { input_id: "input-1", mode: "queue" });
+      harness.fake.pushEvent("turn", "start", { turn_id: "turn-1" });
+      harness.fake.pushEvent("step", "text", {
+        turn_id: "turn-1",
+        request_id: "request-1",
+        delta: "🙂",
+      });
+      pushProgress(harness, { requestId: "request-1", text: "ok", textOffset: 1 });
+      yield* TestClock.adjust("60 millis");
+      yield* harness.waitFor(
+        (event) =>
+          event.type === "message.updated" &&
+          event.message.role === "assistant" &&
+          event.message.text === "🙂ok",
+      );
+      harness.fake.pushEvent("step", "text", {
+        turn_id: "turn-1",
+        request_id: "request-1",
+        delta: "ok",
+      });
+      harness.fake.pushEvent("step", "model-output-end", {
+        turn_id: "turn-1",
+        request_id: "request-1",
+        status: "completed",
+        finish_reason: "end_turn",
+      });
+      harness.fake.pushEvent("turn", "end", {
+        turn_id: "turn-1",
+        status: "completed",
+        reason: "end_turn",
+      });
+      yield* harness.waitFor(isTerminal);
+      const messages = assistantMessages(yield* Ref.get(harness.events));
+      assert.strictEqual(messages.at(-1)?.text, "🙂ok");
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
 });
 
 const waitForEvent = (events: Queue.Queue<Event>, predicate: (event: Event) => boolean) =>

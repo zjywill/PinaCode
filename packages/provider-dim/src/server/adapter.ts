@@ -41,6 +41,7 @@ import {
   dimApprovalOptions,
   dimDelta,
   dimModelOutputEnd,
+  dimModelProgress,
   dimProviderFailure,
   dimToolItemKind,
   dimToolResults,
@@ -213,12 +214,21 @@ interface ActiveDimTurn {
   nextOrdinal: number;
   readonly textByRequest: Map<string, StreamState>;
   readonly thinkingByRequest: Map<string, StreamState>;
+  /** The last live text/thinking each request reported before its `step/*` commit. */
+  readonly progressByRequest: Map<string, DimProgressSnapshot>;
   readonly toolItems: Map<string, ToolItemState>;
   readonly steers: Map<
     string,
     { messageId: MessageId; inputEventId: string | null; done: boolean }
   >;
   lastFailure: OrchestrationV2ProviderFailure | null;
+}
+
+interface DimProgressSnapshot {
+  readonly text: string;
+  readonly textOffset: number;
+  readonly thinking: string;
+  readonly thinkingOffset: number;
 }
 
 interface StreamState {
@@ -451,6 +461,14 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           },
         });
 
+      // Progress offsets count Unicode scalars, so slice by code point rather than UTF-16.
+      const scalarPrefix = (text: string, count: number) =>
+        Array.from(text).slice(0, count).join("");
+
+      /** Published text followed by the request's unpublished tail, unless newer commits make it stale. */
+      const withLiveTail = (committed: string, live: string, offset: number) =>
+        Array.from(committed).length <= offset ? scalarPrefix(committed, offset) + live : committed;
+
       const emitAssistant = Effect.fn("DimAdapter.emitAssistant")(function* (
         turn: ActiveDimTurn,
         requestId: string,
@@ -458,7 +476,13 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         status: OrchestrationV2TurnItem["status"],
       ) {
         const state = turn.textByRequest.get(requestId);
-        if (state === undefined || state.text.trim() === "") return;
+        if (state === undefined) return;
+        const live = turn.progressByRequest.get(requestId);
+        const shown =
+          streaming && live !== undefined
+            ? withLiveTail(state.text, live.text, live.textOffset)
+            : state.text;
+        if (shown.trim() === "") return;
         const nativeItemId = `${threadState?.sessionId ?? ""}:text:${requestId}`;
         const emittedAt = yield* DateTime.now;
         const messageId = idAllocator.derive.messageFromProviderItem({
@@ -483,7 +507,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
             completedAt: streaming ? null : emittedAt,
             type: "assistant_message",
             messageId,
-            text: state.text,
+            text: shown,
             streaming,
           },
         });
@@ -499,7 +523,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
               nativeItemId,
             }),
             role: "assistant",
-            text: state.text,
+            text: shown,
             attachments: [],
             streaming,
             createdBy: "agent",
@@ -517,7 +541,13 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         status: OrchestrationV2TurnItem["status"],
       ) {
         const state = turn.thinkingByRequest.get(requestId);
-        if (state === undefined || state.text.trim() === "") return;
+        if (state === undefined) return;
+        const live = turn.progressByRequest.get(requestId);
+        const shown =
+          streaming && live !== undefined
+            ? withLiveTail(state.text, live.thinking, live.thinkingOffset)
+            : state.text;
+        if (shown.trim() === "") return;
         const nativeItemId = `${threadState?.sessionId ?? ""}:thinking:${requestId}`;
         const emittedAt = yield* DateTime.now;
         yield* emitNode(
@@ -537,7 +567,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
             title: null,
             completedAt: streaming ? null : emittedAt,
             type: "reasoning",
-            text: state.text,
+            text: shown,
             streaming,
           },
         });
@@ -1244,6 +1274,44 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         yield* settleApproval(approval, "cancelled");
       });
 
+      const handleModelProgress = Effect.fn("DimAdapter.handleModelProgress")(function* (
+        params: unknown,
+      ) {
+        const progress = dimModelProgress(params);
+        if (progress === null) return;
+        if (threadState !== null && progress.sessionId !== threadState.sessionId) return;
+        const turn = activeTurn;
+        if (turn === null || turn.dimTurnId === null) return;
+        // Progress names the request it belongs to; a turn it does not match is another thread's.
+        if (progress.turnId !== turn.dimTurnId || progress.requestId === null) return;
+        const requestId = progress.requestId;
+        turn.progressByRequest.set(requestId, {
+          text: progress.text,
+          textOffset: progress.textOffset,
+          thinking: progress.thinking,
+          thinkingOffset: progress.thinkingOffset,
+        });
+        const now = yield* DateTime.now;
+        const ensureState = (states: Map<string, StreamState>) => {
+          if (states.has(requestId)) return;
+          states.set(requestId, {
+            text: "",
+            startedAt: now,
+            completed: false,
+            flushScheduled: false,
+            flushFiber: null,
+          });
+        };
+        if (progress.text !== "") {
+          ensureState(turn.textByRequest);
+          yield* scheduleStreamFlush(turn, "text", requestId);
+        }
+        if (progress.thinking !== "") {
+          ensureState(turn.thinkingByRequest);
+          yield* scheduleStreamFlush(turn, "thinking", requestId);
+        }
+      });
+
       const handleNotice = Effect.fn("DimAdapter.handleNotice")(function* (notice: DimNotice) {
         if (notice.method === "session.event") {
           const event = dimEvent(notice.params);
@@ -1251,6 +1319,10 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           if (threadState !== null && event.sessionId !== threadState.sessionId) return;
           if (!rememberEvent(event.event.id)) return;
           yield* handleEvent(event);
+          return;
+        }
+        if (notice.method === "session.model.progress") {
+          yield* handleModelProgress(notice.params);
           return;
         }
         if (notice.method === "session.state") {
@@ -1688,6 +1760,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           nextOrdinal: turnInput.providerTurnOrdinal * 100 + 1,
           textByRequest: new Map(),
           thinkingByRequest: new Map(),
+          progressByRequest: new Map(),
           toolItems: new Map(),
           steers: new Map(),
           lastFailure: null,

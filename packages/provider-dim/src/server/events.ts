@@ -83,6 +83,32 @@ export function dimToolResults(
   });
 }
 
+export interface DimModelProgress {
+  readonly sessionId: string;
+  readonly turnId: string | null;
+  readonly requestId: string | null;
+  /** This request's text not yet published as `step/text`. */
+  readonly text: string;
+  /** Unicode scalars of published `step/text` deltas that precede `text`. */
+  readonly textOffset: number;
+  readonly thinking: string;
+  readonly thinkingOffset: number;
+}
+
+export function dimModelProgress(params: unknown): DimModelProgress | null {
+  const sessionId = recordString(params, "sessionId");
+  if (sessionId === undefined) return null;
+  return {
+    sessionId,
+    turnId: recordString(params, "turnId") ?? null,
+    requestId: recordString(params, "requestId") ?? null,
+    text: recordString(params, "text") ?? "",
+    textOffset: recordNumber(params, "textOffset") ?? 0,
+    thinking: recordString(params, "thinking") ?? "",
+    thinkingOffset: recordNumber(params, "thinkingOffset") ?? 0,
+  };
+}
+
 export function dimTurnEnd(data: unknown): {
   turnId: string;
   status: "completed" | "cancelled" | "failed";
