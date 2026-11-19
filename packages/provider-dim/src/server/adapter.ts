@@ -418,6 +418,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
       let activeTurn: ActiveDimTurn | null = null;
       let closed = false;
       let appliedModel: string | null = null;
+      let defaultModel: { provider: string; modelId: string } | null = null;
       let appliedEffort: string | null = null;
       let appliedPreset: "workspace-write" | "full-access" | null = null;
       let sessionMethods: { sessionId: string; names: ReadonlySet<string> } | null = null;
@@ -1625,37 +1626,50 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         Effect.forkIn(scope),
       );
 
+      const resolveDefaultModel = Effect.fn("DimAdapter.resolveDefaultModel")(function* (
+        cwd: string,
+      ) {
+        const preview = yield* connection.request("session.model.preview", { cwd });
+        const model = recordField(preview, "model");
+        const providerId = recordString(model, "providerId");
+        const modelId = recordString(model, "modelId");
+        if (providerId === undefined || modelId === undefined) {
+          return yield* protocolError("Dim session.model.preview returned no default model");
+        }
+        return { provider: providerId, modelId };
+      });
+
       const applySelection = Effect.fn("DimAdapter.applySelection")(function* (
         selection: ModelSelection,
       ) {
         const session = threadState;
         if (session === null) return;
         const wanted = dimSelection(selection);
-        const modelKey =
-          wanted.model === null ? null : `${wanted.model.provider}/${wanted.model.modelId}`;
         const effortKey = wanted.effort;
-        if (modelKey === appliedModel && effortKey === appliedEffort) return;
         if (
-          modelKey === null &&
+          wanted.model === null &&
           effortKey === null &&
           appliedModel === null &&
           appliedEffort === null
         ) {
           return;
         }
+        // "Dim default" names no model; the daemon's preview says which one it means.
+        const model = wanted.model ?? (defaultModel ??= yield* resolveDefaultModel(session.cwd));
+        const modelKey = `${model.provider}/${model.modelId}`;
+        if (modelKey === appliedModel && effortKey === appliedEffort) return;
         yield* connection.request("session.model.update", {
           sessionId: session.sessionId,
           branchId: DIM_BRANCH,
-          ...(wanted.model === null
-            ? {}
-            : { providerId: wanted.model.provider, modelId: wanted.model.modelId }),
+          providerId: model.provider,
+          modelId: model.modelId,
           ...(effortKey === null
             ? appliedEffort === null
               ? {}
               : { modelPreferences: { reasoningEffort: { action: "clear" } } }
             : { modelPreferences: { reasoningEffort: effortKey } }),
         });
-        if (modelKey !== appliedModel && modelKey !== null) {
+        if (modelKey !== appliedModel) {
           sessionEntity = { ...sessionEntity, model: modelKey };
           yield* updateSession(sessionEntity.status);
         }
@@ -1798,6 +1812,15 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         return names;
       });
 
+      const modelFromAttach = (reply: unknown): string | null => {
+        const model = recordField(reply, "model");
+        const providerId = recordString(model, "providerId");
+        const modelId = recordString(model, "modelId");
+        return providerId === undefined || modelId === undefined
+          ? null
+          : `${providerId}/${modelId}`;
+      };
+
       const registerThread = Effect.fn("DimAdapter.registerThread")(function* (
         threadInput: ProviderAdapter.ProviderAdapterV2EnsureThreadInput,
       ) {
@@ -1820,7 +1843,13 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
             yield* restorePendingQuestions(wantedSessionId);
             return threadState.providerThread;
           }
-          yield* connection.request("session.attach", { sessionId: wantedSessionId });
+          const attached = yield* connection.request("session.attach", {
+            sessionId: wantedSessionId,
+          });
+          // The session may already run another model (say, renamed in Dim's own UI).
+          appliedModel = modelFromAttach(attached);
+          appliedEffort = null;
+          appliedPreset = null;
           yield* ensurePreset(threadInput.runtimePolicy.runtimeMode);
           const cwd = sessionEntity.cwd;
           const createdAt = yield* DateTime.now;
@@ -2523,7 +2552,9 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
             if (forkedSessionId === undefined) {
               return yield* protocolError("Dim session.fork returned no sessionId");
             }
-            yield* connection.request("session.attach", { sessionId: forkedSessionId });
+            const forkedAttach = yield* connection.request("session.attach", {
+              sessionId: forkedSessionId,
+            });
             const now = yield* DateTime.now;
             const providerThread: OrchestrationV2ProviderThread = {
               id: idAllocator.derive.providerThread({
@@ -2557,7 +2588,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
               updatedAt: now,
             };
             threadState = { sessionId: forkedSessionId, cwd: sessionEntity.cwd, providerThread };
-            appliedModel = null;
+            appliedModel = modelFromAttach(forkedAttach);
             appliedEffort = null;
             appliedPreset = null;
             yield* emit({

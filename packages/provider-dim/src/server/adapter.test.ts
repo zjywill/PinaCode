@@ -100,6 +100,8 @@ class FakeDim {
   failRename = false;
   failQuestionRespond = false;
   pendingQuestionBatches: ReadonlyArray<unknown> = [];
+  failPreview = false;
+  defaultModel = { providerId: "fixture", modelId: "default-model" };
   historyEvents: Array<{
     readonly id: string;
     readonly sequence: number;
@@ -228,6 +230,11 @@ class FakeDim {
           self.preset = policy["preset"] as "workspace-write" | "full-access";
           return { version: 1, policy };
         }
+        case "session.model.preview":
+          if (self.failPreview) {
+            return yield* new DimTransportError({ detail: "preview failed" });
+          }
+          return { model: self.defaultModel };
         case "session.model.update":
           if (self.failModelUpdate) {
             return yield* new DimTransportError({ detail: "model update failed" });
@@ -660,6 +667,62 @@ describe("DimAdapter runtime policy and model preferences", () => {
       assert.deepEqual(harness.fake.requestsOf("session.model.update")[0]!["modelPreferences"], {
         reasoningEffort: "low",
       });
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("switches back to the daemon's default model explicitly", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness({ modelSelection: modelSelection("fixture/model") });
+      const thread = yield* harness.runtime.ensureThread({
+        threadId: THREAD_ID,
+        modelSelection: modelSelection("fixture/model"),
+        runtimePolicy: runtimePolicy("full-access"),
+      });
+      harness.fake.defaultModel = { providerId: "fixture", modelId: "default-model" };
+      yield* harness.runtime.startTurn(
+        turnInput(thread, { modelSelection: modelSelection("default") }),
+      );
+      assert.deepEqual(harness.fake.requestsOf("session.model.preview"), [{ cwd: WORKSPACE }]);
+      const update = harness.fake.requestsOf("session.model.update").at(-1)!;
+      assert.strictEqual(update["providerId"], "fixture");
+      assert.strictEqual(update["modelId"], "default-model");
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("reads the attached session's model before comparing selections", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness({ initialNativeThreadId: SESSION_ID });
+      harness.fake.defaultModel = { providerId: "fixture", modelId: "default-model" };
+      const thread = yield* harness.runtime.ensureThread({
+        threadId: THREAD_ID,
+        modelSelection: modelSelection(),
+        runtimePolicy: runtimePolicy("full-access"),
+        existingProviderThread: attachedThread(SESSION_ID),
+      });
+      yield* harness.runtime.startTurn(
+        turnInput(thread, { modelSelection: modelSelection("default") }),
+      );
+      assert.deepEqual(harness.fake.requestsOf("session.model.preview"), [{ cwd: WORKSPACE }]);
+      const update = harness.fake.requestsOf("session.model.update").at(-1)!;
+      assert.strictEqual(update["providerId"], "fixture");
+      assert.strictEqual(update["modelId"], "default-model");
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("reports a failed default model preview instead of a silent switch", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness({ modelSelection: modelSelection("fixture/model") });
+      const thread = yield* harness.runtime.ensureThread({
+        threadId: THREAD_ID,
+        modelSelection: modelSelection("fixture/model"),
+        runtimePolicy: runtimePolicy("full-access"),
+      });
+      harness.fake.failPreview = true;
+      const failed = yield* harness.runtime
+        .startTurn(turnInput(thread, { modelSelection: modelSelection("default") }))
+        .pipe(Effect.flip);
+      assert.strictEqual(failed._tag, "ProviderAdapterTurnStartError");
+      assert.strictEqual(harness.fake.requestsOf("session.submit").length, 0);
     }).pipe(Effect.scoped, Effect.provide(layers)),
   );
 
