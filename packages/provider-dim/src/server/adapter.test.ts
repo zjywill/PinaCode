@@ -94,6 +94,8 @@ class FakeDim {
   failModelUpdate = false;
   failPermissionUpdate = false;
   failFork = false;
+  failUsage = false;
+  usageGate: Deferred.Deferred<void> | null = null;
   historyEvents: Array<{
     readonly id: string;
     readonly sequence: number;
@@ -139,7 +141,16 @@ class FakeDim {
   get connection(): DimConnection {
     return {
       hello: this.hello,
-      request: (method, params = {}) => this.request(method, params),
+      request: (method, params = {}, options) =>
+        options?.timeout === undefined
+          ? this.request(method, params)
+          : this.request(method, params).pipe(
+              Effect.timeoutOrElse({
+                duration: options.timeout,
+                orElse: () =>
+                  Effect.fail(new DimTransportError({ detail: `Dim ${method} timed out` })),
+              }),
+            ),
       notices: Stream.fromQueue(this.noticeQueue),
       closed: Deferred.await(this.closedDeferred),
     };
@@ -282,6 +293,13 @@ class FakeDim {
           });
         }
         case "session.context.usage":
+          if (self.usageGate !== null) {
+            yield* Deferred.succeed(self.usageGate, undefined);
+            return yield* Effect.never;
+          }
+          if (self.failUsage) {
+            return yield* new DimTransportError({ detail: "usage unavailable" });
+          }
           return {
             through: 20,
             contextWindow: 200_000,
@@ -445,6 +463,83 @@ describe("DimAdapter turn ownership", () => {
             event.providerTurn.nativeTurnRef?.nativeId === "ours",
         ),
       );
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+});
+
+describe("DimAdapter context usage", () => {
+  const completeTurn = (harness: {
+    readonly fake: FakeDim;
+    readonly runtime: ProviderAdapter.ProviderAdapterV2SessionRuntime;
+  }) =>
+    Effect.gen(function* () {
+      const thread = yield* ensureThread(harness.runtime);
+      yield* harness.runtime.startTurn(turnInput(thread));
+      harness.fake.pushEvent("input", "applied", { input_id: "input-1", mode: "queue" });
+      harness.fake.pushEvent("turn", "start", { turn_id: "ours" });
+      harness.fake.pushEvent("turn", "end", {
+        turn_id: "ours",
+        status: "completed",
+        reason: "end_turn",
+      });
+      yield* harness.waitFor(isTerminal);
+      const seen = yield* Ref.get(harness.events);
+      const completed = seen
+        .filter((event) => event.type === "provider_turn.updated")
+        .find((event) => event.providerTurn.status === "completed");
+      return {
+        usage:
+          completed?.type === "provider_turn.updated"
+            ? completed.providerTurn.tokenUsage
+            : undefined,
+        terminal: seen.find(isTerminal),
+      };
+    });
+
+  it.effect("reports the daemon's context usage on the final turn update", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      const { usage } = yield* completeTurn(harness);
+      assert.strictEqual(usage?.usedTokens, 42_000);
+      assert.strictEqual(usage?.maxTokens, 200_000);
+      assert.strictEqual(usage?.outputTokens, 8_192);
+      assert.strictEqual(usage?.autoCompactThreshold, 180_000);
+      assert.deepEqual(harness.fake.requestsOf("session.context.usage"), [
+        { sessionId: SESSION_ID, branchId: "main" },
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("times out a silent usage read so the turn can finish", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      const gate = yield* Deferred.make<void>();
+      harness.fake.usageGate = gate;
+      const thread = yield* ensureThread(harness.runtime);
+      yield* harness.runtime.startTurn(turnInput(thread));
+      harness.fake.pushEvent("input", "applied", { input_id: "input-1", mode: "queue" });
+      harness.fake.pushEvent("turn", "start", { turn_id: "ours" });
+      harness.fake.pushEvent("turn", "end", {
+        turn_id: "ours",
+        status: "completed",
+        reason: "end_turn",
+      });
+      yield* Deferred.await(gate);
+      yield* TestClock.adjust("3 seconds");
+      yield* harness.waitFor(isTerminal);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
+  it.effect("completes the turn without usage when the probe fails", () =>
+    Effect.gen(function* () {
+      const harness = yield* openHarness();
+      harness.fake.failUsage = true;
+      const { usage, terminal } = yield* completeTurn(harness);
+      assert.strictEqual(
+        terminal?.type === "turn.terminal" ? terminal.status : undefined,
+        "completed",
+      );
+      assert.strictEqual(usage, undefined);
     }).pipe(Effect.scoped, Effect.provide(layers)),
   );
 });

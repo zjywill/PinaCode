@@ -170,6 +170,7 @@ const isProviderAdapterProtocolError = Schema.is(ProviderAdapter.ProviderAdapter
 const STREAM_FLUSH_MS = 50;
 const DIM_MCP_LEASE_RENEW = "15 seconds";
 const DIM_MCP_ATTACH_TIMEOUT = "5 seconds";
+const DIM_CONTEXT_USAGE_TIMEOUT = "2 seconds";
 const DIM_STEER_TIMEOUT = "10 seconds";
 const DIM_MAX_SEEN_EVENT_IDS = 2_048;
 
@@ -711,6 +712,33 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         });
       });
 
+      const readContextUsage = Effect.fn("DimAdapter.readContextUsage")(function* (
+        sessionId: string,
+      ) {
+        const reply = yield* connection
+          .request(
+            "session.context.usage",
+            { sessionId, branchId: DIM_BRANCH },
+            { timeout: DIM_CONTEXT_USAGE_TIMEOUT },
+          )
+          .pipe(Effect.orElseSucceed(() => undefined));
+        if (reply === undefined || !isRecord(reply)) return undefined;
+        const used = recordNumber(reply, "estimatedInputTokens");
+        if (used === undefined) return undefined;
+        const window = recordNumber(reply, "contextWindow");
+        const output = recordNumber(reply, "outputTokens");
+        const threshold = recordNumber(reply, "thresholdTokens");
+        return {
+          usedTokens: Math.max(0, Math.round(used)),
+          ...(window === undefined ? {} : { maxTokens: Math.max(0, Math.round(window)) }),
+          ...(output === undefined ? {} : { outputTokens: Math.max(0, Math.round(output)) }),
+          ...(threshold === undefined || threshold <= 0
+            ? {}
+            : { autoCompactThreshold: Math.round(threshold) }),
+          updatedAt: DateTime.formatIso(yield* DateTime.now),
+        };
+      });
+
       const finalizeTurn = Effect.fn("DimAdapter.finalizeTurn")(function* (end: {
         status: string;
         reason: string | null;
@@ -778,12 +806,15 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           status === "failed"
             ? (turn.lastFailure ?? dimProviderFailure({ error: end.reason }))
             : null;
+        const tokenUsage =
+          threadState === null ? undefined : yield* readContextUsage(threadState.sessionId);
         yield* emit({
           type: "provider_turn.updated",
           driver: DIM_PROVIDER,
           threadId: turn.turnInput.threadId,
           providerTurn: {
             ...turn.providerTurn,
+            ...(tokenUsage === undefined ? {} : { tokenUsage }),
             status:
               status === "completed"
                 ? "completed"
@@ -874,11 +905,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         const name = `${event.event.type}/${event.event.name}`;
         const data = event.event.data;
         const eventTurnId = recordString(data, "turn_id");
-        const turnScoped =
-          name === "turn/start" ||
-          name === "turn/end" ||
-          name === "model/usage" ||
-          name.startsWith("step/");
+        const turnScoped = name === "turn/start" || name === "turn/end" || name.startsWith("step/");
         if (turnScoped && turn.dimTurnId === null && name !== "turn/start") return;
         if (
           turnScoped &&
@@ -1088,32 +1115,6 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
             tool.structured = result.structured;
             yield* emitToolItem(turn, tool, completedAt);
           }
-          return;
-        }
-        if (name === "model/usage") {
-          const usage = isRecord(data["usage"]) ? data["usage"] : null;
-          if (usage === null) return;
-          const used =
-            typeof usage["totalTokens"] === "number"
-              ? usage["totalTokens"]
-              : typeof usage["total_tokens"] === "number"
-                ? usage["total_tokens"]
-                : undefined;
-          if (used === undefined) return;
-          const window = (yield* Ref.get(contextWindows)).get(sessionEntity.model ?? "");
-          yield* emit({
-            type: "provider_turn.updated",
-            driver: DIM_PROVIDER,
-            threadId: turn.turnInput.threadId,
-            providerTurn: {
-              ...turn.providerTurn,
-              tokenUsage: {
-                usedTokens: used,
-                ...(window === undefined ? {} : { maxTokens: window }),
-                updatedAt: DateTime.formatIso(yield* DateTime.now),
-              },
-            },
-          });
           return;
         }
         if (name === "turn/end") {
