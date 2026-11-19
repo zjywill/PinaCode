@@ -34,6 +34,7 @@ import {
   type DimCatalogModel,
 } from "./events.ts";
 import { isRecord, recordArray, recordField, recordString } from "./protocol.ts";
+import { dimUsageLimitsForProfile, readDimAccountUsage } from "./usageLimits.ts";
 
 export const DIM_PRESENTATION = {
   displayName: "Dim",
@@ -207,6 +208,20 @@ export const checkDimProviderStatus = Effect.fn("DimProvider.checkStatus")(funct
     models = collectModels(yield* readConfiguredModels(input.settings), contextWindows);
   }
 
+  // Subscription limits exist only where the product daemon reports the account.
+  const usageLimits =
+    profile === "product"
+      ? yield* Effect.scoped(
+          Effect.gen(function* () {
+            const connection = yield* input.daemon.connect("T3 Code usage");
+            return yield* readDimAccountUsage(
+              (method, params) => connection.request(method, params),
+              checkedAt,
+            );
+          }),
+        ).pipe(Effect.orElseSucceed(() => undefined))
+      : dimUsageLimitsForProfile(profile, checkedAt);
+
   yield* Ref.set(input.modelContextWindows, contextWindows);
   const status: ServerProviderState = models.length === 0 ? "warning" : "ready";
   return {
@@ -216,6 +231,7 @@ export const checkDimProviderStatus = Effect.fn("DimProvider.checkStatus")(funct
     version: hello.success.serverVersion,
     status,
     auth,
+    ...(usageLimits === undefined ? {} : { usageLimits }),
     ...(status === "warning"
       ? { message: "No model configured in Dim. Sign in or configure a provider in Dim." }
       : {}),

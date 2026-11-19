@@ -1,93 +1,15 @@
-import type { ServerProviderUsageLimits, ServerProviderUsageWindow } from "@t3tools/contracts";
+import { makeUnavailableUsageLimits } from "@t3tools/provider-core/server/usageLimits";
 import {
-  clampPercent,
-  makeUnavailableUsageLimits,
-} from "@t3tools/provider-core/server/usageLimits";
+  DIM_USAGE_PROVIDER_ID,
+  dimDaemonEndpoint,
+  dimUsageLimits,
+} from "@t3tools/provider-dim/server";
 import * as NodeNet from "node:net";
-import * as Digest from "effect/crypto/Digest";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Option from "effect/Option";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-
-const units = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
-const decodeUsage = Schema.decodeUnknownSync(
-  Schema.Struct({
-    subscriptionId: Schema.optional(units),
-    plan: Schema.optional(
-      Schema.Struct({
-        name: Schema.optional(Schema.String),
-        priceInterval: Schema.optional(Schema.String),
-      }),
-    ),
-    credits: Schema.optional(
-      Schema.Struct({
-        usedUnits: Schema.optional(units),
-        totalUnits: Schema.optional(units),
-        remainingUnits: Schema.optional(units),
-        unlimited: Schema.optional(Schema.Boolean),
-        resetsAt: Schema.optional(Schema.String),
-      }),
-    ),
-    windows: Schema.Array(
-      Schema.Struct({
-        durationHours: units,
-        tokenCap: units,
-        tokenUsed: units,
-        expiresAt: Schema.optional(Schema.String),
-      }),
-    ),
-  }),
-);
-
-function resetTime(value?: string) {
-  const date = value ? DateTime.make(value) : Option.none();
-  return Option.isSome(date) ? { resetsAt: DateTime.formatIso(date.value) } : {};
-}
-
-export function dimUsageLimits(raw: unknown, checkedAt: string): ServerProviderUsageLimits {
-  const { windows, credits, plan, subscriptionId } = decodeUsage(raw);
-  const limits: ServerProviderUsageWindow[] = windows
-    .filter((w) => w.durationHours > 0 && w.tokenCap > 0)
-    .map((w) => ({
-      id: `dim-${w.durationHours}h`,
-      kind: w.durationHours === 168 ? "weekly" : w.durationHours === 5 ? "session" : "other",
-      label: `Dim · ${w.durationHours}h`,
-      usedPercent: clampPercent((w.tokenUsed / w.tokenCap) * 100),
-      windowDurationMins: w.durationHours * 60,
-      ...resetTime(w.expiresAt),
-    }));
-  const total = credits?.totalUnits;
-  const remaining =
-    credits?.remainingUnits ??
-    (total !== undefined && credits?.usedUnits !== undefined
-      ? Math.max(0, total - credits.usedUnits)
-      : undefined);
-  if (!credits?.unlimited && total && remaining !== undefined) {
-    limits.push({
-      id: "dim-credits",
-      kind: plan?.priceInterval === "month" ? "monthly" : "other",
-      label: "Dim · Subscription credits",
-      usedPercent: clampPercent((1 - remaining / total) * 100),
-      ...resetTime(credits?.resetsAt),
-    });
-  }
-  const balance = credits?.unlimited
-    ? "Unlimited credits"
-    : remaining !== undefined
-      ? `${remaining.toLocaleString("en-US")}${total === undefined ? "" : ` / ${total.toLocaleString("en-US")}`} credits left`
-      : undefined;
-  const summary = [plan?.name, balance].filter(Boolean).join(" · ");
-  return {
-    checkedAt,
-    windows: limits,
-    ...(summary ? { summary } : {}),
-    ...(subscriptionId ? { credentialFingerprint: `dim-subscription-${subscriptionId}` } : {}),
-  };
-}
 
 const decodeReply = Schema.decodeUnknownSync(
   Schema.Struct({
@@ -136,7 +58,7 @@ async function queryUsage(endpoint: string, checkedAt: string, signal: AbortSign
         if (hello.daemonProfile.kind !== "product" || !hello.features.includes("account.usage"))
           return undefined;
         id = 2;
-        send(id, "account.usage", { providerId: "dimcode-api-oauth" });
+        send(id, "account.usage", { providerId: DIM_USAGE_PROVIDER_ID });
       }
     }
     throw new Error("Dim daemon disconnected");
@@ -153,31 +75,18 @@ export const readDimUsageLimits = Effect.fn("DimCode.readUsageLimits")(function*
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
   const flag = args.lastIndexOf("--home");
   const path = yield* Path.Path;
-  const windows = (yield* HostProcess.Platform) === "win32";
-  const userHome = windows ? environment.USERPROFILE : environment.HOME;
+  const platform = yield* HostProcess.Platform;
+  const userHome = platform === "win32" ? environment.USERPROFILE : environment.HOME;
   const home =
     flag >= 0
       ? args[flag + 1]
       : (environment.DIMCODE_HOME ?? (userHome && path.join(userHome, ".dimcode-alpha")));
   if (!home || args.includes("--model-config")) return undefined;
   const nativeHome = path.resolve(cwd, home, "rust");
-  const probe = Effect.gen(function* () {
-    let endpoint = path.join(nativeHome, "daemon.sock");
-    if (windows) {
-      const fs = yield* FileSystem.FileSystem;
-      const digest = yield* Digest.Digest;
-      // Dim hashes Rust's canonical (extended-length) directory name for Windows pipes.
-      const canonical = path.toNamespacedPath(yield* fs.realPath(nativeHome));
-      const key = yield* digest.digestHex(
-        Digest.sha256,
-        new TextEncoder().encode("dimcode:" + canonical),
-      );
-      endpoint = String.raw`\\.\pipe\dim-rust-` + key.slice(0, 32);
-    }
-    return yield* Effect.tryPromise({
-      try: (signal) => queryUsage(endpoint, checkedAt, signal),
-      catch: () => "Dim account limits unavailable" as const,
-    });
+  const endpoint = dimDaemonEndpoint({ nativeHome, platform });
+  const probe = Effect.tryPromise({
+    try: (signal) => queryUsage(endpoint, checkedAt, signal),
+    catch: () => "Dim account limits unavailable" as const,
   });
   return yield* probe.pipe(
     Effect.timeout("8 seconds"),

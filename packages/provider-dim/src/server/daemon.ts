@@ -64,10 +64,18 @@ export interface DimDaemonOptions {
   readonly cwd: string;
 }
 
-function windowsPipeName(nativeHome: string): string {
-  let canonical = NodePath.resolve(nativeHome);
+/**
+ * Where a daemon with this native home listens. Dim hashes Rust's canonical
+ * (extended-length) directory name for its Windows pipe.
+ */
+export function dimDaemonEndpoint(input: {
+  readonly nativeHome: string;
+  readonly platform: NodeJS.Platform;
+}): string {
+  if (input.platform !== "win32") return NodePath.join(input.nativeHome, "daemon.sock");
+  let canonical = NodePath.resolve(input.nativeHome);
   try {
-    canonical = NodePath.toNamespacedPath(NodeFS.realpathSync.native(nativeHome));
+    canonical = NodePath.toNamespacedPath(NodeFS.realpathSync.native(input.nativeHome));
   } catch {
     // The native home may not exist yet; the CLI creates it before spawning.
   }
@@ -120,9 +128,7 @@ export const makeDimDaemon = Effect.fn("DimDaemon.make")(function* (options: Dim
   const connectOnly = override !== "";
   const endpoint = connectOnly
     ? expandHomePath(override, home)
-    : platform === "win32"
-      ? windowsPipeName(nativeHome)
-      : path.join(nativeHome, "daemon.sock");
+    : dimDaemonEndpoint({ nativeHome, platform });
   const modelConfigPath = settings.modelConfigPath.trim();
   const binaryPath = expandHomePath(settings.binaryPath || "dima", home);
   const guard = yield* Semaphore.make(1);
