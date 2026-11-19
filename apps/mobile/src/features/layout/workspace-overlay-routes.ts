@@ -26,6 +26,7 @@ const LISTED_OVERLAY_ROUTES: ReadonlySet<string> = new Set([
   "SettingsLegal",
   "ThreadAgents",
   "ThreadBackgroundWork",
+  "ThreadGuestShare",
   "ThreadPullRequests",
   "ThreadQueue",
   "ThreadReviewComment",

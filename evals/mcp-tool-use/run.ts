@@ -63,6 +63,7 @@ import { AttachmentToolkit } from "../../apps/server/src/mcp/toolkits/attachment
 import { DeviceToolkit } from "../../apps/server/src/mcp/toolkits/device/tools.ts";
 import { EnvironmentToolkit } from "../../apps/server/src/mcp/toolkits/environment/tools.ts";
 import { HtmlToolkit } from "../../apps/server/src/mcp/toolkits/html/tools.ts";
+import { IssuesToolkit } from "../../apps/server/src/mcp/toolkits/issues/tools.ts";
 import { MessageToolkit } from "../../apps/server/src/mcp/toolkits/message/tools.ts";
 import { OrchestratorToolkit } from "../../apps/server/src/mcp/toolkits/orchestrator/tools.ts";
 import { PreviewToolkit } from "../../apps/server/src/mcp/toolkits/preview/tools.ts";
@@ -195,16 +196,24 @@ const McpToolUseCall = Schema.Struct({
   tool: Schema.String,
   args: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 });
-type McpToolUseCall = typeof McpToolUseCall.Type;
+const McpToolUseCallWithAlternatives = Schema.Struct({
+  ...McpToolUseCall.fields,
+  argsAnyOf: Schema.optional(Schema.Array(Schema.Record(Schema.String, Schema.Unknown))),
+});
+const McpToolUseExpectedCall = Schema.Struct({
+  ...McpToolUseCallWithAlternatives.fields,
+  success: Schema.optional(Schema.Literal(true)),
+});
+type McpToolUseCall = typeof McpToolUseExpectedCall.Type;
 
 /** Grading rules. Tool names are bare: `pinacode_delegate_task`, `Bash`, `Agent`. */
 const McpToolUseExpect = Schema.Struct({
   /** Each entry needs one matching call. */
-  calls: Schema.optional(Schema.Array(McpToolUseCall)),
+  calls: Schema.optional(Schema.Array(McpToolUseExpectedCall)),
   /** Each entry matches a different call, and no call matches two entries; tool names are exact. */
   distinctCalls: Schema.optional(Schema.Array(McpToolUseCall)),
   /** No call may match any entry. */
-  callsMustNot: Schema.optional(Schema.Array(McpToolUseCall)),
+  callsMustNot: Schema.optional(Schema.Array(McpToolUseCallWithAlternatives)),
   notCalls: Schema.optional(Schema.Array(Schema.String)),
   /** First calls of these tools happen in this order. */
   order: Schema.optional(Schema.Array(Schema.String)),
@@ -420,7 +429,8 @@ const toolResult = (id: string, content: unknown): Block => ({
 });
 const texts = (content: typeof Content.Type) =>
   typeof content === "string" ? [content] : content.flatMap((block) => block.text ?? []);
-const isT3Name = (name: string) => name.startsWith(T3_PREFIX) || name.startsWith("mcp__pinacode__");
+const isT3Name = (name: string) => name.startsWith(T3_PREFIX);
+const isCapturedAppTool = (name: string) => isT3Name(name) || name.startsWith("mcp__t3-code__");
 const hasTool = (tools: ReadonlyArray<ApiTool>, name: string) =>
   tools.some((tool) => tool.name === name);
 
@@ -465,6 +475,7 @@ const t3SourceTools: ReadonlyArray<Tool.Any> = [
   WorktreeToolkit,
   PullRequestsToolkit,
   PreviewToolkit,
+  IssuesToolkit,
   DeviceToolkit,
   HtmlToolkit,
   MessageToolkit,
@@ -658,7 +669,9 @@ export const buildBase = (
   if (systemTexts.filter((value) => value.includes(RUNTIME_MARKER)).length !== 1 || !deferredList) {
     throw new Error(`The template needs one ${RUNTIME_MARKER} block and a deferred tool list.`);
   }
-  const nativeDeferred = deferredList.split("\n").filter((name) => name && !isT3Name(name));
+  const nativeDeferred = deferredList
+    .split("\n")
+    .filter((name) => name && !isCapturedAppTool(name));
   const names = [
     ...nativeDeferred,
     ...t3.filter((tool) => !alwaysLoaded.has(tool.name)).map((tool) => tool.name),
@@ -709,7 +722,7 @@ export const buildBase = (
       date: /Today's date is ([\d-]+)/.exec(reminders.join("\n"))?.[1],
     },
     nativeTools: [
-      ...template.tools.filter((tool) => !isT3Name(tool.name)),
+      ...template.tools.filter((tool) => !isCapturedAppTool(tool.name)),
       ...t3.filter((tool) => alwaysLoaded.has(tool.name)),
     ],
     /** Tools ToolSearch loads: T3 tools from source, and native tools the template only names. */
@@ -1896,8 +1909,15 @@ export const gradeSample = (
   // `tool` may list alternatives, as in "pinacode_link_pull_request|pinacode_watch_pull_request"; counts add up.
   const count = (tool: string) =>
     calls.filter((call) => tool.split("|").includes(call.tool)).length;
-  const found = ({ tool, args = {} }: McpToolUseCall, among = calls) =>
-    among.some((call) => tool.split("|").includes(call.tool) && matches(args, call.input));
+  const found = ({ tool, args = {}, argsAnyOf, success }: McpToolUseCall, among = calls) =>
+    among.some(
+      (call) =>
+        tool.split("|").includes(call.tool) &&
+        (success === undefined || call.failed === false) &&
+        matches(args, call.input) &&
+        (argsAnyOf === undefined ||
+          argsAnyOf.some((alternative) => matches(alternative, call.input))),
+    );
   const label = ({ tool, args }: McpToolUseCall) => (args ? `${tool} ${valueText(args)}` : tool);
   for (const call of expect.calls ?? []) add(`calls ${label(call)}`, found(call));
   if (expect.distinctCalls !== undefined) {

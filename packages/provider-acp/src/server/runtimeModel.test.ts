@@ -1395,6 +1395,10 @@ describe("extractMcpToolCallIdentity", () => {
       // Kimi retitles with partial JSON and middle-truncates args over 50 characters.
       'pinacode_delegate_task: {"mode":"async","task":"Ru',
       'pinacode_delegate_task: {"mode":"async","task":"Ru...cho child-result-42\'"}',
+      // Antigravity: "Running <tool>" before agy 1.5.8, "Run mcp_<server>_<tool>" since, "?" on prompts.
+      "Running pinacode_delegate_task",
+      "Run mcp_pinacode_pinacode_delegate_task",
+      "Run mcp_pinacode_pinacode_delegate_task?",
     ]) {
       const toolCall = toolCallFromUpdate({
         sessionUpdate: "tool_call",
@@ -1616,7 +1620,12 @@ describe("extractMcpToolCallIdentity", () => {
   });
 
   it("does not brand path-like or unknown-tool titles", () => {
-    for (const title of ["pinacode/README.md", "pinacode_not_a_real_tool"]) {
+    for (const title of [
+      "pinacode/README.md",
+      "pinacode_not_a_real_tool",
+      "Run mcp_pinacode_not_a_real_tool",
+      "Run manage_task",
+    ]) {
       const toolCall = toolCallFromUpdate({
         sessionUpdate: "tool_call",
         toolCallId: "path-1",
