@@ -26,7 +26,7 @@ export const DimSettings = makeProviderSettingsSchema(
       Schema.annotateKey({
         title: "Dim home",
         description:
-          "The user's Dim home shared with the dima CLI. Empty uses DIMCODE_HOME, else ~/.dimcode-alpha.",
+          "Your Dim home, shared with the dima CLI. Empty uses DIMCODE_HOME, else ~/.dimcode-alpha.",
         providerSettingsForm: {
           placeholder: DIM_DEFAULT_PRODUCT_HOME,
           clearWhenEmpty: "omit",

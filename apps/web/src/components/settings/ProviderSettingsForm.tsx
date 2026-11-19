@@ -152,6 +152,22 @@ const PACKAGE_FIELD_TEXT: ReadonlyMap<string, string> = new Map([
     msg("Additional CLI arguments passed on session start."),
   ],
   [
+    "Path to the Dim CLI. A login-shell PATH resolves `dima`.",
+    msg("Path to the Dim CLI. A login-shell PATH resolves `dima`."),
+  ],
+  ["Dim home", msg("Dim home")],
+  [
+    "Your Dim home, shared with the dima CLI. Empty uses DIMCODE_HOME, else ~/.dimcode-alpha.",
+    msg("Your Dim home, shared with the dima CLI. Empty uses DIMCODE_HOME, else ~/.dimcode-alpha."),
+  ],
+  ["Socket override", msg("Socket override")],
+  [
+    "Connect to an already running daemon at this socket. A set override never starts a daemon.",
+    msg(
+      "Connect to an already running daemon at this socket. A set override never starts a daemon.",
+    ),
+  ],
+  [
     "Compact after 100,000 to 1,000,000 tokens. Leave empty to use Claude's default.",
     msg("Compact after 100,000 to 1,000,000 tokens. Leave empty to use Claude's default."),
   ],
