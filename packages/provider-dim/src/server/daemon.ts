@@ -58,6 +58,18 @@ export interface DimDaemon {
   ) => Effect.Effect<DimConnection, DimDaemonFailure, Scope.Scope>;
 }
 
+/** The failure a start loop reports once it gave up waiting for the socket. */
+export function dimDaemonStartFailure(input: {
+  readonly exitStatus: string | null;
+  readonly endpoint: string;
+  readonly binaryPath: string;
+  readonly logPath: string;
+}): string {
+  return input.exitStatus === null
+    ? `Dim daemon did not start at ${input.endpoint}. Run \`${input.binaryPath} app-server\` in a terminal to see why.`
+    : `${input.exitStatus}. The daemon log is at ${input.logPath}.`;
+}
+
 export interface DimDaemonOptions {
   readonly settings: DimSettings;
   readonly environment: NodeJS.ProcessEnv;
@@ -149,6 +161,7 @@ export const makeDimDaemon = Effect.fn("DimDaemon.make")(function* (options: Dim
   const launch = yield* resolveSpawnCommand(binaryPath, daemonArgs, {
     env: options.environment,
   });
+  const logPath = path.join(nativeHome, "daemon.log");
 
   const spawnDaemon = Effect.try({
     try: () => {
@@ -160,7 +173,6 @@ export const makeDimDaemon = Effect.fn("DimDaemon.make")(function* (options: Dim
       for (const name of Object.keys(env)) {
         if (name.startsWith("DIM_")) delete env[name];
       }
-      const logPath = path.join(nativeHome, "daemon.log");
       const log = NodeFS.openSync(logPath, "a", 0o600);
       try {
         const child = NodeChildProcess.spawn(launch.command, launch.args, {
@@ -220,9 +232,7 @@ export const makeDimDaemon = Effect.fn("DimDaemon.make")(function* (options: Dim
       yield* Effect.sleep(DAEMON_PROBE_INTERVAL);
     }
     return yield* new DimDaemonError({
-      detail:
-        exitStatus ??
-        `Dim daemon did not start at ${endpoint}. Run \`${binaryPath} app-server\` in a terminal to see why.`,
+      detail: dimDaemonStartFailure({ exitStatus, endpoint, binaryPath, logPath }),
       cause: last,
     });
   });
