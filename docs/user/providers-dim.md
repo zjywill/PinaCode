@@ -6,12 +6,18 @@ can be picked up in the other.
 
 ## Set Up Dim
 
-1. Install Dim on the machine running the T3 Code server, so `dima` runs there.
-2. Complete Dim's setup in a terminal, including signing in and configuring a model provider.
-3. Open T3 Code Settings, choose **Settings → Providers → Add provider → Dim**, and confirm.
+1. Open **Settings → Providers → Add provider → Dim** and choose the server that will run it.
+2. If Pina Code offers **Install Dim**, use it to install the CLI on that server. You can also run
+   `npm install -g dimcode-alpha@alpha` on the server yourself.
+3. Select **Sign in**, open the verification page, and enter the displayed device code. Once Dim
+   confirms sign-in, Pina Code refreshes the model list and subscription usage.
 
-Dim and DimCode Alpha are separate entries: DimCode Alpha runs Dim through ACP, while Dim is the
-native provider. Both read the same Dim installation and subscription.
+Dim shares its account with the `dima` CLI. Use **Sign out** in the same provider settings to sign out
+of that Dim home. Subscription credits and token windows appear under **Usage → Limits**.
+
+On upgrade, DimCode Alpha and the Registry edition move to Dim and keep their Pina Code chat
+history. The Registry edition uses a separate session store. Sign in to Dima if needed, then continue
+the thread using the saved chat context. The old sessions remain available in the stable CLI.
 
 ## Settings
 
@@ -24,7 +30,9 @@ An added Dim instance has two settings beyond its binary path:
 
 ## Permission Modes
 
-Dim offers two modes in the composer:
+Choose a permission mode in the composer.
+
+- **Approval required** uses Dim's read-only preset.
 
 - **Auto-accept edits** lets Dim read and change files in the workspace without asking, but commands
   and other tools still need your approval.

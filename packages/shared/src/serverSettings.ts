@@ -29,7 +29,12 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { deepMerge } from "./Struct.ts";
 import { fromLenientJson } from "./schemaJson.ts";
-import { createModelSelection, readCustomModelEntries } from "./model.ts";
+import {
+  createModelSelection,
+  DIM_LEGACY_MODEL_PREFIX,
+  readCustomModelEntries,
+  resolveSelectableModel,
+} from "./model.ts";
 import {
   getBackgroundActivityBaseProfile,
   normalizeBackgroundActivitySettings,
@@ -383,6 +388,22 @@ function patchedIdleCompaction(
   return globalIdleCompaction(current) === "off" ? "off" : "onReturn";
 }
 
+function matchesStoredModelPreference(
+  settings: ServerSettings,
+  provider: ProviderInstanceId,
+  stored: string,
+  requested: string,
+): boolean {
+  return (
+    stored === requested ||
+    (settings.providerInstances[provider]?.driver === "dim" &&
+      stored.startsWith(DIM_LEGACY_MODEL_PREFIX) &&
+      !requested.startsWith(DIM_LEGACY_MODEL_PREFIX) &&
+      requested.includes("/") &&
+      stored.slice(DIM_LEGACY_MODEL_PREFIX.length) === requested.slice(requested.indexOf("/") + 1))
+  );
+}
+
 export function applyServerSettingsPatch(
   current: ServerSettings,
   rawPatch: ServerSettingsPatch,
@@ -453,16 +474,20 @@ export function applyServerSettingsPatch(
     patch.favorites ?? current.favorites ?? migrateModelPreferences?.favorites ?? null;
   const favorites =
     setModelFavorites?.reduce(
-      (current, change) => {
-        const exists = current.some(
-          (favorite) => favorite.provider === change.provider && favorite.model === change.model,
+      (favorites, change) => {
+        const exists = favorites.some(
+          (favorite) =>
+            favorite.provider === change.provider &&
+            matchesStoredModelPreference(current, change.provider, favorite.model, change.model),
         );
         if (change.favorite) {
-          if (!exists) current.push({ provider: change.provider, model: change.model });
-          return current;
+          if (!exists) favorites.push({ provider: change.provider, model: change.model });
+          return favorites;
         }
-        return current.filter(
-          (favorite) => favorite.provider !== change.provider || favorite.model !== change.model,
+        return favorites.filter(
+          (favorite) =>
+            favorite.provider !== change.provider ||
+            !matchesStoredModelPreference(current, change.provider, favorite.model, change.model),
         );
       },
       [...(initialFavorites ?? [])],
@@ -482,7 +507,9 @@ export function applyServerSettingsPatch(
         hiddenModels: [],
         modelOrder: [],
       };
-      const hiddenModels = preferences.hiddenModels.filter((model) => model !== change.model);
+      const hiddenModels = preferences.hiddenModels.filter(
+        (model) => !matchesStoredModelPreference(current, change.provider, model, change.model),
+      );
       if (change.hidden) hiddenModels.push(change.model);
       updated[change.provider] = { ...preferences, hiddenModels };
     }
@@ -693,6 +720,70 @@ export function resolveModelPreferences(
     providerModelPreferences:
       settings.providerModelPreferences ?? legacy.providerModelPreferences ?? {},
   };
+}
+
+export function resolveDimModelPreferences(
+  settings: ServerSettings,
+  providers: ReadonlyArray<ServerProvider>,
+): ServerSettings {
+  const { favorites, providerModelPreferences } = settings;
+  const resolve = (provider: ServerProvider, model: string) =>
+    model.startsWith(DIM_LEGACY_MODEL_PREFIX)
+      ? (resolveSelectableModel(provider.driver, model, provider.models) ?? model)
+      : model;
+  const dimProviders = providers.filter((provider) => provider.driver === "dim");
+  if (dimProviders.length === 0) return settings;
+  const hasLegacyFavorite = favorites?.some((favorite) =>
+    favorite.model.startsWith(DIM_LEGACY_MODEL_PREFIX),
+  );
+  const resolved = new Map(dimProviders.map((provider) => [provider.instanceId, provider]));
+
+  const seen = new Set<string>();
+  let changed = false;
+  const resolvedFavorites = hasLegacyFavorite
+    ? favorites?.flatMap((favorite) => {
+        const provider = resolved.get(favorite.provider);
+        if (!provider) return [favorite];
+        const model = resolve(provider, favorite.model);
+        const key = JSON.stringify([favorite.provider, model]);
+        if (seen.has(key)) {
+          changed = true;
+          return [];
+        }
+        seen.add(key);
+        if (model === favorite.model) return [favorite];
+        changed = true;
+        return [{ ...favorite, model }];
+      })
+    : favorites;
+  let preferences:
+    | Record<string, ModelPreferences["providerModelPreferences"][ProviderInstanceId]>
+    | undefined;
+  for (const provider of dimProviders) {
+    const entry = providerModelPreferences?.[provider.instanceId];
+    if (
+      !entry ||
+      ![...entry.hiddenModels, ...entry.modelOrder].some((model) =>
+        model.startsWith(DIM_LEGACY_MODEL_PREFIX),
+      )
+    )
+      continue;
+    const mapModels = (models: ReadonlyArray<string>) => [
+      ...new Set(models.map((model) => resolve(provider, model))),
+    ];
+    preferences ??= { ...providerModelPreferences };
+    preferences[provider.instanceId] = {
+      hiddenModels: mapModels(entry.hiddenModels),
+      modelOrder: mapModels(entry.modelOrder),
+    };
+  }
+  return changed || preferences !== undefined
+    ? {
+        ...settings,
+        favorites: resolvedFavorites ?? null,
+        providerModelPreferences: preferences ?? providerModelPreferences,
+      }
+    : settings;
 }
 
 /** Empty legacy values do not claim ownership before another client can migrate its saved list. */

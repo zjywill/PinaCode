@@ -3,6 +3,10 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
   DEFAULT_SERVER_SETTINGS,
+  EventId,
+  MessageId,
+  ProviderThreadId,
+  ThreadId,
   globalIdleCompaction,
   type ManagedPolicyDocument,
   ModelSelection,
@@ -20,6 +24,7 @@ import {
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { assert, it } from "@effect/vitest";
+import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -37,6 +42,11 @@ import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
 import { sourceControlHostSecretName } from "./sourceControl/sourceControlHostSecrets.ts";
 import * as ServerConfig from "./config.ts";
 import * as SqlitePersistence from "./persistence/Sqlite.ts";
+import * as EventSink from "./orchestration-v2/EventSink.ts";
+import * as EventStore from "./orchestration-v2/EventStore.ts";
+import * as ProjectionStore from "./orchestration-v2/ProjectionStore.ts";
+import { layerEventSink, layerStores } from "./orchestration-v2/runtimeStores.ts";
+
 import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
 import * as ServerSettingsModule from "./serverSettings.ts";
 import { SECRET_REDACTED } from "./settingsSecrets.ts";
@@ -959,6 +969,261 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
         config: { binaryPath: "/opt/guard/bin/codex" },
       });
     }).pipe(Effect.provide(layerServerSettings())),
+  );
+
+  it.effect.each([false, true])(
+    "migrates Dim ACP settings and thread bindings (Registry %s)",
+    (registry) =>
+      Effect.gen(function* () {
+        const { settingsPath } = yield* ServerConfig.ServerConfig;
+        const fs = yield* FileSystem.FileSystem;
+        const settingsService = yield* ServerSettingsModule.ServerSettingsService;
+        const sink = yield* EventSink.EventSinkV2;
+        const eventStore = yield* EventStore.EventStoreV2;
+        const projections = yield* ProjectionStore.ProjectionStoreV2;
+        const oldId = ProviderInstanceId.make(
+          registry ? "dimRegistry" : "acpRegistry_dimcode_alpha",
+        );
+        const newId = ProviderInstanceId.make("dim");
+        const targetId = registry ? oldId : newId;
+        const separateId = ProviderInstanceId.make("dim_work");
+        const projectId = ProjectId.make("dim-project");
+        const threadId = ThreadId.make("dim-conversation");
+        const nativeId = ProviderThreadId.make("dim-provider-thread");
+        const oldDriver = ProviderDriverKind.make("acpRegistry");
+        const dimDriver = ProviderDriverKind.make("dim");
+        const modelSelection = {
+          instanceId: oldId,
+          model: "models/alpha",
+          options: [{ id: "mode", value: "read-only" }],
+        } satisfies ModelSelection;
+        const now = yield* DateTime.now;
+        yield* sink.write({
+          events: [
+            {
+              id: EventId.make("dim-test-thread"),
+              threadId,
+              occurredAt: now,
+              type: "thread.created",
+              payload: {
+                id: threadId,
+                projectId,
+                title: "Dim conversation",
+                createdBy: "user",
+                creationSource: "web",
+                providerInstanceId: oldId,
+                modelSelection,
+                runtimeMode: "full-access",
+                interactionMode: "default",
+                branch: null,
+                worktreePath: null,
+                activeProviderThreadId: null,
+                lineage: {
+                  parentThreadId: null,
+                  relationshipToParent: null,
+                  rootThreadId: threadId,
+                },
+                forkedFrom: null,
+                createdAt: now,
+                updatedAt: now,
+                archivedAt: null,
+                settledOverride: null,
+                settledAt: null,
+                lastVisitedAt: null,
+                deletedAt: null,
+              },
+            },
+            {
+              id: EventId.make("dim-test-native"),
+              threadId,
+              occurredAt: now,
+              driver: oldDriver,
+              providerInstanceId: oldId,
+              type: "provider-thread.updated",
+              payload: {
+                id: nativeId,
+                driver: oldDriver,
+                providerInstanceId: oldId,
+                providerSessionId: null,
+                appThreadId: threadId,
+                ownerNodeId: null,
+                nativeThreadRef: { driver: oldDriver, nativeId: "dim-session", strength: "strong" },
+                nativeConversationHeadRef: null,
+                status: "idle",
+                firstRunOrdinal: 1,
+                lastRunOrdinal: 1,
+                handoffIds: [],
+                forkedFrom: null,
+                createdAt: now,
+                updatedAt: now,
+              },
+            },
+            {
+              id: EventId.make("dim-test-message"),
+              threadId,
+              occurredAt: now,
+              type: "message.updated",
+              payload: {
+                id: MessageId.make("dim-message"),
+                threadId,
+                createdBy: "user",
+                creationSource: "web",
+                runId: null,
+                nodeId: null,
+                role: "user",
+                text: "Keep this message.",
+                attachments: [],
+                streaming: false,
+                createdAt: now,
+                updatedAt: now,
+              },
+            },
+          ],
+        });
+
+        const oldDim = {
+          driver: "acpRegistry",
+          displayName: "DimCode Alpha",
+          config: {
+            source: "local",
+            commandPath: "dima",
+            commandArgs: ["acp", "--home", "/dim/shared"],
+            customModels: ["custom-model"],
+          },
+        };
+        yield* fs.writeFileString(
+          settingsPath,
+          JSON.stringify({
+            providerInstances: {
+              [newId]: { driver: "dim", enabled: false, config: { productHome: "/dim/shared" } },
+              [oldId]: registry
+                ? { driver: "acpRegistry", config: { agentId: "dimcode" } }
+                : oldDim,
+              [separateId]: {
+                ...oldDim,
+                displayName: "Work",
+                enabled: false,
+                config: {
+                  ...oldDim.config,
+                  commandPath: "/opt/work/dima",
+                  commandArgs: ["acp", "--home=/dim/work"],
+                },
+              },
+              other: {
+                driver: "acpRegistry",
+                config: { source: "local", commandPath: "other", commandArgs: ["acp"] },
+              },
+            },
+            favorites: [{ provider: oldId, model: "models/alpha" }],
+            providerModelPreferences: {
+              [oldId]: { hiddenModels: ["other"], modelOrder: ["models/alpha"] },
+              [newId]: { hiddenModels: ["native/hidden"], modelOrder: ["native/first"] },
+            },
+            projectSettingsOverrides: {
+              [projectId]: { defaultModelSelection: modelSelection },
+            },
+          }),
+        );
+
+        const settings = yield* settingsService.getSettings;
+        if (registry) {
+          assert.deepEqual(settings.providerInstances[oldId], {
+            driver: dimDriver,
+            enabled: true,
+            config: { binaryPath: "dima", productHome: "~/.dimcode-alpha" },
+          });
+        } else {
+          assert.isUndefined(settings.providerInstances[oldId]);
+          assert.isTrue(settings.providerInstances[newId]?.enabled);
+          assert.deepEqual(settings.providerInstances[newId]?.config, {
+            productHome: "/dim/shared",
+            customModels: [{ slug: "legacy-dim/custom-model", name: "custom-model" }],
+          });
+        }
+        assert.deepEqual(settings.providerInstances[separateId], {
+          driver: dimDriver,
+          displayName: "Work",
+          enabled: false,
+          config: {
+            binaryPath: "/opt/work/dima",
+            productHome: "/dim/work",
+            customModels: [{ slug: "legacy-dim/custom-model", name: "custom-model" }],
+          },
+        });
+        assert.strictEqual(
+          settings.providerInstances[ProviderInstanceId.make("other")]?.driver,
+          oldDriver,
+        );
+        assert.deepEqual(settings.favorites, [
+          { provider: targetId, model: "legacy-dim/models/alpha" },
+        ]);
+        assert.deepEqual(settings.providerModelPreferences?.[targetId], {
+          hiddenModels: [...(registry ? [] : ["native/hidden"]), "legacy-dim/other"],
+          modelOrder: [...(registry ? [] : ["native/first"]), "legacy-dim/models/alpha"],
+        });
+        const newSelection = { instanceId: targetId, model: "legacy-dim/models/alpha" };
+        assert.deepEqual(settings.projectSettingsOverrides[projectId]?.defaultModelSelection, {
+          ...newSelection,
+          options: modelSelection.options,
+        });
+
+        const thread = yield* projections.getThread(threadId);
+        const records = yield* projections.getThreadRecords(threadId, [
+          "providerThreads",
+          "messages",
+        ]);
+        assert.deepEqual(thread.modelSelection, newSelection);
+        assert.strictEqual(thread.runtimeMode, "approval-required");
+        assert.strictEqual(thread.activeProviderThreadId, nativeId);
+        assert.deepInclude(records.providerThreads[0], {
+          id: nativeId,
+          driver: dimDriver,
+          providerInstanceId: targetId,
+          nativeThreadRef: registry
+            ? null
+            : { driver: dimDriver, nativeId: "dim-session", strength: "strong" },
+        });
+        assert.deepEqual(
+          records.messages.map((message) => message.text),
+          ["Keep this message."],
+        );
+
+        const events = yield* eventStore.read({ threadId }).pipe(Stream.runCollect);
+        assert.deepEqual(
+          events.map((entry) => entry.event.type),
+          [
+            "thread.created",
+            "provider-thread.updated",
+            "message.updated",
+            "provider-thread.updated",
+            "thread.model-selection-updated",
+          ],
+        );
+        yield* Effect.gen(function* () {
+          const replay = yield* ProjectionStore.ProjectionStoreV2;
+          for (const entry of events) yield* replay.apply(entry.event);
+          assert.deepEqual((yield* replay.getThread(threadId)).modelSelection, newSelection);
+          const restored = yield* replay.getThreadRecords(threadId, [
+            "providerThreads",
+            "messages",
+          ]);
+          assert.deepEqual(restored.providerThreads, records.providerThreads);
+          assert.deepEqual(restored.messages, records.messages);
+        }).pipe(
+          Effect.provide(
+            Layer.fresh(ProjectionStore.layer.pipe(Layer.provide(SqlitePersistence.layerMemory))),
+          ),
+        );
+        assert.deepEqual(
+          (yield* decodeServerSettingsJson(yield* fs.readFileString(settingsPath)))
+            .providerInstances,
+          settings.providerInstances,
+        );
+      }).pipe(
+        Effect.provide(
+          Layer.merge(layerEventSink, layerStores).pipe(Layer.provideMerge(layerServerSettings())),
+        ),
+      ),
   );
 
   it.effect("keeps an explicit default instance over the legacy blob for its driver", () =>

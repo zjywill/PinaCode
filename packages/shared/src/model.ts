@@ -473,6 +473,12 @@ export function toCustomModelSetting(entry: CustomModelDefinition): CustomModelS
   };
 }
 
+export const DIM_LEGACY_MODEL_PREFIX = "legacy-dim/";
+export const dimLegacyModelSlug = (modelId: string) =>
+  modelId === "default" || modelId.startsWith(DIM_LEGACY_MODEL_PREFIX)
+    ? modelId
+    : DIM_LEGACY_MODEL_PREFIX + modelId;
+
 export function resolveSelectableModel(
   provider: ProviderDriverKind,
   value: string | null | undefined,
@@ -490,6 +496,14 @@ export function resolveSelectableModel(
   const direct = options.find((option) => option.slug === trimmed);
   if (direct) {
     return direct.slug;
+  }
+
+  if (provider === "dim" && trimmed.startsWith(DIM_LEGACY_MODEL_PREFIX)) {
+    const modelId = trimmed.slice(DIM_LEGACY_MODEL_PREFIX.length);
+    const matches = options.filter(
+      ({ slug }) => slug.includes("/") && slug.slice(slug.indexOf("/") + 1) === modelId,
+    );
+    return matches.length === 1 ? matches[0]!.slug : null;
   }
 
   const byName = options.find((option) => option.name.toLowerCase() === trimmed.toLowerCase());

@@ -175,10 +175,7 @@ function EnvironmentDetail({ environmentId }: { readonly environmentId: Environm
     if (
       busy ||
       !readEnvironmentScope(environmentId, AuthProvidersManageScope) ||
-      !canUpdateEnvironmentProvider(
-        provider,
-        config?.settings.providerInstances[provider.instanceId]?.config,
-      )
+      !canUpdateEnvironmentProvider(provider)
     )
       return;
     void run(provider.instanceId, async () => {
@@ -427,10 +424,7 @@ function EnvironmentDetail({ environmentId }: { readonly environmentId: Environm
                             </Text>
                           ) : null}
                         </View>
-                        {canUpdateEnvironmentProvider(
-                          provider,
-                          config?.settings.providerInstances[provider.instanceId]?.config,
-                        ) ? (
+                        {canUpdateEnvironmentProvider(provider) ? (
                           <SettingsActionRow
                             icon="arrow.up.circle"
                             label={

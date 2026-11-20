@@ -285,17 +285,17 @@ describe("EnvironmentProviderSettings routing", () => {
     );
   });
 
-  it("installs a missing DimCode Alpha on the selected environment", async () => {
+  it("installs a missing Dim on the selected environment", async () => {
     await setup();
-    const instanceId = ProviderInstanceId.make("acpRegistry_dimcode_alpha");
-    const driver = ProviderDriverKind.make("acpRegistry");
+    const instanceId = ProviderInstanceId.make("dim");
+    const driver = ProviderDriverKind.make("dim");
     state.settings = {
       ...DEFAULT_UNIFIED_SETTINGS,
       providerInstances: {
         [instanceId]: {
           driver,
           enabled: true,
-          config: { source: "local", commandPath: "dima", commandArgs: ["acp"] },
+          config: { binaryPath: "dima" },
         },
       },
     };
@@ -319,7 +319,7 @@ describe("EnvironmentProviderSettings routing", () => {
       },
     ]);
     await using _screen = await render(panel({ targetInstanceId: instanceId }));
-    await userEvent.click(page.getByRole("button", { name: "Install DimCode Alpha" }));
+    await userEvent.click(page.getByRole("button", { name: "Install Dim" }));
     expect(state.updateProvider).toHaveBeenCalledWith({
       environmentId,
       input: { instanceId, provider: driver },

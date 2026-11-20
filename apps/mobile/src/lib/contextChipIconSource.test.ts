@@ -5,7 +5,6 @@ import { modelChipIcon } from "./contextChipIconSource";
 vi.mock("./contextChipIcons.generated", () => ({
   CONTEXT_CHIP_ICON_SOURCES: { bot: "bot.png" },
   PROVIDER_CHIP_ICONS: {
-    dimcode: { source: "dimcode.png", tintsIcon: true },
     codex: { source: "codex.png", tintsIcon: true },
   },
 }));
@@ -25,12 +24,6 @@ describe("modelChipIcon", () => {
   });
 
   it("never hands a native chip an SVG it cannot decode", () => {
-    expect(
-      modelChipIcon({
-        driver: "acpRegistry",
-        iconUrl: "https://cdn.agentclientprotocol.com/registry/v1/latest/dimcode.svg",
-      }),
-    ).toEqual({ source: "dimcode.png", tintsIcon: true });
     for (const iconUrl of [
       "https://cdn.agentclientprotocol.com/registry/v1/latest/devin.svg",
       "https://x.test/icon.SVG?v=2",

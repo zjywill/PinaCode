@@ -7024,21 +7024,6 @@
   "100e99f08fd3ab4b": "Visas i leverantörslistan.",
   "e628a0c1626b11b1": "Instans-ID",
   "dc87902396b8ade4": "Bokstäver, siffror, '-' eller '_'.",
-  "d780c981fb37349b": [
-    "Pina Code kör ",
-    {
-      "t": "code",
-      "i": 1,
-      "c": "dima acp"
-    },
-    " på ",
-    {
-      "i": 2,
-      "k": "_gt_value_2",
-      "v": "v"
-    },
-    ". När du har lagt till leverantören kan du installera DimCode Alpha i dess inställningar."
-  ],
   "08fe32f007e788f1": "Konfigurera manuellt",
   "84eb2878dc17d3eb": "Hanteringsnyckel",
   "7ac196c1e8175928": "Standard är hubbens värdnamn",

@@ -1,7 +1,6 @@
 import { resolveProviderProbeTimeoutMs } from "@t3tools/provider-core/server/snapshotProbe";
 import {
   AcpRegistryListProvidersResult,
-  isDimCodeAlphaCommand,
   AcpRegistryOperationError,
   AcpRegistryListSessionsResult,
   AcpRegistryProbeResult,
@@ -146,12 +145,6 @@ export function terminalAuthArgs(
   spawn: AcpRegistryAuthSpawnContext,
   args: ReadonlyArray<string> = [],
 ) {
-  // Dim advertises the complete helper invocation, including the acp subcommand and home.
-  if (
-    args[0] === "acp" &&
-    isDimCodeAlphaCommand({ source: "local", commandPath: spawn.command, commandArgs: spawn.args })
-  )
-    return args;
   return [...spawn.args, ...args];
 }
 

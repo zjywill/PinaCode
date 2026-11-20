@@ -65,7 +65,7 @@ describe("environment maintenance access", () => {
 it("offers first installation only for a missing npm-installable Dim instance", () => {
   const provider = decodeProvider({
     instanceId: "local_dim",
-    driver: "acpRegistry",
+    driver: "dim",
     enabled: true,
     installed: false,
     version: null,
@@ -83,26 +83,25 @@ it("offers first installation only for a missing npm-installable Dim instance", 
       updateCommand: "npm install -g dimcode-alpha@alpha",
     },
   });
-  const dim = { source: "local", commandPath: "dima", commandArgs: ["acp"] };
-  expect(canUpdateEnvironmentProvider(provider, dim)).toBe(true);
-  expect(canUpdateEnvironmentProvider(provider, { ...dim, commandPath: "other" })).toBe(false);
-  expect(canUpdateEnvironmentProvider({ ...provider, versionAdvisory: undefined }, dim)).toBe(
-    false,
-  );
+  expect(canUpdateEnvironmentProvider(provider)).toBe(true);
   expect(
-    canUpdateEnvironmentProvider(
-      {
-        ...provider,
-        updateState: {
-          status: "queued",
-          startedAt: null,
-          finishedAt: null,
-          message: null,
-          output: null,
-        },
+    canUpdateEnvironmentProvider({
+      ...provider,
+      driver: decodeProvider({ ...provider, driver: "acpRegistry" }).driver,
+    }),
+  ).toBe(false);
+  expect(canUpdateEnvironmentProvider({ ...provider, versionAdvisory: undefined })).toBe(false);
+  expect(
+    canUpdateEnvironmentProvider({
+      ...provider,
+      updateState: {
+        status: "queued",
+        startedAt: null,
+        finishedAt: null,
+        message: null,
+        output: null,
       },
-      dim,
-    ),
+    }),
   ).toBe(false);
 });
 

@@ -1,5 +1,8 @@
 import { ProviderDriverKind, TextGenerationError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Digest from "effect/crypto/Digest";
+import * as HttpClient from "effect/http/HttpClient";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
@@ -9,13 +12,22 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
 import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import { ProviderDriverError } from "@t3tools/provider-core/server/errors";
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
 import { withInstanceIdentity } from "@t3tools/provider-core/server/instanceIdentity";
 import {
   makeManualOnlyProviderMaintenanceCapabilities,
-  type ProviderMaintenanceCapabilities,
+  createProviderVersionAdvisory,
+  enrichProviderSnapshotWithVersionAdvisory,
+  makeCachedProviderMaintenanceResolution,
+  makeProviderMaintenanceCapabilities,
+  normalizeCommandPath,
+  resolveDefaultNpmGlobalPrefix,
+  resolveNpmGlobalPrefix,
+  resolveProviderMaintenanceCapabilitiesEffect,
+  type ProviderMaintenanceCapabilitiesResolver,
 } from "@t3tools/provider-core/server/maintenanceResolver";
 import { makeManagedServerProvider } from "@t3tools/provider-core/server/managedProvider";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
@@ -33,6 +45,7 @@ import {
 
 import { DimSettings } from "../settings.ts";
 import { DIM_PROVIDER, makeDimAdapterV2 } from "./adapter.ts";
+import { makeDimAuth, readDimAuth, refreshDimAccountModels, supportsDimAccount } from "./auth.ts";
 import { makeDimDaemon } from "./daemon.ts";
 import { makeDimSessionManagement } from "./sessionManagement.ts";
 import { checkDimProviderStatus, makePendingDimProvider } from "./status.ts";
@@ -46,7 +59,43 @@ export type DimDriverEnv =
   | ProviderHost.ProviderHost
   | ChildProcessSpawner.ChildProcessSpawner
   | FileSystem.FileSystem
-  | Path.Path;
+  | Path.Path
+  | SecureRandom.SecureRandom
+  | Digest.Digest
+  | HttpClient.HttpClient
+  | ProviderLatestVersions.ProviderLatestVersions;
+
+function dimMaintenance(
+  commandPath: string,
+  env: NodeJS.ProcessEnv,
+): ProviderMaintenanceCapabilitiesResolver {
+  return {
+    resolve: Effect.fn("Dim.resolveMaintenance")(function* (context) {
+      const packageName = "dimcode-alpha";
+      const prefix = context
+        ? yield* resolveNpmGlobalPrefix(context, packageName)
+        : commandPath.trim() === "dima"
+          ? yield* resolveDefaultNpmGlobalPrefix(env)
+          : null;
+      const capabilities = prefix
+        ? makeProviderMaintenanceCapabilities({
+            provider: DRIVER_KIND,
+            packageName,
+            updateExecutable: "npm",
+            updateArgs: ["install", "-g", "--prefix", prefix, packageName + "@alpha"],
+            updateLockKey: "npm-global:" + normalizeCommandPath(prefix),
+            env,
+            platform: yield* HostProcess.Platform,
+          })
+        : makeManualOnlyProviderMaintenanceCapabilities({
+            provider: DRIVER_KIND,
+            packageName,
+            ...(context && { installPath: context.realCommandPath }),
+          });
+      return { ...capabilities, npmDistTag: "alpha" };
+    }),
+  };
+}
 
 const unsupportedTextGeneration = (): ProviderTextGeneration => {
   const unsupported = (operation: string) =>
@@ -68,7 +117,7 @@ const unsupportedTextGeneration = (): ProviderTextGeneration => {
 
 export const DimDriver: ProviderDriver<DimSettings, DimDriverEnv> = {
   driverKind: DRIVER_KIND,
-  metadata: { displayName: "Dim", supportsMultipleInstances: true },
+  metadata: { displayName: "Dim", supportsMultipleInstances: true, hasDefaultInstance: false },
   configSchema: DimSettings,
   defaultConfig: () => decodeDimSettings({}),
   create: Effect.fn("DimDriver.create")(function* ({
@@ -115,14 +164,22 @@ export const DimDriver: ProviderDriver<DimSettings, DimDriverEnv> = {
       continuationGroupKey: continuationIdentity.continuationKey,
     });
     const snapshotSettings = yield* makeProviderSnapshotSettingsSource(effectiveConfig);
-    const maintenance: ProviderMaintenanceCapabilities =
-      makeManualOnlyProviderMaintenanceCapabilities({
-        provider: DRIVER_KIND,
-        packageName: "dimcode-alpha",
-        manualCommand: "npm install -g dimcode-alpha@alpha",
-      });
+    const services = yield* Effect.context<
+      | FileSystem.FileSystem
+      | Path.Path
+      | ChildProcessSpawner.ChildProcessSpawner
+      | Digest.Digest
+      | HttpClient.HttpClient
+      | ProviderLatestVersions.ProviderLatestVersions
+    >();
+    const resolveMaintenance = yield* makeCachedProviderMaintenanceResolution(
+      resolveProviderMaintenanceCapabilitiesEffect(
+        dimMaintenance(effectiveConfig.binaryPath, processEnvironment),
+        { binaryPath: effectiveConfig.binaryPath, env: processEnvironment },
+      ).pipe(Effect.provideContext(services)),
+    );
     const snapshot = yield* makeManagedServerProvider<ProviderSnapshotSettings<DimSettings>>({
-      resolveMaintenance: () => Effect.succeed(maintenance),
+      resolveMaintenance,
       getSettings: snapshotSettings.getSettings,
       streamSettings: snapshotSettings.streamSettings,
       haveSettingsChanged: haveProviderSnapshotSettingsChanged,
@@ -135,10 +192,34 @@ export const DimDriver: ProviderDriver<DimSettings, DimDriverEnv> = {
         modelContextWindows,
       }).pipe(
         Effect.map(stampIdentity),
+        Effect.filterOrElse(
+          (provider) => !provider.enabled || provider.installed,
+          (provider) =>
+            resolveMaintenance().pipe(
+              Effect.map((maintenanceCapabilities) => ({
+                ...provider,
+                versionAdvisory: createProviderVersionAdvisory({
+                  driver: DRIVER_KIND,
+                  currentVersion: null,
+                  maintenanceCapabilities,
+                }),
+              })),
+            ),
+        ),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.provideService(FileSystem.FileSystem, fileSystem),
         Effect.provideService(Path.Path, path),
       ),
+      enrichSnapshot: ({ snapshot, settings, publishSnapshot }) =>
+        snapshot.installed
+          ? resolveMaintenance().pipe(
+              Effect.flatMap((maintenance) =>
+                enrichProviderSnapshotWithVersionAdvisory(snapshot, maintenance, settings),
+              ),
+              Effect.provideContext(services),
+              Effect.flatMap(publishSnapshot),
+            )
+          : Effect.void,
     }).pipe(
       Effect.mapError(
         (cause) =>
@@ -150,6 +231,29 @@ export const DimDriver: ProviderDriver<DimSettings, DimDriverEnv> = {
           }),
       ),
     );
+    const auth = yield* makeDimAuth({
+      instanceId,
+      daemon,
+      refresh: snapshot.refresh.pipe(Effect.asVoid),
+    });
+    const refreshModels = Effect.fn("DimDriver.refreshModels")(
+      function* () {
+        const connection = yield* daemon.connect("Pina Code Dim model refresh");
+        if (!supportsDimAccount(connection.hello)) return;
+        const auth = yield* readDimAuth(connection.request);
+        if (auth?.status === "authenticated") yield* refreshDimAccountModels(connection.request);
+      },
+      Effect.scoped,
+      Effect.mapError(
+        (cause) =>
+          new ProviderDriverError({
+            driver: DRIVER_KIND,
+            instanceId,
+            detail: "Could not refresh the Dim model catalog.",
+            cause,
+          }),
+      ),
+    );
     return {
       instanceId,
       driverKind: DRIVER_KIND,
@@ -157,8 +261,9 @@ export const DimDriver: ProviderDriver<DimSettings, DimDriverEnv> = {
       displayName,
       accentColor,
       enabled,
+      auth,
       snapshot,
-      refreshModels: () => snapshot.refresh.pipe(Effect.asVoid),
+      refreshModels,
       orchestrationAdapter: adapter,
       // The server's session list/import RPCs dispatch on this, whatever the driver.
       acpSessionManagement: makeDimSessionManagement(daemon),

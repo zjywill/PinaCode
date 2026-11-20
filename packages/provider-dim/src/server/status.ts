@@ -17,6 +17,7 @@ import {
   DEFAULT_TIMEOUT_MS,
   isCommandMissingCause,
   parseCliVersionResult,
+  providerModelsFromSettings,
   providerProbeEnvironment,
   resolveProviderProbeTimeoutMs,
   spawnAndCollect,
@@ -25,6 +26,7 @@ import {
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 
 import type { DimSettings } from "../settings.ts";
+import { readDimAuth, supportsDimAccount } from "./auth.ts";
 import type { DimDaemon } from "./daemon.ts";
 import type { DimConnectionError } from "./transport.ts";
 import {
@@ -38,7 +40,7 @@ import { dimUsageLimitsForProfile, readDimAccountUsage } from "./usageLimits.ts"
 
 export const DIM_PRESENTATION = {
   displayName: "Dim",
-  supportedRuntimeModes: ["auto-accept-edits", "full-access"],
+  supportedRuntimeModes: ["approval-required", "auto-accept-edits", "full-access"],
   showInteractionModeToggle: false,
   reportsContextWindow: true,
   supportsConversationRollback: false,
@@ -190,37 +192,30 @@ export const checkDimProviderStatus = Effect.fn("DimProvider.checkStatus")(funct
   let models: ReadonlyArray<ServerProviderModel> = [];
   let auth: ServerProviderAuth = UNKNOWN_AUTH;
   const profile = hello.success.daemonProfile.kind;
+  let canAuthenticate = false;
+  let usageLimits = dimUsageLimitsForProfile(profile, checkedAt);
 
   if (profile === "product") {
-    const catalog = yield* Effect.scoped(
+    const result = yield* Effect.scoped(
       Effect.gen(function* () {
-        const connection = yield* input.daemon.connect("T3 Code status");
-        return yield* modelsFromProductCatalog((method, params) =>
-          connection.request(method, params),
-        );
+        const { request, hello } = yield* input.daemon.connect("Pina Code Dim status");
+        const catalog = yield* modelsFromProductCatalog(request);
+        const account = supportsDimAccount(hello)
+          ? yield* readDimAuth(request).pipe(Effect.orElseSucceed(() => undefined))
+          : undefined;
+        const usage = yield* readDimAccountUsage(request, checkedAt);
+        return { catalog, account, usage };
       }),
     ).pipe(Effect.orElseSucceed(() => undefined));
-    if (catalog !== undefined) {
-      models = collectModels(catalog.models, contextWindows);
-      auth = catalog.auth;
+    if (result !== undefined) {
+      models = collectModels(result.catalog.models, contextWindows);
+      auth = result.account ?? result.catalog.auth;
+      canAuthenticate = result.account !== undefined;
+      usageLimits = result.usage;
     }
   } else if (profile === "configured") {
     models = collectModels(yield* readConfiguredModels(input.settings), contextWindows);
   }
-
-  // Subscription limits exist only where the product daemon reports the account.
-  const usageLimits =
-    profile === "product"
-      ? yield* Effect.scoped(
-          Effect.gen(function* () {
-            const connection = yield* input.daemon.connect("T3 Code usage");
-            return yield* readDimAccountUsage(
-              (method, params) => connection.request(method, params),
-              checkedAt,
-            );
-          }),
-        ).pipe(Effect.orElseSucceed(() => undefined))
-      : dimUsageLimitsForProfile(profile, checkedAt);
 
   yield* Ref.set(input.modelContextWindows, contextWindows);
   const status: ServerProviderState = models.length === 0 ? "warning" : "ready";
@@ -231,10 +226,20 @@ export const checkDimProviderStatus = Effect.fn("DimProvider.checkStatus")(funct
     version: hello.success.serverVersion,
     status,
     auth,
+    setup: { canInstall: false, canAuthenticate },
     ...(usageLimits === undefined ? {} : { usageLimits }),
     ...(status === "warning"
-      ? { message: "No model configured in Dim. Sign in or configure a provider in Dim." }
+      ? {
+          message:
+            auth.status === "authenticated"
+              ? "No models are available. Refresh the model list or configure a provider in Dim."
+              : "No model configured in Dim. Sign in or configure a provider in Dim.",
+        }
       : {}),
-    models: [dimDefaultModel(), ...models],
+    models: providerModelsFromSettings(
+      [dimDefaultModel(), ...models],
+      input.settings.customModels,
+      null,
+    ),
   } satisfies SnapshotDraft;
 });

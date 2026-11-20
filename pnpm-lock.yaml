@@ -1706,9 +1706,6 @@ importers:
       '@t3tools/provider-core':
         specifier: workspace:*
         version: link:../provider-core
-      '@t3tools/provider-dim':
-        specifier: workspace:*
-        version: link:../provider-dim
       '@t3tools/shared':
         specifier: workspace:*
         version: link:../shared

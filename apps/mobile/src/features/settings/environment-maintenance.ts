@@ -1,6 +1,5 @@
 import {
   AuthEnvironmentMaintainScope,
-  isDimCodeAlphaCommand,
   sessionGrantsScope,
   type AuthSessionState,
   type ExecutionEnvironmentCapabilities,
@@ -35,7 +34,7 @@ export function supportsEnvironmentUpdate(
   );
 }
 
-export function canUpdateEnvironmentProvider(provider: ServerProvider, config: unknown) {
+export function canUpdateEnvironmentProvider(provider: ServerProvider) {
   const compatibility = provider.compatibilityAdvisory?.latestVersionStatus;
   return (
     provider.enabled &&
@@ -44,7 +43,7 @@ export function canUpdateEnvironmentProvider(provider: ServerProvider, config: u
     (provider.installed
       ? provider.versionAdvisory.status === "behind_latest" &&
         provider.versionAdvisory.latestVersion !== null
-      : provider.driver === "acpRegistry" && isDimCodeAlphaCommand(config)) &&
+      : provider.driver === "dim") &&
     compatibility !== "broken" &&
     compatibility !== "unsupported" &&
     provider.updateState?.status !== "running" &&

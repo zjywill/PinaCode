@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { ProviderInstanceId, type ModelCapabilities } from "@t3tools/contracts";
+import { ProviderDriverKind, ProviderInstanceId, type ModelCapabilities } from "@t3tools/contracts";
 
 import {
   applyClaudePromptEffortPrefix,
@@ -10,6 +10,7 @@ import {
   getProviderOptionCurrentLabel,
   getProviderOptionDescriptors,
   readCustomModelEntries,
+  resolveSelectableModel,
   modelSelectionsEqual,
   pickModelSelection,
   withImplicitFastModeDefault,
@@ -265,4 +266,13 @@ describe("withImplicitFastModeDefault", () => {
       { id: "fastMode", value: true },
     ]);
   });
+});
+
+it("resolves an old Dim model ID only when the current catalog identifies one provider", () => {
+  const driver = ProviderDriverKind.make("dim");
+  const selection = "legacy-dim/models/alpha";
+  const first = { slug: "provider-a/models/alpha", name: "Alpha" };
+  const second = { slug: "provider-b/models/alpha", name: "Alpha" };
+  expect(resolveSelectableModel(driver, selection, [first])).toBe(first.slug);
+  expect(resolveSelectableModel(driver, selection, [first, second])).toBeNull();
 });

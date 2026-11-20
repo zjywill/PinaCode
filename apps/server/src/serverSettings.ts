@@ -29,6 +29,7 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
 import * as Effect from "effect/Effect";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -46,6 +47,8 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
 import { resolveSymlinkTarget } from "@t3tools/shared/symlink";
 import * as ServerConfig from "./config.ts";
+import { layerEventSink, layerStores } from "./orchestration-v2/runtimeStores.ts";
+import { migrateDimSettings, migrateDimThreads } from "./provider/DimProviderMigration.ts";
 import { type DeepPartial, deepMerge } from "@t3tools/shared/Struct";
 import { fromJsonStringPretty, fromLenientJson } from "@t3tools/shared/schemaJson";
 import {
@@ -672,6 +675,8 @@ const make = Effect.gen(function* () {
   const { settingsPath } = yield* ServerConfig.ServerConfig;
   const fs = yield* FileSystem.FileSystem;
   const pathService = yield* Path.Path;
+  const dimHome = yield* HostProcess.HomeDirectory;
+  const hostEnvironment = yield* HostProcess.Environment;
   const secretStore = yield* ServerSecretStore.ServerSecretStore;
   const sql = yield* SqlClient.SqlClient;
   const {
@@ -887,9 +892,28 @@ const make = Effect.gen(function* () {
         ? settings
         : migrateLegacyProviderSettings(settings, legacyProviders, providerHistory),
     );
-    const folded = settingsFileTrusted
+    const projectSettingsFolded = settingsFileTrusted
       ? foldLegacyProjectSettings(loaded, legacyProjectRows)
       : loaded;
+    const dimMigration = migrateDimSettings(
+      projectSettingsFolded,
+      pathService,
+      dimHome,
+      hostEnvironment.DIMCODE_HOME,
+    );
+    if (settingsFileTrusted) {
+      yield* migrateDimThreads(dimMigration).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ServerSettingsError({
+              settingsPath,
+              operation: "migrate-dim-provider",
+              cause,
+            }),
+        ),
+      );
+    }
+    const folded = dimMigration.settings;
     // Remove retired keys only after copying secrets and writing the new file; failures retry on next load.
     const legacySecretsCopied = yield* Effect.forEach(
       settingsFileTrusted
@@ -1457,4 +1481,6 @@ const make = Effect.gen(function* () {
   } satisfies ServerSettingsService["Service"];
 });
 
-export const layer = Layer.effect(ServerSettingsService, make);
+export const layer = Layer.effect(ServerSettingsService, make).pipe(
+  Layer.provide(Layer.merge(layerEventSink, layerStores)),
+);

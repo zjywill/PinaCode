@@ -1741,6 +1741,7 @@ export const ServerSettingsOperation = Schema.Literals([
   "create-provider-instance",
   "read-file",
   "read-provider-history",
+  "migrate-dim-provider",
   "read-project-settings",
   "read-secret",
   "remove-secret",

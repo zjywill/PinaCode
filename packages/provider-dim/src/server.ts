@@ -9,9 +9,4 @@ export {
 export { connectDim, type DimConnection } from "./server/transport.ts";
 export { dimDaemonEndpoint } from "./server/daemon.ts";
 export { makeDimSessionManagement } from "./server/sessionManagement.ts";
-export {
-  DIM_USAGE_PROVIDER_ID,
-  dimUsageLimits,
-  readDimAccountUsage,
-} from "./server/usageLimits.ts";
 export { DimSettings } from "./settings.ts";

@@ -1,3 +1,4 @@
+import { resolveDimModelPreferences } from "@t3tools/shared/serverSettings";
 import {
   errorI18nMessage,
   type MarkedText,
@@ -985,6 +986,7 @@ export function createServerEnvironmentAtoms<R, E>(
       return emptyConfigAtom;
     }
     let previousProviders: ServerConfig["providers"] | undefined;
+    let previousResolvedSettings: ServerConfig["settings"] | undefined;
     return Atom.make((get): ServerConfig | null => {
       const projection = AsyncResult.getOrElse(
         get(configProjection({ environmentId, input: {} })),
@@ -999,10 +1001,18 @@ export function createServerEnvironmentAtoms<R, E>(
         config,
         get(fetchedWorkspaceSnapshotsAtom(environmentId)),
       );
-      if (merged === config) return config;
+      const settings = resolveDimModelPreferences(merged.settings, merged.providers);
+      if (settings !== merged.settings && !Equal.equals(previousResolvedSettings, settings)) {
+        previousResolvedSettings = settings;
+      }
+      if (merged === config && settings === config.settings) return config;
       // Keep provider identities stable across config events; the projection already reuses the rest.
       previousProviders = reuseUnchanged(previousProviders, merged.providers);
-      return { ...merged, providers: previousProviders };
+      return {
+        ...merged,
+        settings: settings === merged.settings ? settings : previousResolvedSettings!,
+        providers: previousProviders,
+      };
     }).pipe(Atom.withLabel(`environment-data:server:config:${environmentId}`));
   });
   const updateStateValueAtom = Atom.family((environmentId: EnvironmentId) =>

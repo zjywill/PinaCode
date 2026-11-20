@@ -3,7 +3,6 @@ import {
   EnvironmentId,
   ProviderDriverKind,
   ProviderInstanceId,
-  officialAcpRegistryIconUrlForAgentId,
   type ServerProvider,
   UsageLimitSourceId,
 } from "@t3tools/contracts";
@@ -1174,37 +1173,12 @@ describe("Dim usage pools", () => {
     limits: { checkedAt: "2026-09-03T11:00:00.000Z", windows: [dimWindow] },
   });
 
-  it("merges the native Dim account into the DimCode pool", () => {
-    const pools = collectLimitPools(
-      [
-        account("acp", "acpRegistry", officialAcpRegistryIconUrlForAgentId("dimcode") ?? undefined),
-        account("native", "dim"),
-      ],
-      now,
-    );
+  it("groups native Dim subscriptions under the Dim driver", () => {
+    const pools = collectLimitPools([account("a", "dim"), account("b", "dim")], now);
     expect(pools).toHaveLength(1);
+    expect(pools[0]?.driver).toBe("dim");
     expect(pools[0]?.accounts).toHaveLength(2);
-    expect(pools[0]?.brand).toBe("DimCode");
     expect(pools[0]?.windows).toHaveLength(1);
-  });
-
-  it("keeps the DimCode driver when the native account comes first", () => {
-    const pools = collectLimitPools(
-      [
-        account("native", "dim"),
-        account("acp", "acpRegistry", officialAcpRegistryIconUrlForAgentId("dimcode") ?? undefined),
-      ],
-      now,
-    );
-    expect(pools).toHaveLength(1);
-    expect(pools[0]?.driver).toBe("acpRegistry");
-    expect(pools[0]?.brand).toBe("DimCode");
-  });
-
-  it("pools a native-only Dim account under the same key", () => {
-    const pools = collectLimitPools([account("native", "dim")], now);
-    expect(pools).toHaveLength(1);
-    expect(pools[0]?.brand).toBe("DimCode");
   });
 });
 

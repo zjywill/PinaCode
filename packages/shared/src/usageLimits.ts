@@ -9,8 +9,6 @@ import {
   type ProviderConsumeResetCreditInput,
   type ServerProviderSlashCommand,
   isProviderAvailable,
-  officialAcpRegistryIconUrlForAgentId,
-  ProviderDriverKind,
   PROVIDER_DISPLAY_NAMES,
   type ServerProvider,
   type ServerProviderUsageLimits,
@@ -262,8 +260,6 @@ function accountKeyResolver(reports: Iterable<AccountReport>) {
 
 const hubAccountName = (account: { readonly id: string }) => account.id.replace(/\.json$/i, "");
 
-const dimCodeIconUrl = officialAcpRegistryIconUrlForAgentId("dimcode");
-
 // Source ids are environment-local, so only a remote endpoint names the same hub across environments.
 function hubIdentity(environmentId: EnvironmentId, source: UsageLimitSourceSnapshot): string {
   // The server supplies canonical endpoints; native URL polyfills can misparse IPv6 hosts.
@@ -462,7 +458,6 @@ export interface LimitPoolWindow {
 }
 
 export interface LimitPool {
-  readonly brand?: "DimCode";
   readonly driver: ServerProvider["driver"];
   readonly accounts: readonly LimitAccount[];
   readonly windows: readonly LimitPoolWindow[];
@@ -521,20 +516,12 @@ export function collectLimitPools(
 ): readonly LimitPool[] {
   const groups = new Map<string, LimitAccount[]>();
   for (const account of accounts) {
-    // The native and ACP reads are the same Dim subscription, so they share one pool.
-    const key =
-      account.driver === "dim" ||
-      (account.driver === "acpRegistry" && account.iconUrl === dimCodeIconUrl)
-        ? "acpRegistry:dimcode"
-        : account.driver;
-    const group = groups.get(key);
+    const group = groups.get(account.driver);
     if (group) group.push(account);
-    else groups.set(key, [account]);
+    else groups.set(account.driver, [account]);
   }
-  return [...groups].map(([key, members]) => {
-    // The DimCode pool keeps its ACP identity and icon whatever order its accounts arrived in.
-    const driver: ServerProvider["driver"] =
-      key === "acpRegistry:dimcode" ? ProviderDriverKind.make("acpRegistry") : members[0]!.driver;
+  return [...groups.values()].map((members) => {
+    const driver = members[0]!.driver;
     const orderWindow = members
       .flatMap((account) => account.limits.windows)
       .sort((left, right) => WINDOW_KIND_ORDER[left.kind] - WINDOW_KIND_ORDER[right.kind])[0];
@@ -555,7 +542,6 @@ export function collectLimitPools(
     );
     return {
       driver,
-      ...(key === "acpRegistry:dimcode" ? { brand: "DimCode" as const } : {}),
       accounts: sorted,
       windows: poolWindows(sorted, now),
     };

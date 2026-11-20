@@ -20,8 +20,6 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   defaultInstanceIdForDriver,
-  isDimCodeAlphaCommand,
-  DIMCODE_ALPHA_LABEL,
   type EnvironmentId,
   type AcpRegistryUrlAuthAction,
   PROVIDER_DISPLAY_NAMES,
@@ -1403,11 +1401,10 @@ function ProviderInstanceRow({
         mode === "editor" &&
         liveProvider?.enabled &&
         !liveProvider.installed &&
-        driver === "acpRegistry" &&
-        isDimCodeAlphaCommand(instance.config) &&
+        driver === "dim" &&
         liveProvider.versionAdvisory?.canUpdate ? (
           <SettingsRow
-            title={DIMCODE_ALPHA_LABEL}
+            title={resetLabel}
             description={
               liveProvider.updateState?.message ??
               gt("Install {package} with npm on {environment}.", {
@@ -1424,7 +1421,7 @@ function ProviderInstanceRow({
               >
                 {isInstanceUpdateRunning
                   ? gt("Installing…")
-                  : gt("Install {provider}", { provider: DIMCODE_ALPHA_LABEL })}
+                  : gt("Install {provider}", { provider: resetLabel })}
               </Button>
             }
           />

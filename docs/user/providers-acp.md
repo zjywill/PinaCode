@@ -6,7 +6,7 @@ own models, tools, and sign-in, while T3 Code provides projects, threads, checkp
 delegation.
 
 Agents that T3 Code supports as their own providers, such as Codex, Claude, Cursor, Grok, OpenCode,
-Pi, and [Antigravity](./providers-antigravity.md), don't appear in the Registry list. Enable them in
+Pi, [Dim](./providers-dim.md), and [Antigravity](./providers-antigravity.md), don't appear in the Registry list. Enable them in
 **Settings → Providers** instead.
 
 T3 Code prefers the current ACP v2 preview protocol and uses its richer messages, usage, plans,
@@ -27,18 +27,6 @@ provider instance's environment overrides to use ACP v1.
 
 Search only shows agents that can run on the connected server. Registry agents are third-party
 code; review an agent's source and license before adding it.
-
-## DimCode Alpha
-
-Install `dimcode-alpha@alpha` on the machine hosting PinaCode and complete DimCode's setup there.
-Choose **Settings → Providers → Add provider → DimCode Alpha**. The provider runs `dima acp`
-and lists the models available to that installation. Settings shows the installed version and checks
-the alpha channel for updates. For global npm installations, choose **Update now** to upgrade that copy.
-
-Select a Dim model to load its reasoning levels before sending a message.
-**Dim access** changes Dim’s native session permissions independently of the thread’s runtime permissions.
-
-Pina Code can also talk to Dim directly, without ACP; see [Dim](./providers-dim.md).
 
 ## Add a local command
 

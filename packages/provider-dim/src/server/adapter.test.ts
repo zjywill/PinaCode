@@ -88,7 +88,7 @@ const runtimePolicy = (runtimeMode: RuntimeMode) => ({
 
 class FakeDim {
   readonly requests: Array<{ method: string; params: Record<string, unknown> }> = [];
-  preset: "workspace-write" | "full-access" = "full-access";
+  preset: "read-only" | "workspace-write" | "full-access" = "full-access";
   allowedTools: string[] = [];
   disallowedTools: string[] = [];
   failSubmit = false;
@@ -227,7 +227,7 @@ class FakeDim {
             return yield* new DimTransportError({ detail: "permission update failed" });
           }
           const policy = params["policy"] as Record<string, unknown>;
-          self.preset = policy["preset"] as "workspace-write" | "full-access";
+          self.preset = policy["preset"] as "read-only" | "workspace-write" | "full-access";
           return { version: 1, policy };
         }
         case "session.model.preview":
@@ -648,8 +648,14 @@ describe("DimAdapter runtime policy and model preferences", () => {
 
       yield* harness.runtime.startTurn(
         turnInput(thread, {
-          runtimeMode: "auto-accept-edits",
-          modelSelection: modelSelection("fixture/other", "low"),
+          runtimeMode: "full-access",
+          modelSelection: {
+            ...modelSelection("fixture/other", "low"),
+            options: [
+              { id: "effort", value: "low" },
+              { id: "mode", value: "read-only" },
+            ],
+          },
         }),
       );
       const order = harness.fake.requests.map((entry) => entry.method);
@@ -662,7 +668,7 @@ describe("DimAdapter runtime policy and model preferences", () => {
       assert.isBelow(permissionUpdate, submit);
       assert.isBelow(modelUpdate, submit);
       assert.deepEqual(harness.fake.requestsOf("session.permission.update")[0]!["policy"], {
-        preset: "workspace-write",
+        preset: "read-only",
         allowedTools: [],
         disallowedTools: [],
       });

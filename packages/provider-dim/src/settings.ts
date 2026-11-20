@@ -1,4 +1,8 @@
 import {
+  CustomModelSetting,
+  isRuntimeModeAbove,
+  type ModelSelection,
+  type RuntimeMode,
   makeBinaryPathSetting,
   makeProviderSettingsSchema,
   TrimmedString,
@@ -46,6 +50,10 @@ export const DimSettings = makeProviderSettingsSchema(
       Schema.withDecodingDefault(Effect.succeed("")),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
+    customModels: Schema.Array(CustomModelSetting).pipe(
+      Schema.withDecodingDefault(Effect.succeed([])),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
   },
   {
     order: ["binaryPath", "productHome", "socketPath"],
@@ -53,3 +61,17 @@ export const DimSettings = makeProviderSettingsSchema(
 );
 
 export type DimSettings = typeof DimSettings.Type;
+
+export function restrictLegacyDimRuntimeMode(
+  runtimeMode: RuntimeMode,
+  selection: ModelSelection,
+): RuntimeMode {
+  const mode = selection.options?.find((option) => option.id === "mode")?.value;
+  const ceiling =
+    mode === "read-only"
+      ? "approval-required"
+      : mode === "workspace-write"
+        ? "auto-accept-edits"
+        : undefined;
+  return ceiling && isRuntimeModeAbove(runtimeMode, ceiling) ? ceiling : runtimeMode;
+}

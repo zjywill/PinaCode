@@ -148,6 +148,32 @@ const makeFakeUvToolchain = Effect.fn("AcpRegistrySupport.test.makeFakeUvToolcha
 });
 
 describe("AcpRegistrySupport", () => {
+  it.effect("rejects direct preparation and launch of the retired DimCode agent", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const cacheDir = yield* fs.makeTempDirectoryScoped();
+      const catalog = yield* AcpRegistrySupport.makeAcpRegistryCatalog({
+        cacheDir,
+        toolsDir: `${cacheDir}/tools`,
+        registryUrl,
+      });
+      const dim = settings({ agentId: "dimcode" });
+      expect(yield* catalog.inspect(dim)).toMatchObject({
+        status: "not_found",
+        agentId: "dimcode",
+      });
+      const prepare = yield* catalog.prepare({ agentId: "dimcode" }).pipe(Effect.result);
+      const resolve = yield* catalog.resolve(dim, "/workspace").pipe(Effect.result);
+      expect(prepare).toMatchObject({ _tag: "Failure", failure: { reason: "agent_not_found" } });
+      expect(resolve).toMatchObject({ _tag: "Failure", failure: { reason: "agent_not_found" } });
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        layerResolver(() => Effect.die("retired agent should not fetch the registry")),
+      ),
+    ),
+  );
+
   it("selects the preferred compatible distribution", () => {
     const agent = makeAgent({
       binary: {
@@ -271,22 +297,6 @@ describe("AcpRegistrySupport", () => {
           shell: false,
         },
       });
-      const dima = `${cacheDir}/dima`;
-      yield* fileSystem.writeFileString(
-        dima,
-        '#!/bin/sh\n[ "$1" = "--version" ] && echo "dimcode 0.1.0-alpha.23"\n',
-      );
-      yield* fileSystem.chmod(dima, 0o755);
-      expect(
-        yield* resolver.inspect(
-          decodeAcpRegistrySettings({
-            source: "local",
-            commandPath: "dima",
-            commandArgs: ["acp"],
-          }),
-          environment,
-        ),
-      ).toMatchObject({ status: "ready", version: "0.1.0-alpha.23" });
       expect(requests).toEqual([]);
       expect(yield* fileSystem.exists(`${cacheDir}/tools`)).toBe(false);
     }).pipe(

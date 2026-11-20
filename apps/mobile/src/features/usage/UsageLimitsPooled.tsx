@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { EnvironmentId } from "@t3tools/contracts";
-import { dimCodeRegistryIconUrl, providerClients } from "@t3tools/client-runtime/provider-clients";
+import { providerClients } from "@t3tools/client-runtime/provider-clients";
 import { normalizeProviderAccentColor } from "@t3tools/client-runtime/state/provider-instance-display";
 import {
   collectLimitAccounts,
@@ -501,23 +501,12 @@ export function UsageLimitsSection({
       {pools.map((pool) => {
         const windows = displayLimitWindows(pool);
         return (
-          <Fragment key={pool.brand ?? pool.driver}>
+          <Fragment key={pool.driver}>
             <View className="gap-3">
               <View className="flex-row items-center gap-2 px-1">
-                <ProviderIcon
-                  iconUrl={
-                    pool.brand
-                      ? (pool.accounts.find((account) => account.driver === "acpRegistry")
-                          ?.iconUrl ??
-                        dimCodeRegistryIconUrl ??
-                        undefined)
-                      : undefined
-                  }
-                  provider={pool.driver}
-                  size={18}
-                />
+                <ProviderIcon provider={pool.driver} size={18} />
                 <Text className="text-base font-t3-medium text-foreground">
-                  {pool.brand ?? providerClients.get(pool.driver)?.label ?? pool.driver}
+                  {providerClients.get(pool.driver)?.label ?? pool.driver}
                 </Text>
               </View>
               {pool.accounts.map((account) =>

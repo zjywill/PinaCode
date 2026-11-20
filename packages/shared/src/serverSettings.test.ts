@@ -21,6 +21,7 @@ import {
   fallbackTextGenerationModelSelection,
   modelPreferencesMigrationPatch,
   resolveModelPreferences,
+  resolveDimModelPreferences,
   isModelSelectionProviderEnabled,
   parsePersistedServerObservabilitySettings,
   resolveReviewGuideModelSelection,
@@ -1094,4 +1095,53 @@ describe("resolveSpeechPostProcessingModelSelection", () => {
         .speechPostProcessingModelSelection,
     ).toBeNull();
   });
+});
+
+it("resolves migrated Dim preferences against a unique catalog model and lets users remove them", () => {
+  const dim = ProviderDriverKind.make("dim");
+  const instanceId = ProviderInstanceId.make("dim");
+  const legacy = "legacy-dim/example/model";
+  const slug = "provider/example/model";
+  const settings = decodeServerSettings({
+    providerInstances: { [instanceId]: { driver: dim } },
+    favorites: [{ provider: instanceId, model: legacy }],
+    providerModelPreferences: { [instanceId]: { hiddenModels: [legacy], modelOrder: [legacy] } },
+  });
+  const provider = {
+    driver: dim,
+    instanceId,
+    displayName: "Dim",
+    enabled: true,
+    installed: true,
+    version: null,
+    status: "ready",
+    auth: { status: "authenticated" },
+    checkedAt: "2026-11-20T00:00:00Z",
+    models: [{ slug, name: "Model", isCustom: false, capabilities: null }],
+    skills: [],
+    slashCommands: [],
+  } satisfies ServerProvider;
+  const visible = resolveDimModelPreferences(settings, [provider]);
+  expect(visible.favorites).toEqual([{ provider: instanceId, model: slug }]);
+  expect(visible.providerModelPreferences?.[instanceId]).toEqual({
+    hiddenModels: [slug],
+    modelOrder: [slug],
+  });
+  const ambiguous = resolveDimModelPreferences(settings, [
+    {
+      ...provider,
+      models: [
+        ...provider.models,
+        { slug: "another/example/model", name: "Other", isCustom: false, capabilities: null },
+      ],
+    },
+  ]);
+  expect(ambiguous.favorites).toEqual(settings.favorites);
+  expect(ambiguous.providerModelPreferences).toEqual(settings.providerModelPreferences);
+  const updated = applyServerSettingsPatch(settings, {
+    setModelFavorites: [{ provider: instanceId, model: slug, favorite: false }],
+    setModelsHidden: [{ provider: instanceId, model: slug, hidden: false }],
+  });
+  expect(updated.favorites).toEqual([]);
+  expect(updated.providerModelPreferences?.[instanceId]?.hiddenModels).toEqual([]);
 });

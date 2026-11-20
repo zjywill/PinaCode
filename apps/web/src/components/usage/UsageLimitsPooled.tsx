@@ -13,7 +13,6 @@ import {
 } from "@t3tools/shared/usageLimits";
 import { T, useGT, useMessages } from "gt-react";
 import type { Popover as PopoverPrimitive } from "@base-ui/react/popover";
-import { dimCodeRegistryIconUrl } from "@t3tools/client-runtime/provider-clients";
 import { normalizeProviderAccentColor } from "@t3tools/client-runtime/state/provider-instance-display";
 import { AlertTriangleIcon, ExternalLinkIcon, TicketIcon } from "lucide-react";
 import {
@@ -638,7 +637,7 @@ function PoolWindowCard({
 
 function PoolSection({ pool, now }: { readonly pool: LimitPool; readonly now: number }) {
   const color = barColor(pool.driver);
-  const label = pool.brand ?? providerClients.get(pool.driver)?.label ?? String(pool.driver);
+  const label = providerClients.get(pool.driver)?.label ?? String(pool.driver);
   const windows = displayLimitWindows(pool);
   const m = useMessages();
   return (
@@ -646,13 +645,6 @@ function PoolSection({ pool, now }: { readonly pool: LimitPool; readonly now: nu
       <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
         <ProviderInstanceIcon
           driverKind={pool.driver}
-          acpRegistryIconUrl={
-            pool.brand
-              ? (pool.accounts.find((account) => account.driver === "acpRegistry")?.iconUrl ??
-                dimCodeRegistryIconUrl ??
-                undefined)
-              : undefined
-          }
           displayName={label}
           indicatorBackground="var(--background)"
           className="size-5"
@@ -709,7 +701,7 @@ export function UsageLimitsPooled({
       ) : null}
       <SegmentPopoverContext value={segmentPopover}>
         {pools.map((pool) => (
-          <Fragment key={pool.brand ?? pool.driver}>
+          <Fragment key={pool.driver}>
             <PoolSection pool={pool} now={now} />
           </Fragment>
         ))}

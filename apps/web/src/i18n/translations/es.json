@@ -7018,21 +7018,6 @@
   "100e99f08fd3ab4b": "Se muestra en la lista de proveedores.",
   "e628a0c1626b11b1": "ID de instancia",
   "dc87902396b8ade4": "Letras, dígitos, '-' o '_'.",
-  "d780c981fb37349b": [
-    "Pina Code ejecuta ",
-    {
-      "t": "code",
-      "i": 1,
-      "c": "dima acp"
-    },
-    " en ",
-    {
-      "i": 2,
-      "k": "_gt_value_2",
-      "v": "v"
-    },
-    ". Tras añadir este proveedor, puedes instalar DimCode Alpha desde sus ajustes."
-  ],
   "08fe32f007e788f1": "Configurar manualmente",
   "84eb2878dc17d3eb": "Clave de gestión",
   "7ac196c1e8175928": "Por defecto, el nombre de host del hub",

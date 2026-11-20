@@ -1,6 +1,5 @@
 import {
   EnvironmentId,
-  officialAcpRegistryIconUrlForAgentId,
   ProviderDriverKind,
   ProviderInstanceId,
   type ServerProvider,
@@ -48,9 +47,8 @@ describe("UsageLimitsPooled", () => {
               managedChatGpt("chatgpt_work", "ChatGPT Work"),
               managedChatGpt("chatgpt_personal", "ChatGPT Personal"),
               {
-                ...managedChatGpt("dim", "DimCode Alpha"),
-                driver: ProviderDriverKind.make("acpRegistry"),
-                iconUrl: officialAcpRegistryIconUrlForAgentId("dimcode")!,
+                ...managedChatGpt("dim", "Dim"),
+                driver: ProviderDriverKind.make("dim"),
                 usageLimits: { checkedAt, windows: [], summary: "Pro · Unlimited credits" },
               },
             ],
@@ -62,10 +60,8 @@ describe("UsageLimitsPooled", () => {
       <UsageLimitsPooled presentations={presentations} now={Date.parse(checkedAt)} />,
     );
 
-    await expect
-      .element(screen.getByRole("heading", { name: "DimCode", exact: true }))
-      .toBeVisible();
-    await expect.element(screen.getByText("DimCode Alpha · Pro · Unlimited credits")).toBeVisible();
+    await expect.element(screen.getByRole("heading", { name: "Dim", exact: true })).toBeVisible();
+    await expect.element(screen.getByText("Dim · Pro · Unlimited credits")).toBeVisible();
     await expect
       .element(screen.getByText("ChatGPT Work on Desk, ChatGPT Personal on Desk"))
       .toBeVisible();

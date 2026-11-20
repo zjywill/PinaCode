@@ -1,6 +1,5 @@
 import {
   ACP_REGISTRY_MAX_AGENTS,
-  isDimCodeAlphaCommand,
   AcpRegistryOperationError,
   AcpRegistryOperationErrorReason,
   TrimmedNonEmptyString,
@@ -1706,6 +1705,12 @@ export const makeAcpRegistryCatalog = Effect.fn("AcpRegistryCatalog.make")(funct
     );
   });
 
+  const dimRegistryUnavailable = () =>
+    new AcpRegistryError({
+      reason: "agent_not_found",
+      detail: "DimCode now runs through the Dim provider. Add Dim in provider settings.",
+    });
+
   const findAgent = Effect.fn("AcpRegistryCatalog.findAgent")(function* (
     registry: AcpRegistryIndex,
     agentId: string,
@@ -1742,6 +1747,7 @@ export const makeAcpRegistryCatalog = Effect.fn("AcpRegistryCatalog.make")(funct
     function* (input) {
       const registry = yield* recentRegistry();
       const ranked = registry.agents.flatMap((agent) => {
+        if (agent.id === "dimcode") return [];
         const distribution = resolveAcpRegistryDistribution({
           agent,
           preference: "auto",
@@ -1787,6 +1793,7 @@ export const makeAcpRegistryCatalog = Effect.fn("AcpRegistryCatalog.make")(funct
 
   const prepare: AcpRegistryCatalog["Service"]["prepare"] = Effect.fn("AcpRegistryCatalog.prepare")(
     function* (input) {
+      if (input.agentId.trim() === "dimcode") return yield* dimRegistryUnavailable();
       const registry = yield* refreshRegistry();
       const agent = yield* findAgent(registry, input.agentId);
       const distribution = yield* compatibleDistribution(agent, "auto");
@@ -1829,30 +1836,17 @@ export const makeAcpRegistryCatalog = Effect.fn("AcpRegistryCatalog.make")(funct
         if (!command) return { status: "unconfigured" } as const;
         const executable = resolveExecutable(command, platform, environment ?? hostEnvironment);
         if (executable !== undefined) yield* validateLocalExecutable(executable);
-        const version =
-          executable && isDimCodeAlphaCommand(settings)
-            ? yield* runCommand(executable, ["--version"], {
-                env: environment ?? hostEnvironment,
-                timeout: "4 seconds",
-                maxStdoutBytes: 256,
-              }).pipe(
-                Effect.map(
-                  (text) =>
-                    /^dimcode (\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/.exec(text.trim())?.[1] ?? null,
-                ),
-                Effect.orElseSucceed(() => null),
-              )
-            : null;
         return executable === undefined
           ? ({
               status: "missing_runner",
               version: null,
               distribution: "local",
             } as const)
-          : ({ status: "ready", agentId: command, version, distribution: "local" } as const);
+          : ({ status: "ready", agentId: command, version: null, distribution: "local" } as const);
       }
       const agentId = settings.agentId.trim();
       if (agentId.length === 0) return { status: "unconfigured" } as const;
+      if (agentId === "dimcode") return { status: "not_found", agentId } as const;
       const registry = yield* loadRegistry();
       const agent = registry.agents.find((candidate) => candidate.id === agentId);
       if (agent === undefined) return { status: "not_found", agentId } as const;
@@ -1984,6 +1978,7 @@ export const makeAcpRegistryCatalog = Effect.fn("AcpRegistryCatalog.make")(funct
           detail: "ACP Registry provider requires a registry agent ID.",
         });
       }
+      if (agentId === "dimcode") return yield* dimRegistryUnavailable();
       const registry = yield* loadRegistry();
       const agent = yield* findAgent(registry, agentId);
       const distribution = yield* compatibleDistribution(agent, settings.distribution);

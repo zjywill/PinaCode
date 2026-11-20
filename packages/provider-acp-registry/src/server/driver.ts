@@ -1,6 +1,5 @@
 import {
   officialAcpRegistryIconUrlForAgentId,
-  isDimCodeAlphaCommand,
   ProviderDriverKind,
   resolveOfficialAcpRegistryIconUrl,
   TextGenerationError,
@@ -9,9 +8,7 @@ import {
   type CustomModelSetting,
   type ServerProvider,
   type ServerProviderModel,
-  type ProviderOptionDescriptor,
 } from "@t3tools/contracts";
-import { readDimUsageLimits } from "./dimUsageLimits.ts";
 import { AcpRegistrySettings } from "../settings.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { createModelCapabilities } from "@t3tools/shared/model";
@@ -20,14 +17,8 @@ import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as HttpClient from "effect/http/HttpClient";
-import * as ProviderLatestVersions from "@t3tools/provider-core/server/ProviderLatestVersions";
 import * as Equal from "effect/Equal";
 import * as Option from "effect/Option";
-import * as SubscriptionRef from "effect/SubscriptionRef";
-import * as Stream from "effect/Stream";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -49,18 +40,7 @@ import {
   providerModelsFromSettings,
   providerProbeEnvironment,
 } from "@t3tools/provider-core/server/snapshotProbe";
-import {
-  makeManualOnlyProviderMaintenanceCapabilities,
-  makeCachedProviderMaintenanceResolution,
-  resolveProviderMaintenanceCapabilitiesEffect,
-  enrichProviderSnapshotWithVersionAdvisory,
-  makeProviderMaintenanceCapabilities,
-  resolveNpmGlobalPrefix,
-  resolveDefaultNpmGlobalPrefix,
-  createProviderVersionAdvisory,
-  normalizeCommandPath,
-  type ProviderMaintenanceCapabilitiesResolver,
-} from "@t3tools/provider-core/server/maintenanceResolver";
+import { makeManualOnlyProviderMaintenanceCapabilities } from "@t3tools/provider-core/server/maintenanceResolver";
 import {
   haveProviderSnapshotSettingsChanged,
   makeProviderSnapshotSettingsSource,
@@ -152,38 +132,6 @@ const MAINTENANCE = makeManualOnlyProviderMaintenanceCapabilities({
   provider: DRIVER_KIND,
   packageName: null,
 });
-
-function dimCodeMaintenance(
-  commandPath: string,
-  env: NodeJS.ProcessEnv,
-): ProviderMaintenanceCapabilitiesResolver {
-  return {
-    resolve: Effect.fn("DimCode.resolveMaintenance")(function* (context) {
-      const packageName = "dimcode-alpha";
-      const prefix = context
-        ? yield* resolveNpmGlobalPrefix(context, packageName)
-        : commandPath.trim() === "dima"
-          ? yield* resolveDefaultNpmGlobalPrefix(env)
-          : null;
-      const capabilities = prefix
-        ? makeProviderMaintenanceCapabilities({
-            provider: DRIVER_KIND,
-            packageName,
-            updateExecutable: "npm",
-            updateArgs: ["install", "-g", "--prefix", prefix, packageName + "@alpha"],
-            updateLockKey: "npm-global:" + normalizeCommandPath(prefix),
-            env,
-            platform: yield* HostProcess.Platform,
-          })
-        : makeManualOnlyProviderMaintenanceCapabilities({
-            provider: DRIVER_KIND,
-            packageName,
-            ...(context && { installPath: context.realCommandPath }),
-          });
-      return { ...capabilities, npmDistTag: "alpha" };
-    }),
-  };
-}
 
 const makeUnsupportedTextGeneration = (): ProviderTextGeneration => {
   const unsupported = (operation: string) =>
@@ -343,9 +291,7 @@ function baseSnapshot(
 ): ServerProvider {
   const iconUrl =
     input.settings.source === "local"
-      ? officialAcpRegistryIconUrlForAgentId(
-          isDimCodeAlphaCommand(input.settings) ? "dimcode" : null,
-        )
+      ? officialAcpRegistryIconUrlForAgentId(null)
       : (resolveOfficialAcpRegistryIconUrl(input.probe?.probe.icon) ??
         officialAcpRegistryIconUrlForAgentId(input.settings.agentId));
   return {
@@ -355,7 +301,6 @@ function baseSnapshot(
     ...(input.accentColor ? { accentColor: input.accentColor } : {}),
     ...(iconUrl ? { iconUrl } : {}),
     continuation: { groupKey: input.continuationKey },
-    ...(isDimCodeAlphaCommand(input.settings) ? { supportsModelOptionsProbe: true } : {}),
     supportsTextGeneration: false,
     enabled: input.settings.enabled,
     installed: input.installed,
@@ -656,8 +601,6 @@ export const checkAcpRegistryProviderReadiness = Effect.fn(
 export type AcpRegistryDriverEnv =
   | AcpRegistryAdapterV2DriverEnv
   | Digest.Digest
-  | HttpClient.HttpClient
-  | ProviderLatestVersions.ProviderLatestVersions
   | ProviderHost.ProviderHost;
 
 export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryDriverEnv> = {
@@ -708,26 +651,6 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
     const processEnvironment = yield* mergeProviderInstanceEnvironment(
       environment,
       hostEnvironment,
-    );
-    const dimCode = isDimCodeAlphaCommand(config);
-    const services = yield* Effect.context<
-      | Digest.Digest
-      | FileSystem.FileSystem
-      | Path.Path
-      | ChildProcessSpawner.ChildProcessSpawner
-      | HttpClient.HttpClient
-      | ProviderLatestVersions.ProviderLatestVersions
-    >();
-    const resolveMaintenance = yield* makeCachedProviderMaintenanceResolution(
-      dimCode
-        ? resolveProviderMaintenanceCapabilitiesEffect(
-            dimCodeMaintenance(config.commandPath, processEnvironment),
-            {
-              binaryPath: config.commandPath,
-              env: processEnvironment,
-            },
-          ).pipe(Effect.provideContext(services))
-        : Effect.succeed(MAINTENANCE),
     );
     const orchestrationAdapter = yield* AcpRegistryAdapterV2Driver.create({
       instanceId,
@@ -813,20 +736,6 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
     const reportedLocalVersion = yield* Ref.make<string | null>(null);
     const checkProvider = checkAcpRegistryProviderReadiness(readinessInput).pipe(
       Effect.provideService(AcpRegistrySupport.AcpRegistryCatalog, catalog),
-      Effect.filterOrElse(
-        (provider) => !dimCode || !provider.enabled || provider.installed,
-        (provider) =>
-          resolveMaintenance().pipe(
-            Effect.map((maintenanceCapabilities) => ({
-              ...provider,
-              versionAdvisory: createProviderVersionAdvisory({
-                driver: DRIVER_KIND,
-                currentVersion: null,
-                maintenanceCapabilities,
-              }),
-            })),
-          ),
-      ),
       Effect.flatMap((provider) =>
         Ref.get(reportedLocalVersion).pipe(
           Effect.map((version) =>
@@ -902,27 +811,13 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
     const snapshot = yield* makeManagedServerProvider<
       ProviderSnapshotSettings<AcpRegistrySettings>
     >({
-      resolveMaintenance,
+      resolveMaintenance: () => Effect.succeed(MAINTENANCE),
       getSettings: snapshotSettings.getSettings,
       streamSettings: snapshotSettings.streamSettings,
       haveSettingsChanged: haveProviderSnapshotSettingsChanged,
       initialSnapshot: () => buildInitialAcpRegistrySnapshot(readinessInput),
-      checkProvider: dimCode
-        ? checkProvider.pipe(
-            Effect.filterOrElse(
-              (provider) => !provider.enabled || !provider.installed,
-              (provider) =>
-                readDimUsageLimits(config.commandArgs, processEnvironment, host.paths.cwd).pipe(
-                  Effect.provideContext(services),
-                  Effect.map((usageLimits) =>
-                    usageLimits ? { ...provider, usageLimits } : provider,
-                  ),
-                ),
-            ),
-          )
-        : checkProvider,
+      checkProvider,
       enrichSnapshot: Effect.fn("enrichSnapshot")(function ({
-        settings,
         snapshot,
         getSnapshot,
         publishSnapshot,
@@ -942,24 +837,12 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
             Option.match({
               onNone: () => Effect.void,
               onSome: ({ provider, generation }) =>
-                (dimCode
-                  ? resolveMaintenance().pipe(
-                      Effect.flatMap((maintenance) =>
-                        enrichProviderSnapshotWithVersionAdvisory(provider, maintenance, settings),
-                      ),
-                      Effect.provideContext(services),
-                    )
-                  : Effect.succeed(provider)
-                ).pipe(
-                  Effect.flatMap((enriched) =>
-                    liveSnapshotSemaphore.withPermit(
-                      Ref.get(enrichmentCache).pipe(
-                        Effect.flatMap((current) =>
-                          current.generation === generation
-                            ? withLiveRuntimeState(enriched).pipe(Effect.flatMap(publishSnapshot))
-                            : Effect.void,
-                        ),
-                      ),
+                liveSnapshotSemaphore.withPermit(
+                  Ref.get(enrichmentCache).pipe(
+                    Effect.flatMap((current) =>
+                      current.generation === generation
+                        ? withLiveRuntimeState(provider).pipe(Effect.flatMap(publishSnapshot))
+                        : Effect.void,
                     ),
                   ),
                 ),
@@ -1064,87 +947,13 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
         : provided;
     };
 
-    const modelOptions = yield* SubscriptionRef.make<
-      ReadonlyMap<string, ReadonlyArray<ProviderOptionDescriptor>>
-    >(new Map());
-    const probeLock = yield* Semaphore.make(1);
-    const probeModelOptions = Effect.fn("DimCode.probeModelOptions")(function* (model: string) {
-      const current = (yield* snapshot.getSnapshot).models.find((entry) => entry.slug === model);
-      if (
-        !current ||
-        current.isCustom ||
-        (yield* SubscriptionRef.get(modelOptions)).has(model) ||
-        current.capabilities?.optionDescriptors?.some(
-          (entry) => entry.type === "select" && entry.role === "reasoning",
-        )
-      )
-        return;
-      const { probe } = yield* provideAcpManagementServices(
-        probeAcpRegistryConfiguration({
-          instanceId,
-          model,
-          settings: effectiveConfig,
-          cwd: host.paths.cwd,
-          environment: providerProbeEnvironment(processEnvironment),
-        }),
-      ).pipe(
-        Effect.mapError(
-          (error) =>
-            new ProviderDriverError({
-              driver: DRIVER_KIND,
-              instanceId,
-              detail: error.message,
-              cause: error,
-            }),
-        ),
-      );
-      const descriptors = probe.configOptions.filter(
-        (entry) => entry.type === "select" && entry.role === "reasoning",
-      );
-      yield* SubscriptionRef.update(modelOptions, (previous) =>
-        new Map(previous).set(model, descriptors),
-      );
-    }, probeLock.withPermit);
-    const dimSnapshot = (
-      provider: ServerProvider,
-      cached: ReadonlyMap<string, ReadonlyArray<ProviderOptionDescriptor>>,
-    ): ServerProvider => ({
-      ...provider,
-      models: provider.models.map((model) => {
-        const descriptors = model.capabilities?.optionDescriptors ?? [];
-        const effort = cached.get(model.slug) ?? [];
-        const nativePermission = descriptors.some(
-          (option) => option.id === "mode" && option.type === "select",
-        );
-        const includeEffort =
-          effort.length > 0 &&
-          !descriptors.some((option) => option.type === "select" && option.role === "reasoning");
-        if (!nativePermission && !includeEffort) return model;
-        return {
-          ...model,
-          capabilities: createModelCapabilities({
-            optionDescriptors: [
-              ...descriptors.map((option) =>
-                option.type === "select" && option.id === "mode"
-                  ? { ...option, label: "Dim access", sessionPermission: true }
-                  : option,
-              ),
-              ...(includeEffort ? effort : []),
-            ],
-          }),
-        };
-      }),
-    });
-    const dimOptionsSnapshot = (read: Effect.Effect<ServerProvider>) =>
-      Effect.zipWith(read, SubscriptionRef.get(modelOptions), dimSnapshot);
-    const clearModelOptions = probeLock.withPermit(SubscriptionRef.set(modelOptions, new Map()));
     const clearLiveState = (
       Option.isSome(runtimeCoordinator)
         ? runtimeCoordinator.value
             .clearLiveConfiguration(instanceId)
             .pipe(Effect.andThen(runtimeCoordinator.value.clearAvailableCommands(instanceId)))
         : Effect.void
-    ).pipe(Effect.andThen(clearLearnedModels), Effect.andThen(clearModelOptions));
+    ).pipe(Effect.andThen(clearLearnedModels));
     const controller = yield* AcpRegistryAuth.makeAcpRegistryAuth({
       instanceId,
       settings: effectiveConfig,
@@ -1183,40 +992,15 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
       accentColor,
       enabled,
       auth,
-      ...(dimCode
-        ? {
-            probeModelOptions,
-            refreshModels: () =>
-              (Option.isSome(runtimeCoordinator)
-                ? runtimeCoordinator.value.clearLiveConfiguration(instanceId)
-                : Effect.void
-              ).pipe(
-                Effect.andThen(clearLearnedModels),
-                Effect.andThen(liveSnapshotSemaphore.withPermit(invalidateEnrichmentCache)),
-              ),
-          }
-        : {}),
       snapshot: {
         ...snapshot,
-        ...(dimCode
-          ? {
-              getSnapshot: dimOptionsSnapshot(snapshot.getSnapshot),
-              streamChanges: Stream.merge(
-                snapshot.streamChanges,
-                SubscriptionRef.changes(modelOptions).pipe(Stream.drop(1)),
-              ).pipe(Stream.mapEffect(() => dimOptionsSnapshot(snapshot.getSnapshot))),
-            }
-          : {}),
-        refresh: (dimCode ? dimOptionsSnapshot(snapshot.refresh) : snapshot.refresh).pipe(
-          Effect.tap(() => controller.refreshMethods ?? Effect.void),
-        ),
+        refresh: snapshot.refresh.pipe(Effect.tap(() => controller.refreshMethods ?? Effect.void)),
       },
       invalidateCaches: (Option.isSome(runtimeCoordinator)
         ? runtimeCoordinator.value.clearLiveConfiguration(instanceId)
         : Effect.void
       ).pipe(
         Effect.andThen(clearLearnedModels),
-        Effect.andThen(clearModelOptions),
         Effect.andThen(liveSnapshotSemaphore.withPermit(invalidateEnrichmentCache)),
       ),
       orchestrationAdapter,

@@ -1,7 +1,6 @@
 import { pipe } from "effect/Function";
 import {
   DEFAULT_MODEL_BY_PROVIDER,
-  isDimCodeAlphaCommand,
   defaultInstanceIdForDriver,
   resolveProjectProviderInstanceEnabled,
   type ModelSelection,
@@ -174,7 +173,6 @@ function applyProviderInstanceBranding(
   if (config?.source === "local") {
     return {
       ...entry,
-      acpRegistryAgentId: isDimCodeAlphaCommand(config) ? "dimcode" : undefined,
       acpRegistryIconUrl: undefined,
     };
   }

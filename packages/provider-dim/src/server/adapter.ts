@@ -15,10 +15,11 @@ import type {
   ProviderInstanceId,
   ProviderUserInputAnswers,
   RuntimeRequestId,
+  RuntimeMode,
   ThreadId,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
-import { ProviderDriverKind } from "@t3tools/contracts";
+import { isRuntimeModeAbove, ProviderDriverKind } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -71,6 +72,8 @@ import {
   type DimNotice,
   type DimSessionEvent,
 } from "./protocol.ts";
+import { restrictLegacyDimRuntimeMode } from "../settings.ts";
+import { DIM_LEGACY_MODEL_PREFIX } from "@t3tools/shared/model";
 import type { McpProviderSessionConfig } from "@t3tools/provider-core/server/mcpSession";
 import type { DimDaemonError } from "./daemon.ts";
 import type { DimConnection, DimConnectionError } from "./transport.ts";
@@ -272,8 +275,23 @@ interface ThreadState {
 const protocolError = (detail: string) =>
   new ProviderAdapter.ProviderAdapterProtocolError({ driver: DIM_PROVIDER, detail });
 
-function dimPreset(runtimeMode: string): "workspace-write" | "full-access" {
-  return runtimeMode === "full-access" ? "full-access" : "workspace-write";
+type DimPermissionPreset = "read-only" | "workspace-write" | "full-access";
+
+function dimPreset(
+  policy: Pick<ProviderAdapter.ProviderAdapterV2RuntimePolicy, "runtimeMode" | "maxRuntimeMode">,
+  selection: ModelSelection,
+): DimPermissionPreset {
+  const ceiling = policy.maxRuntimeMode;
+  const runtimeMode: RuntimeMode =
+    ceiling && isRuntimeModeAbove(policy.runtimeMode, ceiling) ? ceiling : policy.runtimeMode;
+  switch (restrictLegacyDimRuntimeMode(runtimeMode, selection)) {
+    case "approval-required":
+      return "read-only";
+    case "full-access":
+      return "full-access";
+    default:
+      return "workspace-write";
+  }
 }
 
 function dimSelection(selection: ModelSelection): {
@@ -420,7 +438,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
       let appliedModel: string | null = null;
       let defaultModel: { provider: string; modelId: string } | null = null;
       let appliedEffort: string | null = null;
-      let appliedPreset: "workspace-write" | "full-access" | null = null;
+      let appliedPreset: DimPermissionPreset | null = null;
       let sessionMethods: { sessionId: string; names: ReadonlySet<string> } | null = null;
       let mcpBindingId: string | null = null;
       let mcpAttachedFor: string | null = null;
@@ -1680,12 +1698,48 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         return { provider: providerId, modelId };
       });
 
+      const unavailablePreviousModel = protocolError(
+        "The previous Dim model could not be resolved. Choose an available model to continue.",
+      );
+      const resolveSelection = Effect.fn("DimAdapter.resolveSelection")(function* (
+        selection: ModelSelection,
+      ) {
+        const wanted = dimSelection(selection);
+        if (!selection.model.startsWith(DIM_LEGACY_MODEL_PREFIX)) return wanted;
+        const modelId = selection.model.slice(DIM_LEGACY_MODEL_PREFIX.length);
+        const attached = appliedModel === null ? null : parseDimModelSlug(appliedModel);
+        if (attached?.modelId === modelId) {
+          return { ...wanted, model: { provider: attached.providerId, modelId } };
+        }
+        if (connection.hello.daemonProfile.kind === "configured") {
+          const candidates = [...Ref.getUnsafe(contextWindows).keys()].flatMap((slug) => {
+            const model = parseDimModelSlug(slug);
+            return model?.modelId === modelId ? [model.providerId] : [];
+          });
+          if (candidates.length === 1) {
+            return { ...wanted, model: { provider: candidates[0]!, modelId } };
+          }
+          return yield* unavailablePreviousModel;
+        }
+        const result = yield* connection.request("provider.models.query", {
+          modelId,
+          selectableOnly: true,
+          limit: 2,
+        });
+        const matches = recordArray(result, "models");
+        const provider = matches?.length === 1 ? recordString(matches[0], "providerId") : undefined;
+        if (provider === undefined) {
+          return yield* unavailablePreviousModel;
+        }
+        return { ...wanted, model: { provider, modelId } };
+      });
+
       const applySelection = Effect.fn("DimAdapter.applySelection")(function* (
         selection: ModelSelection,
       ) {
         const session = threadState;
         if (session === null) return;
-        const wanted = dimSelection(selection);
+        const wanted = yield* resolveSelection(selection);
         const effortKey = wanted.effort;
         if (
           wanted.model === null &&
@@ -1719,11 +1773,12 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
       });
 
       /** Dim keeps the preset across turns; apply the runtime mode before a turn can run. */
-      const ensurePreset = Effect.fn("DimAdapter.ensurePreset")(function* (runtimeMode: string) {
+      const ensurePreset = Effect.fn("DimAdapter.ensurePreset")(function* (
+        wanted: DimPermissionPreset,
+      ) {
         const session = threadState;
         if (session === null) return;
-        const wanted = dimPreset(runtimeMode);
-        if (appliedPreset === wanted) return;
+        if (appliedPreset === wanted && wanted !== "read-only") return;
         const current = yield* connection.request("session.permission.get", {
           sessionId: session.sessionId,
           branchId: DIM_BRANCH,
@@ -1880,7 +1935,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
               ...threadState.providerThread,
               providerSessionId: input.providerSessionId,
             };
-            yield* ensurePreset(threadInput.runtimePolicy.runtimeMode);
+            yield* ensurePreset(dimPreset(threadInput.runtimePolicy, threadInput.modelSelection));
             yield* restorePendingQuestions(wantedSessionId);
             return threadState.providerThread;
           }
@@ -1891,7 +1946,6 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           appliedModel = modelFromAttach(attached);
           appliedEffort = null;
           appliedPreset = null;
-          yield* ensurePreset(threadInput.runtimePolicy.runtimeMode);
           const cwd = sessionEntity.cwd;
           const createdAt = yield* DateTime.now;
           const providerThread: OrchestrationV2ProviderThread = {
@@ -1928,6 +1982,9 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           };
           pendingImport = null;
           threadState = { sessionId: wantedSessionId, cwd, providerThread };
+          if (dimPreset(threadInput.runtimePolicy, threadInput.modelSelection) === "read-only") {
+            yield* ensurePreset("read-only");
+          }
           yield* emit({
             type: "provider_thread.updated",
             driver: DIM_PROVIDER,
@@ -1939,7 +1996,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           return providerThread;
         }
 
-        const wanted = dimSelection(threadInput.modelSelection);
+        const wanted = yield* resolveSelection(threadInput.modelSelection);
         const created = yield* decodeCreate(
           yield* connection.request("session.create", {
             cwd: sessionEntity.cwd,
@@ -1948,7 +2005,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
               ? {}
               : { modelPreferences: { reasoningEffort: wanted.effort } }),
             permissionPolicy: {
-              preset: dimPreset(threadInput.runtimePolicy.runtimeMode),
+              preset: dimPreset(threadInput.runtimePolicy, threadInput.modelSelection),
               allowedTools: [],
               disallowedTools: [],
             },
@@ -2001,7 +2058,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         appliedModel =
           wanted.model === null ? null : `${wanted.model.provider}/${wanted.model.modelId}`;
         appliedEffort = wanted.effort;
-        appliedPreset = dimPreset(threadInput.runtimePolicy.runtimeMode);
+        appliedPreset = dimPreset(threadInput.runtimePolicy, threadInput.modelSelection);
         yield* emit({ type: "provider_thread.updated", driver: DIM_PROVIDER, providerThread });
         yield* updateSession("ready");
         yield* attachMcp(threadInput.threadId, created.sessionId).pipe(Effect.ignore);
@@ -2245,7 +2302,9 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
               cause,
             });
           // A wider stored preset must be narrowed before this turn's first tool call.
-          yield* ensurePreset(turnInput.runtimePolicy.runtimeMode).pipe(Effect.mapError(turnError));
+          yield* ensurePreset(dimPreset(turnInput.runtimePolicy, turnInput.modelSelection)).pipe(
+            Effect.mapError(turnError),
+          );
           yield* applySelection(turnInput.modelSelection).pipe(Effect.mapError(turnError));
           const turn = yield* installTurn(turnInput, session, false);
           const submitted = yield* connection

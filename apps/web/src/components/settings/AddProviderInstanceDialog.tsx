@@ -16,7 +16,6 @@ import type { ProviderClientDefinition } from "@t3tools/provider-core/client";
 import {
   type AcpRegistrySearchAgent,
   AuthProvidersManageScope,
-  DIMCODE_ALPHA_LABEL,
   ProviderInstanceId,
   ProviderDriverKind,
   type EnvironmentId,
@@ -76,19 +75,7 @@ const DRIVER_OPTIONS = providerClients.definitions.filter(
 );
 const FEATURED_DRIVER_OPTIONS = DRIVER_OPTIONS.filter((option) => option.featured !== false);
 const MORE_DRIVER_OPTIONS = DRIVER_OPTIONS.filter((option) => option.featured === false);
-type ProviderOption = Pick<ProviderClientDefinition, "driverKind" | "label" | "badgeLabel"> & {
-  readonly preset?: "dimcodeAlpha";
-};
-const DIMCODE_OPTION = {
-  preset: "dimcodeAlpha",
-  driverKind: ACP_REGISTRY_DRIVER_KIND,
-  label: DIMCODE_ALPHA_LABEL,
-} as const satisfies ProviderOption;
-const DIMCODE_CONFIG: Record<string, unknown> = {
-  source: "local",
-  commandPath: "dima",
-  commandArgs: ["acp"],
-};
+type ProviderOption = Pick<ProviderClientDefinition, "driverKind" | "label" | "badgeLabel">;
 const EMPTY_CONFIG_DRAFT: Record<string, unknown> = {};
 function validateInstanceId(
   id: string,
@@ -130,13 +117,12 @@ function ProviderOptionGrid({
     >
       {options.map((option) => (
         <RadioPrimitive.Root
-          key={option.preset ?? option.driverKind}
-          value={option.preset ?? option.driverKind}
+          key={option.driverKind}
+          value={option.driverKind}
           className="relative flex cursor-pointer items-center gap-3 rounded-lg bg-card px-3 py-3 text-left text-muted-foreground outline-none ring-1 ring-black/5 hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-checked:bg-primary/8 data-checked:text-foreground data-checked:ring-2 data-checked:ring-inset data-checked:ring-primary data-checked:hover:bg-primary/8 dark:bg-white/3 dark:ring-white/5 dark:hover:bg-white/5 dark:data-checked:bg-primary/15 dark:data-checked:ring-primary dark:data-checked:hover:bg-primary/15"
         >
           <ProviderInstanceIcon
             driverKind={option.driverKind}
-            acpRegistryAgentId={option.preset === DIMCODE_OPTION.preset ? "dimcode" : undefined}
             displayName={option.label}
             iconClassName="size-4"
           />
@@ -168,7 +154,7 @@ interface AddProviderInstanceDialogProps {
   readonly onCreated?: (instanceId: ProviderInstanceId, driver: ProviderDriverKind) => void;
   /** Opens with "Show more" expanded, so the ACP Registry search is in view. */
   readonly showMoreProviders?: boolean;
-  readonly initialPreset?: "dimcodeAlpha" | "dim" | undefined;
+  readonly initialPreset?: "dim" | undefined;
 }
 
 export function AddProviderInstanceDialog({
@@ -192,26 +178,23 @@ export function AddProviderInstanceDialog({
   // Drivers the administrator's policy leaves out are not offered at all.
   const managedPolicy = useManagedPolicy(environmentId);
   const acpRegistryAllowed = isManagedDriverAllowed(managedPolicy, ACP_REGISTRY_DRIVER_KIND);
-  const featuredDriverOptions = [...FEATURED_DRIVER_OPTIONS, DIMCODE_OPTION].filter((option) =>
+  const featuredDriverOptions = FEATURED_DRIVER_OPTIONS.filter((option) =>
     isManagedDriverAllowed(managedPolicy, option.driverKind),
   );
   const moreDriverOptions = MORE_DRIVER_OPTIONS.filter((option) =>
     isManagedDriverAllowed(managedPolicy, option.driverKind),
   );
   const [selection, setSelection] = useState<string>(() => {
-    if (initialPreset === "dimcodeAlpha") {
-      if (acpRegistryAllowed) return initialPreset;
-    } else if (
+    if (
       initialPreset !== undefined &&
       isManagedDriverAllowed(managedPolicy, ProviderDriverKind.make(initialPreset))
     ) {
       return initialPreset;
     }
     const first: ProviderOption | undefined = featuredDriverOptions[0] ?? moreDriverOptions[0];
-    return first?.preset ?? first?.driverKind ?? DEFAULT_DRIVER_KIND;
+    return first?.driverKind ?? DEFAULT_DRIVER_KIND;
   });
-  const isDimCode = selection === DIMCODE_OPTION.preset;
-  const driver = isDimCode ? ACP_REGISTRY_DRIVER_KIND : ProviderDriverKind.make(selection);
+  const driver = ProviderDriverKind.make(selection);
   const [identityByDriver, setIdentityByDriver] = useState<Record<string, ProviderIdentityDraft>>(
     {},
   );
@@ -244,7 +227,7 @@ export function AddProviderInstanceDialog({
   // Searches while Show more is closed, so the fold opens on results.
   const registry = useAcpRegistrySearch(environmentId, showRegistrySearch);
   const isPreparingRegistryAgent = registry.preparingId !== null;
-  const providerLabel = isDimCode ? DIMCODE_OPTION.label : driverOption.label;
+  const providerLabel = driverOption.label;
   const defaultIdentity: ProviderIdentityDraft = {
     label: providerLabel,
     accentColor: "",
@@ -269,8 +252,7 @@ export function AddProviderInstanceDialog({
   const identityStep = 1;
   const previewLabel = label.trim() || gt("{provider} Workspace", { provider: providerLabel });
 
-  const configDraft =
-    configByDriver[selection] ?? (isDimCode ? DIMCODE_CONFIG : EMPTY_CONFIG_DRAFT);
+  const configDraft = configByDriver[selection] ?? EMPTY_CONFIG_DRAFT;
   const isLocalAcp = isAcpRegistry && isManualAcpConfiguration && configDraft.source === "local";
   const localCommandPath =
     typeof configDraft.commandPath === "string" ? configDraft.commandPath.trim() : "";
@@ -450,7 +432,7 @@ export function AddProviderInstanceDialog({
       return;
     }
     onCreated?.(brandedId, driver);
-    if (isAcpRegistry && !isLocalAcp) {
+    if ((isAcpRegistry && !isLocalAcp) || driver === "dim") {
       setCreatedInstanceId(brandedId);
       setIsSaving(false);
       setWizardStep(2);
@@ -759,7 +741,7 @@ export function AddProviderInstanceDialog({
                 />
               </SettingsGroup>
 
-              {!isAcpRegistry && !isDimCode && driverSettingsFields.length > 0 ? (
+              {!isAcpRegistry && driverSettingsFields.length > 0 ? (
                 <SettingsGroup variant="plain" className={cn(wizardStep !== 2 && "hidden")}>
                   <ProviderSettingsForm
                     definition={driverOption}
@@ -776,14 +758,7 @@ export function AddProviderInstanceDialog({
               ) : !isAcpRegistry && wizardStep === 2 ? (
                 <div className="grid gap-2">
                   <p className="text-sm text-muted-foreground">
-                    {isDimCode ? (
-                      <T>
-                        Pina Code runs <code>dima acp</code> on <Var>{environmentLabel}</Var>. After
-                        adding this provider, you can install DimCode Alpha from its settings.
-                      </T>
-                    ) : (
-                      gt("This driver has no required configuration. You can add the instance now.")
-                    )}
+                    {gt("This driver has no required configuration. You can add the instance now.")}
                   </p>
                 </div>
               ) : null}

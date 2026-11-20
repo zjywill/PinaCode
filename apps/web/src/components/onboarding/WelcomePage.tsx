@@ -22,8 +22,6 @@ import {
   CommandId,
   AuthOrchestrationOperateScope,
   isManagedDriverAllowed,
-  isDimCodeAlphaCommand,
-  DIMCODE_ALPHA_LABEL,
   ProviderDriverKind,
   ThreadId,
 } from "@t3tools/contracts";
@@ -459,9 +457,7 @@ function AgentsSection({
   const canManageProviders = useEnvironmentScope(environmentId, AuthProvidersManageScope);
   const [terminalSession, setTerminalSession] = useState<AgentTerminalSession | null>(null);
   const [moreOpen, setMoreOpen] = useState<boolean | null>(null);
-  const [addingProvider, setAddingProvider] = useState<"registry" | "dimcodeAlpha" | "dim" | null>(
-    null,
-  );
+  const [addingProvider, setAddingProvider] = useState<"registry" | "dim" | null>(null);
   const [codexSetupId, setCodexSetupId] = useState<ProviderInstanceId | null>(null);
   const [cliTerminalFor, setCliTerminalFor] = useState<ProviderInstanceId | null>(null);
 
@@ -475,13 +471,6 @@ function AgentsSection({
   if (moreOpen === null && !checking && found.length === 0) setMoreOpen(true);
   const showMore = moreOpen ?? false;
   const acpAllowed = isManagedDriverAllowed(serverConfig?.managedPolicy, ACP_REGISTRY_DRIVER_KIND);
-  const offerDimCode =
-    acpAllowed &&
-    serverConfig !== null &&
-    !Object.values(serverConfig.settings.providerInstances).some(
-      (instance) =>
-        instance.driver === ACP_REGISTRY_DRIVER_KIND && isDimCodeAlphaCommand(instance.config),
-    );
   const offerDim =
     isManagedDriverAllowed(serverConfig?.managedPolicy, DIM_DRIVER_KIND) &&
     serverConfig !== null &&
@@ -704,30 +693,6 @@ function AgentsSection({
         </CollapsibleTrigger>
         <CollapsiblePanel>
           <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
-            {offerDimCode ? (
-              <div className="flex min-h-9 items-center gap-3">
-                <RowIcon>
-                  <ProviderInstanceIcon
-                    driverKind={ACP_REGISTRY_DRIVER_KIND}
-                    acpRegistryAgentId="dimcode"
-                    displayName={DIMCODE_ALPHA_LABEL}
-                    iconClassName="size-4"
-                  />
-                </RowIcon>
-                <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                  {DIMCODE_ALPHA_LABEL}
-                </span>
-                <Button
-                  size="xs"
-                  variant="outline"
-                  aria-label={gt("Set up: {provider}", { provider: DIMCODE_ALPHA_LABEL })}
-                  disabled={!canManageProviders}
-                  onClick={() => setAddingProvider("dimcodeAlpha")}
-                >
-                  <T>Set up</T>
-                </Button>
-              </div>
-            ) : null}
             {offerDim ? (
               <div className="flex min-h-9 items-center gap-3">
                 <RowIcon>
@@ -814,13 +779,7 @@ function AgentsSection({
           environmentId={environmentId}
           environmentLabel={label}
           showMoreProviders={addingProvider === "registry"}
-          initialPreset={
-            addingProvider === "dimcodeAlpha"
-              ? "dimcodeAlpha"
-              : addingProvider === "dim"
-                ? "dim"
-                : undefined
-          }
+          initialPreset={addingProvider === "dim" ? "dim" : undefined}
           onOpenChange={(open) => {
             if (!open) setAddingProvider(null);
           }}

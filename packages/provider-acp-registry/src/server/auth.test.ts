@@ -333,62 +333,6 @@ it.effect(
     }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );
 
-it.effect(
-  "uses Dim's complete terminal arguments and accepts confirmed login without a model",
-  () =>
-    Effect.gen(function* () {
-      const id = '["dim","dimcode-api-oauth","device","terminal"]';
-      const browserId = '["dim","dimcode-api-oauth","browser","agent"]';
-      const args = ["acp", "--auth-setup", id];
-      const h = yield* makeHarness(
-        { ...terminalMethod, id, args },
-        true,
-        decodeSettings({
-          source: "local",
-          commandPath: "dima",
-          commandArgs: ["acp"],
-          authMethodId: browserId,
-        }),
-        instanceId,
-        undefined,
-        [
-          { ...browserMethod, id: browserId },
-          { ...terminalMethod, id: '["dim","dimcode-api-oauth","browser","terminal"]' },
-        ],
-      );
-      const available = yield* h.state((state) => Boolean(state.methods?.length));
-      assert.deepEqual(
-        available.methods?.map((method) => method.id),
-        [id],
-      );
-      yield* h.controller.start("owner");
-      yield* h.phase("waiting");
-      assert.deepEqual(h.terminalSpawn()?.args, args);
-      h.exit(0);
-      yield* h.phase("succeeded");
-      assert.deepEqual(h.started, []);
-      assert.deepEqual(h.changed, [true]);
-    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
-);
-
-it.effect("uses the sole browser method advertised by Dim", () =>
-  Effect.gen(function* () {
-    const h = yield* makeHarness(
-      browserMethod,
-      false,
-      decodeSettings({ source: "local", commandPath: "dima", commandArgs: ["acp"] }),
-    );
-    const ready = yield* h.state((state) => state.methods !== undefined);
-    assert.deepEqual(
-      ready.methods?.map((method) => method.id),
-      ["browser"],
-    );
-    yield* h.controller.start("owner");
-    yield* h.phase("waiting");
-    assert.deepEqual(h.authenticated, ["browser"]);
-  }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
-);
-
 it.effect("cancels the login PTY and rejects further terminal input", () =>
   Effect.gen(function* () {
     const h = yield* makeHarness(terminalMethod);
