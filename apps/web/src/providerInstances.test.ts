@@ -638,7 +638,7 @@ describe("provider icon metadata", () => {
     expect(localEntry?.enabled).toBe(false);
     expect(localEntry?.snapshot).toBe(snapshots[0]?.snapshot);
 
-    const [dimCode] = applyProviderInstanceSettings(
+    const [legacyDimPreset] = applyProviderInstanceSettings(
       snapshots,
       {
         providerInstances: {
@@ -657,8 +657,8 @@ describe("provider icon metadata", () => {
       },
       null,
     );
-    expect(dimCode?.acpRegistryAgentId).toBe("dimcode");
-    expect(dimCode?.acpRegistryIconUrl).toBeUndefined();
+    expect(legacyDimPreset?.acpRegistryAgentId).toBeUndefined();
+    expect(legacyDimPreset?.acpRegistryIconUrl).toBeUndefined();
 
     const [restoredEntry] = applyProviderInstanceSettings(
       localEntry ? [localEntry] : [],

@@ -173,6 +173,7 @@ function applyProviderInstanceBranding(
   if (config?.source === "local") {
     return {
       ...entry,
+      acpRegistryAgentId: undefined,
       acpRegistryIconUrl: undefined,
     };
   }
