@@ -349,6 +349,7 @@ const layerTest = Layer.mergeAll(
   RuntimeLayer.layer,
   layerProjectionReplayTest,
   RuntimeLayer.layerEventSink,
+  RuntimeLayer.layerEventInfrastructure,
   ProjectStore.layer,
   ProjectionStore.layer,
   EffectOutbox.layer,
@@ -4734,6 +4735,23 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
       yield* reactor.sweep;
 
       assert.isUndefined((yield* orchestrator.getThreadShell(threadId))?.pullRequests?.[0]?.watch);
+      const eventStore = yield* OrchestrationEventStore.OrchestrationEventStore;
+      const linkUpdates = yield* eventStore
+        .readAgentEvents({
+          threadId,
+          afterSequence: 0,
+          eventType: "thread.pull-request-link-updated",
+        })
+        .pipe(Stream.runCollect);
+      const merged = linkUpdates.flatMap(({ event }) =>
+        event.type === "thread.pull-request-link-updated" && event.watchMerged === true
+          ? [event.payload]
+          : [],
+      );
+      assert.deepEqual(
+        merged.map((link) => [link.number, link.endedWatch?.endReason]),
+        [[15, "merged"]],
+      );
       const wakes = (yield* orchestrator.getThreadRecords(threadId, ["messages"])).messages.filter(
         (message) => message.notification != null,
       );
@@ -4916,6 +4934,22 @@ it.layer(layerTest)("OrchestrationV2LayerLive lifecycle", (it) => {
         yield* worker.drain();
         const thread = yield* orchestrator.getThreadShell(threadId);
         assert.isTrue(thread?.pullRequests?.every((link) => link.watch === undefined));
+        const eventStore = yield* OrchestrationEventStore.OrchestrationEventStore;
+        const linkUpdates = yield* eventStore
+          .readAgentEvents({
+            threadId,
+            afterSequence: 0,
+            eventType: "thread.pull-request-link-updated",
+          })
+          .pipe(Stream.runCollect);
+        assert.deepEqual(
+          linkUpdates.flatMap(({ event }) =>
+            event.type === "thread.pull-request-link-updated" && event.watchMerged === true
+              ? [event.payload.number]
+              : [],
+          ),
+          [19],
+        );
         const wakes = (yield* orchestrator.getThreadRecords(threadId, [
           "messages",
         ])).messages.flatMap((message) => message.notification?.summary ?? []);

@@ -524,14 +524,14 @@ export const make = Effect.gen(function* () {
       watch: first.next,
       ...checksPendingBeforeOf(first.target),
       ...(first.endedWatch === undefined ? {} : { endedWatch: first.endedWatch }),
-      ...(first.reason === "closed" && { endReason: first.reason }),
+      ...((first.reason === "closed" || first.reason === "merged") && { endReason: first.reason }),
       others: rest.map((item) => ({
         ...identityOf(item.target.link),
         startedAt: item.target.watch.startedAt,
         watch: item.next,
         ...checksPendingBeforeOf(item.target),
         ...(item.endedWatch === undefined ? {} : { endedWatch: item.endedWatch }),
-        ...(item.reason === "closed" && { endReason: item.reason }),
+        ...((item.reason === "closed" || item.reason === "merged") && { endReason: item.reason }),
         ...(item.wake.includesRemarks === true ? { includesRemarks: true } : {}),
       })),
       wake: {

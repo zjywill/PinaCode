@@ -2028,6 +2028,7 @@ export const OrchestrationV2DomainEvent = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2EventBase.fields,
     type: Schema.Literal("thread.pull-request-link-updated"),
+    watchMerged: Schema.optional(Schema.Literal(true)),
     payload: ThreadPullRequestLink,
   }),
   Schema.Struct({
@@ -2975,6 +2976,7 @@ export const OrchestrationV2DomainEventJson = Schema.Union([
   Schema.Struct({
     ...OrchestrationV2JsonEventBaseFields,
     type: Schema.Literal("thread.pull-request-link-updated"),
+    watchMerged: Schema.optional(Schema.Literal(true)),
     payload: ThreadPullRequestLink,
   }),
   Schema.Struct({

@@ -328,6 +328,8 @@ const allocatedBytes = (fs: FileSystem.FileSystem, file: string) =>
     ),
   );
 
+type GitBranchPullRequestLookup = (branch: string) => GitManager.GitBranchPullRequest | null;
+
 const cleanupFixture = (
   storageCleanup: StorageCleanupSettings = {
     ...DEFAULT_SERVER_SETTINGS.storageCleanup,
@@ -371,6 +373,7 @@ const cleanupFixture = (
     let fullStatusCalls = 0;
     let gitInspections = 0;
     let snapshotReads = 0;
+    let branchPullRequest: GitBranchPullRequestLookup = () => null;
     let terminalListener: ((event: TerminalMetadataStreamEvent) => Effect.Effect<void>) | undefined;
     let events: Stream.Stream<OrchestrationV2DomainEvent> = Stream.empty;
     const activated = yield* Deferred.make<void>();
@@ -517,6 +520,8 @@ const cleanupFixture = (
       ),
       Effect.provideService(GitManager.GitManager, {
         invalidateStatus: () => Effect.void,
+        branchPullRequest: (input: { branch: string }) =>
+          Effect.sync(() => branchPullRequest(input.branch)),
       } as unknown as GitManager.GitManager["Service"]),
       Effect.provideService(TerminalManager.TerminalManager, {
         subscribeMetadata: (
@@ -572,6 +577,9 @@ const cleanupFixture = (
       },
       setThreads: (next: typeof threads) => {
         threads = next;
+      },
+      setBranchPullRequest: (lookup: GitBranchPullRequestLookup) => {
+        branchPullRequest = lookup;
       },
       threadBranches: () => threads.map((thread) => thread.branch),
       setOnLiveCheck: (hook: Effect.Effect<void>) => {
@@ -2596,6 +2604,183 @@ describe("orphan worktree reports", () => {
 });
 
 describe("storage cleanup reports and local file policies", () => {
+  it.effect.each([
+    ["direct", "removed"],
+    ["delegated squash", "removed"],
+    ["startup recovery", "removed"],
+    ["dirty", "kept"],
+    ["busy", "kept"],
+    ["shared", "kept"],
+    ["other PR", "kept"],
+    ["later commit", "kept"],
+    ["closed", null],
+    ["disabled", null],
+    ["project off", null],
+  ] as const)("scopes the merged watch cleanup to its checkout (%s)", ([scenario, outcome]) =>
+    runCleanupTest(
+      Effect.gen(function* () {
+        yield* TestClock.setTime(NOW_MS);
+        const fixture = yield* cleanupFixture({
+          ...DEFAULT_SERVER_SETTINGS.storageCleanup,
+          worktreeOnMerge: scenario !== "disabled",
+        });
+        const { command, repo, worktree, fs, service } = fixture;
+        if (scenario === "project off")
+          fixture.setSettings({
+            projectSettingsOverrides: {
+              [ProjectId.make("project-1")]: { worktreeCleanup: { mode: "off" } },
+            },
+          });
+        const otherWorktree = `${fixture.config.worktreesDir}/other`;
+        yield* command(repo, ["worktree", "add", "-b", "other", otherWorktree]);
+        yield* fs.writeFileString(`${worktree}/tracked.txt`, "feature\n");
+        yield* command(worktree, ["commit", "-am", "feature"]);
+        const squash = scenario === "delegated squash" || scenario === "later commit";
+        if (squash) {
+          yield* command(repo, ["merge", "--squash", "feature"]);
+          yield* command(repo, ["commit", "-m", "squash feature"]);
+        } else yield* command(repo, ["merge", "--ff-only", "feature"]);
+        const prHead = (yield* command(worktree, ["rev-parse", "HEAD"])).stdout.trim();
+        yield* command(repo, ["remote", "add", "origin", repo]);
+        yield* command(repo, [
+          "symbolic-ref",
+          "refs/remotes/origin/HEAD",
+          "refs/remotes/origin/main",
+        ]);
+        if (scenario === "later commit") {
+          yield* fs.writeFileString(`${worktree}/tracked.txt`, "later work\n");
+          yield* command(worktree, ["commit", "-am", "later work"]);
+        }
+
+        const monitorId = ThreadId.make("monitor");
+        const implementationId = ThreadId.make("implementation");
+        const url = "https://github.com/acme/app/pull/7";
+        const link = {
+          host: "github.com",
+          repository: "acme/app",
+          number: 7,
+          url,
+          source: "agent" as const,
+          linkedAt: DateTime.formatIso(at(-DAY_MS)),
+          snapshot: null,
+          stack: null,
+        };
+        const delegated = scenario === "delegated squash";
+        const endReason = scenario === "closed" ? "closed" : "merged";
+        const completedLink = {
+          ...link,
+          endedWatch: {
+            startedAt: link.linkedAt,
+            endReason,
+            headSha: prHead,
+            failedChecks: [],
+            passed: true,
+            passedChecks: [],
+            remarksThrough: link.linkedAt,
+            remarkIds: [],
+            conflicting: false,
+            wakes: 0,
+            ...(delegated && {
+              followUp: {
+                issueUrl: "https://github.com/acme/app/issues/1",
+                childThreadId: implementationId,
+              },
+            }),
+          },
+        } as const;
+        const implementation = shell({
+          id: delegated ? implementationId : monitorId,
+          branch: "feature",
+          worktreePath: worktree,
+          pullRequests: [delegated ? link : completedLink],
+          ...(delegated && {
+            lineage: {
+              rootThreadId: monitorId,
+              parentThreadId: monitorId,
+              relationshipToParent: "delegation",
+            },
+          }),
+          ...(scenario === "busy" && { activeRunId: RunId.make("active") }),
+        });
+        fixture.setThreads([
+          implementation,
+          shell({
+            id: delegated ? monitorId : ThreadId.make("unrelated"),
+            branch: scenario === "shared" ? "feature" : "other",
+            worktreePath: scenario === "shared" ? worktree : otherWorktree,
+            pullRequests: delegated ? [completedLink] : [],
+          }),
+        ]);
+        const lookup: GitBranchPullRequestLookup = (branch) => ({
+          number: branch === "other" || scenario === "other PR" ? 8 : 7,
+          url: branch === "other" || scenario === "other PR" ? url.replace("/7", "/8") : url,
+          state: "merged",
+          repositoryKey: "github.com/acme/app",
+          headRef: branch,
+          baseRef: "main",
+          headSha: prHead,
+          title: "Merged change",
+          updatedAt: null,
+        });
+        if (scenario === "startup recovery")
+          fixture.setBranchPullRequest((branch) => (branch === "feature" ? lookup(branch) : null));
+        const events = yield* Queue.unbounded<{
+          event: OrchestrationV2DomainEvent;
+          processed: Deferred.Deferred<void>;
+        }>();
+        yield* fixture.activate(
+          Stream.fromQueue(events).pipe(
+            Stream.flatMap(({ event, processed }) =>
+              Stream.succeed(event).pipe(
+                Stream.concat(
+                  Stream.fromEffect(Deferred.succeed(processed, undefined)).pipe(Stream.drain),
+                ),
+              ),
+            ),
+          ),
+        );
+        const startup = yield* service.reports.pipe(
+          Stream.filter((report) => report !== null),
+          Stream.runHead,
+        );
+        yield* service.drain;
+        fixture.setBranchPullRequest(lookup);
+        if (scenario === "dirty") yield* fs.writeFileString(`${worktree}/notes.txt`, "local\n");
+        const event = {
+          id: EventId.make("pr-watch-ended"),
+          type: "thread.pull-request-link-updated",
+          threadId: monitorId,
+          occurredAt: at(0),
+          payload: completedLink,
+          ...(endReason === "merged" && { watchMerged: true as const }),
+        } as const;
+        const publish = Effect.fn("StorageCleanupTest.publishWatchEnd")(function* () {
+          const processed = yield* Deferred.make<void>();
+          yield* Queue.offer(events, { event, processed });
+          yield* Deferred.await(processed);
+          yield* service.drain;
+        });
+        if (scenario !== "startup recovery") yield* publish();
+        const report = yield* service.latestReport;
+        if (outcome === null) {
+          expect(report).toEqual(Option.getOrNull(startup));
+        } else {
+          expect(report?.entries.filter((entry) => entry.path === worktree)).toMatchObject([
+            { outcome, path: worktree, threadId: implementation.id },
+          ]);
+          if (scenario !== "startup recovery") expect(report?.entries).toHaveLength(1);
+        }
+        expect(yield* fs.exists(worktree)).toBe(outcome !== "removed");
+        expect(yield* fs.exists(otherWorktree)).toBe(true);
+        expect((yield* command(repo, ["branch", "--list", "feature"])).stdout).toContain("feature");
+        if (outcome === "removed" && scenario !== "startup recovery") {
+          yield* publish();
+          expect(yield* fs.exists(otherWorktree)).toBe(true);
+          expect(yield* service.latestReport).toEqual(report);
+        }
+      }),
+    ),
+  );
   it.effect.each([true, false])(
     "sweeps on runtime retirement rather than live error metadata, worktreeOnDelete=%s",
     (worktreeOnDelete) =>

@@ -5417,7 +5417,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             stopped?.followUp !== undefined && stopped.endReason === undefined
               ? { ...stopped, endReason: "stopped" as const }
               : command.type === "thread.pull-request-watch.sync" && watch === undefined
-                ? command.endReason !== undefined && existing.watch?.followUp !== undefined
+                ? command.endReason !== undefined && existing.watch !== undefined
                   ? { ...existing.watch, endReason: command.endReason }
                   : command.endedWatch
                 : undefined;
@@ -5526,6 +5526,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         command,
       )({
         type: "thread.pull-request-link-updated",
+        ...(command.type === "thread.pull-request-watch.sync" &&
+          command.endReason === "merged" && { watchMerged: true }),
         threadId: command.threadId,
         providerInstanceId: updatedThread.providerInstanceId,
         occurredAt: now,

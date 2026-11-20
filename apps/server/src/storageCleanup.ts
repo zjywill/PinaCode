@@ -19,6 +19,7 @@ import type {
   StorageCleanupReport,
   StorageCleanupReportEntry,
   ThreadId,
+  ThreadPullRequestLink,
 } from "@t3tools/contracts";
 import { resolveWorktreeCleanup } from "@t3tools/shared/projectSettings";
 import { resolveWorktreeT3Home } from "@t3tools/shared/devHome";
@@ -54,6 +55,11 @@ import { MAX_OVERDUE_ARM_MS } from "./orchestration-v2/UsageLimitRecoveryWorker.
 import * as WorktreeBranchSync from "./orchestration-v2/WorktreeBranchSync.ts";
 import { forkParked } from "./serverActivation.ts";
 import * as Settings from "./serverSettings.ts";
+import { sourceControlDefinitions } from "./sourceControl/sourceControlDefinitions.ts";
+import {
+  threadPullRequestKeysEqual,
+  threadPullRequestsOf,
+} from "./sourceControl/threadPullRequests.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import { isFilesystemRoot, managedWorktreesDirectories } from "./worktreesDirectory.ts";
 import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
@@ -304,6 +310,32 @@ export function storageCleanupPullRequestMerged(
         pullRequest.baseRef === worktree.defaultBranch &&
         pullRequest.headSha === worktree.headSha))
   );
+}
+
+type MergedWatch = {
+  readonly threadId: ThreadId;
+  readonly link: ThreadPullRequestLink;
+};
+
+function mergedWatchOwner(
+  { threadId, link }: MergedWatch,
+  threads: ReadonlyMap<ThreadId, OrchestrationV2ThreadShell>,
+): OrchestrationV2ThreadShell | undefined {
+  const monitor = threads.get(threadId);
+  const childId = link.endedWatch?.followUp?.childThreadId;
+  if (childId === undefined) return monitor;
+  const child = threads.get(childId);
+  if (
+    monitor !== undefined &&
+    child?.projectId === monitor.projectId &&
+    child.lineage.relationshipToParent === "delegation" &&
+    child.lineage.parentThreadId === monitor.id &&
+    threadPullRequestsOf(child).some(
+      (candidate) =>
+        candidate.source !== "stack-dismissed" && threadPullRequestKeysEqual(candidate, link),
+    )
+  )
+    return child;
 }
 
 export class StorageCleanup extends Context.Service<
@@ -1044,6 +1076,7 @@ const make = Effect.gen(function* () {
     now: number,
     entries: StorageCleanupReportEntry[],
     trigger: StorageCleanupReport["trigger"],
+    merge?: MergedWatch,
   ) {
     if (!anyWorktreePolicy(serverSettings, worktreeCleanupEnabled))
       return { waiting: false, kept: [] };
@@ -1123,6 +1156,14 @@ const make = Effect.gen(function* () {
     )).filter((thread) => thread.worktreePath !== null && thread.branch !== null);
     const snapshot = yield* readThreads();
     const threadsById = new Map(snapshot.threads.map((thread) => [thread.id, thread]));
+    const mergeOwner = merge === undefined ? undefined : mergedWatchOwner(merge, threadsById);
+    if (
+      merge !== undefined &&
+      (mergeOwner?.worktreePath == null ||
+        mergeOwner.branch === null ||
+        !resolveWorktreeCleanup(serverSettings, mergeOwner.projectId).worktreeOnMerge)
+    )
+      return { waiting, kept };
     const refreshedDefaultRefs = new Map<string, Set<string>>();
     const defaultBranches = new Map<string, string | null>();
     // Threads may store one checkout through different symlinked spellings; compare real paths.
@@ -1188,6 +1229,7 @@ const make = Effect.gen(function* () {
       ...deletedThreads.filter((_thread, index) => !groups.has(deletedKeys[index]!)),
     ];
     for (const thread of candidates) {
+      if (merge !== undefined && thread !== mergeOwner) continue;
       const settings = resolveWorktreeCleanup(serverSettings, thread.projectId);
       if (!worktreeCleanupEnabled(settings)) continue;
       const worktreePath = path.resolve(thread.worktreePath!);
@@ -1261,6 +1303,7 @@ const make = Effect.gen(function* () {
         )
           return keep(waitForStop("settled moments ago"));
         const old =
+          merge === undefined &&
           !deleted &&
           settings.worktreeAfterDays !== null &&
           activityAt < now - settings.worktreeAfterDays * DAY_MS;
@@ -1270,12 +1313,15 @@ const make = Effect.gen(function* () {
             : now - Math.max(DateTime.toEpochMillis(settledThread.settledAt), activityAt);
         const settledDays = settledFor === null ? null : Math.floor(settledFor / DAY_MS);
         const settled =
+          merge === undefined &&
           settledFor !== null &&
           settings.worktreeSettledAfterDays !== null &&
           settledFor >= settings.worktreeSettledAfterDays * DAY_MS;
         // A worktree is unchanged before its first commit, so only finished threads qualify.
         const unchangedApplies =
-          settings.worktreeUnchanged && (settledThread !== undefined || thread.archivedAt !== null);
+          merge === undefined &&
+          settings.worktreeUnchanged &&
+          (settledThread !== undefined || thread.archivedAt !== null);
         let eligible = deleted || old || settled;
         let removalReason = deleted
           ? "thread was deleted"
@@ -1283,19 +1329,21 @@ const make = Effect.gen(function* () {
             ? `inactive for ${Math.floor((now - activityAt) / DAY_MS)} days`
             : `settled for ${settledDays} days`;
         const notDueReason =
-          !deleted && settings.worktreeAfterDays !== null
-            ? `inactive for ${Math.floor((now - activityAt) / DAY_MS)} of ${settings.worktreeAfterDays} days`
-            : settings.worktreeSettledAfterDays !== null
-              ? settledFor === null
-                ? "not settled"
-                : `settled for ${settledDays} of ${settings.worktreeSettledAfterDays} days`
-              : settings.worktreeOnMerge
-                ? "not merged"
-                : unchangedApplies
-                  ? "has commits beyond the default branch"
-                  : settings.worktreeUnchanged
-                    ? "not settled"
-                    : "no rules apply";
+          merge !== undefined
+            ? "not merged"
+            : !deleted && settings.worktreeAfterDays !== null
+              ? `inactive for ${Math.floor((now - activityAt) / DAY_MS)} of ${settings.worktreeAfterDays} days`
+              : settings.worktreeSettledAfterDays !== null
+                ? settledFor === null
+                  ? "not settled"
+                  : `settled for ${settledDays} of ${settings.worktreeSettledAfterDays} days`
+                : settings.worktreeOnMerge
+                  ? "not merged"
+                  : unchangedApplies
+                    ? "has commits beyond the default branch"
+                    : settings.worktreeUnchanged
+                      ? "not settled"
+                      : "no rules apply";
         // The merge and unchanged rules read Git, which a scratch folder does not have.
         if (scratch && !eligible)
           return keep(
@@ -1449,7 +1497,7 @@ const make = Effect.gen(function* () {
           return keep("contains a project checkout");
         if (yield* branchChanged(worktreePath, thread.branch)) {
           // A deleted owner cannot follow, so its remaining subagents stay on its branch.
-          if (!deleted) yield* followBranch(worktreePath);
+          if (!deleted && merge === undefined) yield* followBranch(worktreePath);
           return keep("repository or branch changed");
         }
         const changes = yield* localChangesReason(worktreePath, settings);
@@ -1471,7 +1519,7 @@ const make = Effect.gen(function* () {
           if (remote === null) {
             if (!unchangedApplies)
               return keep(
-                settings.worktreeUnchanged
+                merge === undefined && settings.worktreeUnchanged
                   ? notDueReason
                   : "no remote is configured for merged-worktree cleanup",
               );
@@ -1544,6 +1592,14 @@ const make = Effect.gen(function* () {
               { cwd: worktreePath, branch: thread.branch },
               { refresh: true },
             );
+            if (merge !== undefined) {
+              const key =
+                pullRequest === null
+                  ? null
+                  : sourceControlDefinitions.parseChangeRequestUrl(pullRequest.url)?.link;
+              if (!key || !threadPullRequestKeysEqual(key, merge.link))
+                return keep("branch no longer matches the watched pull request");
+            }
             eligible = storageCleanupPullRequestMerged(pullRequest, {
               branch: thread.branch,
               defaultBranch: branch,
@@ -1621,13 +1677,14 @@ const make = Effect.gen(function* () {
         ),
       );
     }
-    yield* reportOrphanWorktrees(
-      roots,
-      yield* projectStore.list({ includeDeleted: true }),
-      entries,
-      scratchRoot,
-      trigger,
-    );
+    if (merge === undefined)
+      yield* reportOrphanWorktrees(
+        roots,
+        yield* projectStore.list({ includeDeleted: true }),
+        entries,
+        scratchRoot,
+        trigger,
+      );
     return { waiting, kept };
   });
 
@@ -1785,18 +1842,14 @@ const make = Effect.gen(function* () {
   let keptDeletedWorktrees: ReadonlyArray<string> = [];
   let deletions = 0;
   let sweptDeletions = 0;
-  const sweep = Effect.fn("StorageCleanup.sweep")(function* (
+  const sweepWorktrees = Effect.fn("StorageCleanup.sweepWorktrees")(function* (
+    serverSettings: ServerSettings,
+    now: number,
+    entries: StorageCleanupReportEntry[],
     trigger: StorageCleanupReport["trigger"],
+    merge?: MergedWatch,
   ) {
-    const deletionsAtStart = deletions;
-    const now = yield* Clock.currentTimeMillis;
-    const serverSettings = yield* settingsService.getSettings;
-    const settings = serverSettings.storageCleanup;
-    const entries: StorageCleanupReportEntry[] = [];
-    yield* cleanCheckpointRefs().pipe(
-      Effect.catch((cause) => Effect.logWarning("checkpoint ref cleanup failed", { cause })),
-    );
-    const deletedWorktrees = yield* cleanWorktrees(serverSettings, now, entries, trigger).pipe(
+    return yield* cleanWorktrees(serverSettings, now, entries, trigger, merge).pipe(
       Effect.catch((error) =>
         Effect.gen(function* () {
           entries.push({
@@ -1815,6 +1868,19 @@ const make = Effect.gen(function* () {
         }),
       ),
     );
+  });
+  const sweep = Effect.fn("StorageCleanup.sweep")(function* (
+    trigger: StorageCleanupReport["trigger"],
+  ) {
+    const deletionsAtStart = deletions;
+    const now = yield* Clock.currentTimeMillis;
+    const serverSettings = yield* settingsService.getSettings;
+    const settings = serverSettings.storageCleanup;
+    const entries: StorageCleanupReportEntry[] = [];
+    yield* cleanCheckpointRefs().pipe(
+      Effect.catch((cause) => Effect.logWarning("checkpoint ref cleanup failed", { cause })),
+    );
+    const deletedWorktrees = yield* sweepWorktrees(serverSettings, now, entries, trigger);
     deletedWorktreeWaits = deletedWorktrees.waiting;
     keptDeletedWorktrees = deletedWorktrees.kept;
     sweptDeletions = deletionsAtStart;
@@ -1866,6 +1932,14 @@ const make = Effect.gen(function* () {
         ),
       );
     }
+    return yield* publishReport(trigger, now, entries);
+  });
+
+  const publishReport = Effect.fn("StorageCleanup.publishReport")(function* (
+    trigger: StorageCleanupReport["trigger"],
+    now: number,
+    entries: StorageCleanupReportEntry[],
+  ) {
     const counts = { removed: 0, kept: 0, failed: 0 };
     let bytesFreed = 0;
     for (const entry of entries) {
@@ -1892,10 +1966,28 @@ const make = Effect.gen(function* () {
     yield* SubscriptionRef.set(reportRef, latestReport);
     return latestReport;
   });
+  const sweepMerged = Effect.fn("StorageCleanup.sweepMerged")(function* (merge: MergedWatch) {
+    const settings = yield* settingsService.getSettings;
+    const now = yield* Clock.currentTimeMillis;
+    const entries: StorageCleanupReportEntry[] = [];
+    yield* sweepWorktrees(settings, now, entries, "automatic", merge);
+    if (entries.length > 0) yield* publishReport("automatic", now, entries);
+  });
+
   const automaticSweepQueued = yield* Ref.make(false);
   const worker = yield* makeDrainableWorker(
-    (completion: Deferred.Deferred<StorageCleanupReport, ServerSettingsError> | undefined) =>
-      (completion === undefined ? Ref.set(automaticSweepQueued, false) : Effect.void).pipe(
+    (request: {
+      readonly completion?: Deferred.Deferred<StorageCleanupReport, ServerSettingsError>;
+      readonly merge?: MergedWatch;
+    }) => {
+      const { completion, merge } = request;
+      if (merge !== undefined)
+        return sweepMerged(merge).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("merged worktree cleanup failed", { cause }),
+          ),
+        );
+      return (completion === undefined ? Ref.set(automaticSweepQueued, false) : Effect.void).pipe(
         Effect.andThen(sweep(completion === undefined ? "automatic" : "manual")),
         Effect.exit,
         Effect.flatMap((exit) =>
@@ -1908,14 +2000,15 @@ const make = Effect.gen(function* () {
               )
             : Deferred.done(completion, exit).pipe(Effect.asVoid),
         ),
-      ),
+      );
+    },
   );
   const requestSweep = Ref.getAndSet(automaticSweepQueued, true).pipe(
-    Effect.flatMap((queued) => (queued ? Effect.void : worker.enqueue(undefined))),
+    Effect.flatMap((queued) => (queued ? Effect.void : worker.enqueue({}))),
   );
   const runNow = Effect.gen(function* () {
     const completion = yield* Deferred.make<StorageCleanupReport, ServerSettingsError>();
-    yield* worker.enqueue(completion);
+    yield* worker.enqueue({ completion });
     return yield* Deferred.await(completion);
   });
 
@@ -1959,6 +2052,11 @@ const make = Effect.gen(function* () {
     );
     yield* forkParked(
       Stream.runForEach(events, (event) => {
+        if (event.type === "thread.pull-request-link-updated" && event.watchMerged === true) {
+          return anyWorktreePolicy(lastSettings, (rules) => rules.worktreeOnMerge)
+            ? worker.enqueue({ merge: { threadId: event.threadId, link: event.payload } })
+            : Effect.void;
+        }
         if (event.type === "thread.deleted") deletions++;
         else if (
           event.type !== "provider-session.updated" ||
