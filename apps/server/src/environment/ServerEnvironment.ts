@@ -271,6 +271,7 @@ export const make = Effect.gen(function* () {
       threadStop: true,
       agentActivityPublishing: false,
       ...(hostPlatform === "win32" ? {} : { localServerStop: true }),
+      previewTunnelSetting: true,
       environmentIcon: true,
       projectCloneTracking: true,
       projectOrganization: true,

@@ -45,6 +45,7 @@ import * as ProjectService from "../project/ProjectService.ts";
 import * as PullRequestWatchService from "../pullRequest/PullRequestWatchService.ts";
 import * as PullRequestService from "../pullRequest/PullRequestService.ts";
 import type { ProviderInstance } from "@t3tools/provider-core/server/driver";
+import * as ModelManifest from "../provider/ModelManifest.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
@@ -113,16 +114,16 @@ const providerInstance = {
   textGeneration: {} as ProviderInstance["textGeneration"],
 } satisfies ProviderInstance;
 
-const layerTestProviderInstanceRegistry = Layer.succeed(
-  ProviderInstanceRegistry.ProviderInstanceRegistry,
-  {
+const layerTestProviderInstanceRegistry = Layer.merge(
+  ModelManifest.layerTest,
+  Layer.succeed(ProviderInstanceRegistry.ProviderInstanceRegistry, {
     getInstance: (instanceId) =>
       Effect.succeed(instanceId === providerInstance.instanceId ? providerInstance : undefined),
     listInstances: Effect.succeed([providerInstance]),
     listUnavailable: Effect.succeed([]),
     streamChanges: Stream.empty,
     subscribeChanges: Effect.never,
-  },
+  }),
 );
 
 const layerTest = Layer.mergeAll(
@@ -893,13 +894,18 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
             result,
             status,
             title: "Inspect regression",
-            remoteChild: {
-              environmentId: EnvironmentId.make("remote-review-env"),
-              threadId: ThreadId.make(`remote:${id}`),
-              label: "Review server",
-              title: "Remote review",
-              stoppedThere: false,
-            },
+            ...(id === firstTaskId
+              ? {
+                  childThreadId: null,
+                  remoteChild: {
+                    environmentId: EnvironmentId.make("remote-review-env"),
+                    threadId: ThreadId.make(`remote:${id}`),
+                    label: "Review server",
+                    title: "Remote review",
+                    stoppedThere: false,
+                  },
+                }
+              : { childThreadId: ThreadId.make(`thread:inline-budget-child:${id}`) }),
           },
         })),
       });
@@ -923,9 +929,8 @@ it.layer(layerTest)("delegated completion delivery repairs", (it) => {
       const message = projection.messages.find((candidate) => candidate.id === messageId)!;
       assert.equal(message.text.includes(testCase.first), testCase.inlineFirst);
       assert.equal(message.text.includes(testCase.second), testCase.inlineSecond);
-      for (const id of [firstTaskId, secondTaskId]) {
-        assert.include(message.text, `t3-thread://v2/remote-review-env/remote:${id}`);
-      }
+      assert.include(message.text, `t3-thread://v2/remote-review-env/remote:${firstTaskId}`);
+      assert.include(message.text, `t3-thread://v1/thread:inline-budget-child:${secondTaskId}`);
       const deferredTaskId = testCase.inlineFirst ? secondTaskId : firstTaskId;
       assert.include(
         message.text,
@@ -3654,6 +3659,66 @@ it.layer(Layer.merge(layerTest, ProviderContinuationRequests.layer))(
         );
         assert.equal(followup?.status, "completed");
         assert.equal(followup?.result, "PONG");
+      }),
+    );
+
+    it.effect("tracks a user's follow-up but not the compaction sent ahead of it", () =>
+      Effect.gen(function* () {
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
+        const now = yield* DateTime.now;
+        const parentThreadId = ThreadId.make("thread:followup-compact-parent");
+        const projectId = ProjectId.make("project:followup-compact");
+        const parentRunId = RunId.make("run:followup-compact-parent");
+        const rootNodeId = NodeId.make("node:followup-compact-parent");
+        yield* seedParentWithTerminalTask({
+          threadId: parentThreadId,
+          projectId,
+          runId: parentRunId,
+          rootNodeId,
+          taskId: NodeId.make("node:followup-compact-seed"),
+          deliveryState: "acknowledged",
+          now,
+        });
+        const child = yield* seedRestartCancelledChild({
+          parentThreadId,
+          projectId,
+          parentRunId,
+          rootNodeId,
+          name: "followup-compact-child",
+          completionWake: "always",
+          continuationPending: false,
+          runStatus: "completed",
+          now,
+        });
+        yield* orchestrator.recoverDelegatedTasks;
+        const tasksBefore = (yield* orchestrator.getThreadProjection(parentThreadId)).subagents
+          .length;
+
+        const send = (name: string, text: string) =>
+          orchestrator.dispatch({
+            type: "message.dispatch",
+            createdBy: "user",
+            creationSource: "web",
+            commandId: CommandId.make(`command:followup-compact-${name}`),
+            threadId: child.childThreadId,
+            messageId: MessageId.make(`message:followup-compact-${name}`),
+            text,
+            attachments: [],
+            dispatchMode: { type: "queue_after_active" },
+          });
+        yield* send("compact", "/compact");
+        yield* send("ask", "Write the next packet.");
+
+        const runs = (yield* orchestrator.getThreadProjection(child.childThreadId)).runs;
+        const runOf = (name: string) =>
+          runs.find((run) => run.userMessageId === `message:followup-compact-${name}`);
+        assert.isDefined(runOf("compact"));
+        assert.isUndefined(runOf("compact")?.delegatedTaskId);
+        assert.isDefined(runOf("ask")?.delegatedTaskId);
+        assert.equal(
+          (yield* orchestrator.getThreadProjection(parentThreadId)).subagents.length,
+          tasksBefore + 1,
+        );
       }),
     );
 

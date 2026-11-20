@@ -68,7 +68,7 @@ function sharedBackendTargetHost(host: string | undefined): string {
 }
 
 export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) =>
-  path.join(NodeOS.homedir(), ".t3"),
+  path.join(NodeOS.homedir(), ".pinacode"),
 );
 
 const MODE_ARGS = {
@@ -329,7 +329,13 @@ export const createDevRunnerEnv = Effect.fn("dev-runner.createDevRunnerEnv")(fun
       `http://${isDesktopMode ? DESKTOP_DEV_LOOPBACK_HOST : "localhost"}:${webPort}`,
   };
 
-  if (configuredBaseDir !== undefined) {
+  const path = yield* Path.Path;
+  // The server stores an explicit home's state in userdata, which can be a live install.
+  const home = yield* HostProcess.HomeDirectory;
+  const isLiveHome = [".t3", ".pinacode"].some(
+    (directory) => resolvedBaseDir === path.join(home, directory),
+  );
+  if (configuredBaseDir !== undefined && !isLiveHome) {
     output.PINACODE_HOME = resolvedBaseDir;
   } else {
     delete output.PINACODE_HOME;
@@ -966,7 +972,7 @@ const devRunnerCli = Command.make("dev-runner", {
   ),
   t3Home: Flag.String("home-dir").pipe(
     Flag.withDescription(
-      "Explicit T3 Code data directory; runtime state is stored under userdata (equivalent to PINACODE_HOME). Inside a git worktree this defaults to that worktree's own .t3 so dev state stays off the shared home.",
+      "Explicit Pina Code data directory; runtime state is stored under userdata (equivalent to PINACODE_HOME). Inside a git worktree this defaults to that worktree's own .t3 so dev state stays off the shared home.",
     ),
     Flag.optional,
     Flag.map(Option.getOrUndefined),

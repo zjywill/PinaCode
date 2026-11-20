@@ -7,6 +7,7 @@ import * as EventSink from "./EventSink.ts";
 import * as EventStore from "./EventStore.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProjectStore from "./ProjectStore.ts";
+import * as ThreadViewers from "./ThreadViewers.ts";
 import * as TurnItemPositionStore from "./TurnItemPositionStore.ts";
 
 export const layerEventInfrastructure = Layer.mergeAll(
@@ -30,4 +31,6 @@ export const layerStores = Layer.mergeAll(
   TurnItemPositionStore.layer,
 );
 
-export const layerEventSink = EventSink.layerFromStores.pipe(Layer.provide(layerStores));
+export const layerEventSink = EventSink.layerFromStores.pipe(
+  Layer.provide(Layer.merge(layerStores, ThreadViewers.layer)),
+);

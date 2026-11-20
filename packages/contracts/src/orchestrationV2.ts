@@ -301,6 +301,8 @@ export const OrchestrationV2TurnCapabilities = Schema.Struct({
   emitsTurnStarted: Schema.Boolean,
   emitsTurnCompleted: Schema.Boolean,
   supportsInterrupt: Schema.Boolean,
+  // Continues an interrupted turn without a new message; absent on sessions recorded before it existed.
+  supportsNativeResume: Schema.optional(Schema.Boolean),
   supportsActiveSteering: Schema.Boolean,
   // Some native steering mechanisms cancel pending tools before consuming the message.
   activeSteeringInterruptsTools: Schema.optional(Schema.Boolean),
@@ -601,6 +603,38 @@ export function isCompactionCommandMessage(message: CompactionMessageFields): bo
   );
 }
 
+const LEADING_COMMAND = /^\s*(?:\/|\p{Sc}[a-zA-Z0-9:_-]*[a-zA-Z])/u;
+
+/**
+ * Who sent a message, in a line the model reads before its text, or the text unchanged when a
+ * person typed it. Providers parse slash commands and skill mentions such as `$deploy` from the
+ * start of a prompt, so those stay as sent.
+ */
+export function withMessageSenderNote(
+  message: {
+    readonly createdBy: OrchestrationV2Actor;
+    readonly creationSource: OrchestrationV2CreationSource;
+    readonly scheduledTaskId?: ScheduledTaskId | undefined;
+    readonly senderThreadId?: ThreadId | undefined;
+    readonly linkedSender?: OrchestrationV2LinkedSender | undefined;
+  },
+  text: string,
+): string {
+  const agent = message.createdBy === "agent";
+  const note =
+    agent && message.linkedSender !== undefined
+      ? `[Pina Code: the agent in Pina Code thread ${JSON.stringify(message.linkedSender.threadId)} on linked environment ${JSON.stringify(message.linkedSender.environmentId)} sent this message, not the user.]`
+      : agent && message.senderThreadId !== undefined
+        ? `[Pina Code: the agent in Pina Code thread ${JSON.stringify(message.senderThreadId)} sent this message, not the user.]`
+        : message.scheduledTaskId !== undefined
+          ? `[Pina Code: scheduled task ${JSON.stringify(message.scheduledTaskId)} sent this prompt, not the user typing in this chat.]`
+          : agent && message.creationSource === "mcp"
+            ? "[Pina Code: this message came through Pina Code's tools, not from the user typing in this chat.]"
+            : undefined;
+  if (note === undefined || LEADING_COMMAND.test(text)) return text;
+  return text === "" ? note : `${note}\n\n${text}`;
+}
+
 export type OrchestrationV2GoalCommand =
   | { readonly type: "show" }
   | { readonly type: "clear" }
@@ -632,7 +666,7 @@ export function parseGoalCommand(message: {
   }
 }
 
-/** Why T3 Code sent this `/compact` on its own, or undefined for one someone asked for. */
+/** Why Pina Code sent this `/compact` on its own, or undefined for one someone asked for. */
 export function idleCompactionOf(
   message: CompactionMessageFields,
 ): OrchestrationV2IdleCompaction | undefined {
@@ -1393,7 +1427,7 @@ export const OrchestrationV2Notification = Schema.Struct({
 });
 export type OrchestrationV2Notification = typeof OrchestrationV2Notification.Type;
 
-/** Why T3 Code compacted a thread on its own, on the `/compact` it sent. */
+/** Why Pina Code compacted a thread on its own, on the `/compact` it sent. */
 export const OrchestrationV2IdleCompaction = Schema.Literals(["beforeCacheExpires", "onReturn"]);
 export type OrchestrationV2IdleCompaction = typeof OrchestrationV2IdleCompaction.Type;
 
@@ -3328,6 +3362,8 @@ export const OrchestrationV2Command = Schema.Union([
     followUp: Schema.optional(PullRequestFollowUp),
     /** With `watching`, sets how long the watch holds its thread; absent keeps the current one. */
     until: Schema.optional(PullRequestWatchUntil),
+    /** Whether CI was pending with no failure yet when the watch started, so any failure is news. */
+    checksPending: Schema.optional(Schema.Boolean),
     link: Schema.optional(
       Schema.Struct({
         url: TrimmedNonEmptyString,
@@ -4478,6 +4514,7 @@ export class OrchestrationGetWorkflowScriptError extends Schema.TaggedError<Orch
 
 export const OrchestrationV2SearchThreadInput = Schema.Struct({
   threadId: ThreadId,
+  theme: Schema.optionalKey(Schema.Literals(["dark", "light"])),
   skills: Schema.optionalKey(
     Schema.Array(
       Schema.Struct({

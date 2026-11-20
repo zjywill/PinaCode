@@ -65,8 +65,12 @@ function recoveryHint(error: RelayProtectedError): string {
       return "Unlink an unused environment in Pina Connect, then restart Pina Code on this machine.";
     case "RelayAuthInvalidError":
       return "The relay rejected this machine’s credential. Use a pairing link for direct access.";
-    case "RelayEnvironmentLinkProofExpiredError":
     case "RelayEnvironmentLinkProofInvalidError":
+      if (error.reason === "environment_key_mismatch") {
+        return "The relay already has this environment linked with a different key. Use a pairing link for direct access.";
+      }
+      return "Check this machine's date and time, update Pina Code, then restart it.";
+    case "RelayEnvironmentLinkProofExpiredError":
       return "Check this machine's date and time, update Pina Code, then restart it.";
     default:
       return "Retry when the relay is available. If this continues, include the trace ID when reporting it.";

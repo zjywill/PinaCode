@@ -7,6 +7,7 @@ import * as Layer from "effect/Layer";
 import { HttpClient } from "effect/http";
 
 import type { SavedRemoteConnection } from "../../lib/connection";
+import { MobilePreferencesStore } from "../../persistence/mobile-preferences";
 import * as MobileStorage from "../../persistence/mobile-storage";
 import {
   CloudEnvironmentLinkError,
@@ -52,6 +53,7 @@ const connection: SavedRemoteConnection = {
 
 const layerTest = Layer.mergeAll(
   Layer.succeed(ManagedRelay.ManagedRelayClient, null as never),
+  Layer.mock(MobilePreferencesStore)({}),
   Layer.succeed(
     HttpClient.HttpClient,
     HttpClient.make(() => Effect.die("unexpected HTTP request")),
