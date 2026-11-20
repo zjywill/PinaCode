@@ -1,7 +1,8 @@
-import type {
-  ServerProviderAuth,
-  ServerProviderModel,
-  ServerProviderState,
+import {
+  ServerProviderSkill,
+  type ServerProviderAuth,
+  type ServerProviderModel,
+  type ServerProviderState,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -28,7 +29,7 @@ import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import type { DimSettings } from "../settings.ts";
 import { readDimAuth, supportsDimAccount } from "./auth.ts";
 import type { DimDaemon } from "./daemon.ts";
-import type { DimConnectionError } from "./transport.ts";
+import type { DimConnection } from "./transport.ts";
 import {
   dimDefaultModel,
   dimModelFromCatalog,
@@ -54,6 +55,7 @@ export const DIM_NATIVE_SESSIONS = {
 } as const;
 
 const decodeJson = Schema.decodeUnknownOption(Schema.Unknown);
+const decodeSkill = Schema.decodeUnknownOption(ServerProviderSkill);
 const UNKNOWN_AUTH: ServerProviderAuth = { status: "unknown" };
 
 function collectModels(
@@ -113,12 +115,67 @@ const probeBinaryVersion = Effect.fn("DimProvider.probeBinaryVersion")(function*
   ).pipe(Effect.timeout(resolveProviderProbeTimeoutMs("dim", DEFAULT_TIMEOUT_MS, environment)));
 }, Effect.scoped);
 
-const modelsFromProductCatalog = Effect.fn("DimProvider.modelsFromProductCatalog")(function* (
-  request: (
-    method: string,
-    params?: Record<string, unknown>,
-  ) => Effect.Effect<unknown, DimConnectionError>,
+const querySelectableModels = Effect.fn("DimProvider.querySelectableModels")(function* (
+  request: DimConnection["request"],
 ) {
+  const models: DimCatalogModel[] = [];
+  let after: { providerId: string; modelId: string } | undefined;
+  do {
+    const page = yield* request("provider.models.query", {
+      selectableOnly: true,
+      limit: 100,
+      ...(after === undefined ? {} : { after }),
+    });
+    for (const entry of recordArray(page, "models") ?? []) {
+      const providerId = recordString(entry, "providerId");
+      if (providerId === undefined) continue;
+      const entryModel = dimModelFromCatalog({
+        providerId,
+        providerName: recordString(entry, "providerName") ?? providerId,
+        model: recordField(entry, "model"),
+      });
+      if (entryModel !== undefined) models.push(entryModel);
+    }
+    const next = recordField(page, "next");
+    const providerId = recordString(next, "providerId");
+    const modelId = recordString(next, "modelId");
+    if (providerId === undefined || modelId === undefined) break;
+    if (after?.providerId === providerId && after.modelId === modelId) break;
+    after = { providerId, modelId };
+  } while (true);
+  return models;
+});
+
+export const readDimWorkspaceSkills = Effect.fn("DimProvider.readWorkspaceSkills")(function* (
+  connection: DimConnection,
+  cwd: string,
+) {
+  const skills: ServerProviderSkill[] = [];
+  if (!connection.hello.features?.includes("skills.catalog")) return skills;
+  const catalog = yield* connection.request("skills.catalog", { cwd });
+  for (const entry of recordArray(catalog, "entries") ?? []) {
+    if (recordString(entry, "shadowedBy") !== undefined) continue;
+    const userInvocable = recordField(entry, "userInvocable");
+    const skill = decodeSkill({
+      name: recordField(entry, "name"),
+      path: recordField(entry, "filePath"),
+      description: recordString(entry, "description")?.trim() || undefined,
+      scope: recordString(entry, "source"),
+      enabled: recordField(entry, "enabled"),
+      ...(typeof userInvocable === "boolean" ? { userInvocable } : {}),
+      ...(userInvocable === true && recordField(entry, "modelInvocable") === false
+        ? { userInvocationOnly: true }
+        : {}),
+    });
+    if (Option.isSome(skill)) skills.push(skill.value);
+  }
+  return skills;
+});
+
+const modelsFromProductCatalog = Effect.fn("DimProvider.modelsFromProductCatalog")(function* ({
+  request,
+  hello,
+}: DimConnection) {
   const listed = yield* request("provider.list").pipe(Effect.orElseSucceed(() => undefined));
   const providers = recordArray(listed, "providers") ?? [];
   const enabled = providers.filter(
@@ -127,6 +184,11 @@ const modelsFromProductCatalog = Effect.fn("DimProvider.modelsFromProductCatalog
   const authenticated = enabled.some(
     (provider) => recordField(provider, "credentialConfigured") === true,
   );
+  const auth: ServerProviderAuth = authenticated ? { status: "authenticated" } : UNKNOWN_AUTH;
+  if (hello.features?.includes("provider.models.query")) {
+    const models = yield* querySelectableModels(request).pipe(Effect.orElseSucceed(() => []));
+    return { models, auth };
+  }
   const models: DimCatalogModel[] = [];
   for (const provider of enabled) {
     const providerId = recordString(provider, "providerId");
@@ -141,10 +203,7 @@ const modelsFromProductCatalog = Effect.fn("DimProvider.modelsFromProductCatalog
       if (converted !== undefined) models.push(converted);
     }
   }
-  return {
-    models,
-    auth: (authenticated ? { status: "authenticated" } : UNKNOWN_AUTH) satisfies ServerProviderAuth,
-  };
+  return { models, auth };
 });
 
 const readConfiguredModels = Effect.fn("DimProvider.readConfiguredModels")(function* (
@@ -198,8 +257,9 @@ export const checkDimProviderStatus = Effect.fn("DimProvider.checkStatus")(funct
   if (profile === "product") {
     const result = yield* Effect.scoped(
       Effect.gen(function* () {
-        const { request, hello } = yield* input.daemon.connect("Pina Code Dim status");
-        const catalog = yield* modelsFromProductCatalog(request);
+        const connection = yield* input.daemon.connect("Pina Code Dim status");
+        const { request, hello } = connection;
+        const catalog = yield* modelsFromProductCatalog(connection);
         const account = supportsDimAccount(hello)
           ? yield* readDimAuth(request).pipe(Effect.orElseSucceed(() => undefined))
           : undefined;

@@ -48,7 +48,11 @@ import { DIM_PROVIDER, makeDimAdapterV2 } from "./adapter.ts";
 import { makeDimAuth, readDimAuth, refreshDimAccountModels, supportsDimAccount } from "./auth.ts";
 import { makeDimDaemon } from "./daemon.ts";
 import { makeDimSessionManagement } from "./sessionManagement.ts";
-import { checkDimProviderStatus, makePendingDimProvider } from "./status.ts";
+import {
+  checkDimProviderStatus,
+  makePendingDimProvider,
+  readDimWorkspaceSkills,
+} from "./status.ts";
 
 const DRIVER_KIND = ProviderDriverKind.make("dim");
 const decodeDimSettings = Schema.decodeSync(DimSettings);
@@ -263,6 +267,25 @@ export const DimDriver: ProviderDriver<DimSettings, DimDriverEnv> = {
       enabled,
       auth,
       snapshot,
+      snapshotForCwd: Effect.fn("DimDriver.snapshotForCwd")(
+        function* (cwd: string) {
+          const machineSnapshot = yield* snapshot.getSnapshot;
+          if (!enabled) return machineSnapshot;
+          const connection = yield* daemon.connect("Pina Code Dim workspace");
+          const skills = yield* readDimWorkspaceSkills(connection, cwd);
+          return { ...machineSnapshot, skills };
+        },
+        Effect.scoped,
+        Effect.mapError(
+          (cause) =>
+            new ProviderDriverError({
+              driver: DRIVER_KIND,
+              instanceId,
+              detail: "Could not list Dim skills for the workspace.",
+              cause,
+            }),
+        ),
+      ),
       refreshModels,
       orchestrationAdapter: adapter,
       // The server's session list/import RPCs dispatch on this, whatever the driver.
