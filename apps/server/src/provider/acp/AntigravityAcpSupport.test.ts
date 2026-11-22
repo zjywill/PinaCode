@@ -133,6 +133,53 @@ describe("Antigravity Auto", () => {
       ).toBe("deny");
     },
   );
+
+  it.each(["auto", "auto-accept-edits"] as const)(
+    "runs only server-qualified T3 MCP calls unasked in %s",
+    (runtimeMode) => {
+      const policy = { runtimeMode, cwd: "/workspace" };
+      const request = (
+        title: string,
+        rawInput?: Record<string, unknown>,
+      ): EffectAcpSchema.RequestPermissionRequest => ({
+        sessionId: "session-1",
+        toolCall: { toolCallId: "call-1", title, kind: "execute", rawInput },
+        options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
+      });
+      for (const t3Call of [
+        request("Run mcp_pinacode_pinacode_thread_list?"),
+        request("MCP Tool pinacode_delegate_task", {
+          ServerName: "pinacode",
+          ToolName: "pinacode_delegate_task",
+        }),
+      ]) {
+        expect(antigravityPermissionDisposition(policy, t3Call)).toBe("allow");
+        expect(
+          antigravityPermissionDisposition({ ...policy, approvalPolicy: "on-request" }, t3Call),
+        ).toBe("ask");
+        expect(
+          antigravityPermissionDisposition(
+            { ...policy, sandboxPolicy: { type: "readOnly" } },
+            t3Call,
+          ),
+        ).toBe("deny");
+      }
+      for (const otherCall of [
+        // Names no server, so another MCP server's tool of the same name looks identical.
+        request("Running pinacode_preview_status"),
+        request("Run mcp_github_create_issue"),
+        request("MCP Tool pinacode_preview_status", {
+          ServerName: "other",
+          ToolName: "pinacode_preview_status",
+        }),
+        request("Run mcp_pinacode_pinacode_preview_status", {
+          CommandLine: "Run mcp_pinacode_pinacode_preview_status",
+        }),
+      ]) {
+        expect(antigravityPermissionDisposition(policy, otherCall)).toBe("ask");
+      }
+    },
+  );
 });
 
 describe("applyAntigravityAcpModelSelection", () => {

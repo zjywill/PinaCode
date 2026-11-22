@@ -39,15 +39,6 @@ export class PullRequestWatchFailedError extends Schema.TaggedError<PullRequestW
   }
 }
 
-export class PullRequestNotOpenError extends Schema.TaggedError<PullRequestNotOpenError>()(
-  "PullRequestNotOpenError",
-  { state: Schema.String },
-) {
-  override get message(): string {
-    return `The pull request is ${this.state}, so there is nothing to watch.`;
-  }
-}
-
 export class PullRequestWatchFromSubagentError extends Schema.TaggedError<PullRequestWatchFromSubagentError>()(
   "PullRequestWatchFromSubagentError",
   {},
@@ -85,9 +76,13 @@ export class PullRequestWatchService extends Context.Service<
       readonly followUp?: Pick<PullRequestFollowUp, "issueUrl" | "childThreadId">;
       readonly until?: PullRequestWatchUntil | undefined;
     }) => Effect.Effect<
-      ResolvedTarget & { readonly watching: boolean; readonly wasWatching: boolean },
+      ResolvedTarget & {
+        readonly watching: boolean;
+        readonly wasWatching: boolean;
+        /** Set when the PR already ended, so no watch was registered. */
+        readonly state?: "merged" | "closed";
+      },
       | PullRequestWatchFailedError
-      | PullRequestNotOpenError
       | PullRequestWatchFromSubagentError
       | PullRequestWatchThreadNotFoundError
       | PullRequestTargetError
@@ -173,13 +168,20 @@ const make = Effect.gen(function* () {
       )
         return yield* new PullRequestFollowUpInvalidError({ childThreadId: child.id });
     }
-    if (watching && before?.snapshot?.state === "merged") {
-      return yield* new PullRequestNotOpenError({ state: "merged" });
-    }
+    const wasWatching = before?.watch !== undefined;
+    // A watch on an ended PR could only report that it ended, so report it now instead.
+    const alreadyEnded = (state: "merged" | "closed") => ({
+      ...target,
+      watching: false,
+      wasWatching,
+      state,
+    });
+    // A closed snapshot still gets a read below, since the PR may have reopened.
+    if (watching && before?.snapshot?.state === "merged") return alreadyEnded("merged");
     // A pending rollup has no failure yet, so any failure the first read finds is news.
     let checksPendingAtStart: boolean | undefined;
-    if (watching && before?.watch === undefined) {
-      checksPendingAtStart = yield* pullRequests
+    if (watching && !wasWatching) {
+      const read = yield* pullRequests
         .summary(
           {
             projectId: thread.projectId,
@@ -191,17 +193,14 @@ const make = Effect.gen(function* () {
           { recoverTransientFailure: false, bypassCache: true },
         )
         .pipe(
-          Effect.flatMap((summary) =>
-            summary.state === "merged"
-              ? Effect.fail(new PullRequestNotOpenError({ state: "merged" }))
-              : Effect.succeed(summary.checksState === "pending"),
-          ),
           Effect.catchTags({
             // Host and transport errors can recover while the watch is active.
             // A failed read leaves the seed to the link's last sync.
             PullRequestOperationError: () => Effect.undefined,
           }),
         );
+      if (read?.state === "merged" || read?.state === "closed") return alreadyEnded(read.state);
+      checksPendingAtStart = read === undefined ? undefined : read.checksState === "pending";
     }
     const uuid = yield* random.uuidV4().pipe(Effect.orDie);
     yield* engine
@@ -231,7 +230,7 @@ const make = Effect.gen(function* () {
     return {
       ...target,
       watching: watchedLink(after)?.watch !== undefined,
-      wasWatching: before?.watch !== undefined,
+      wasWatching,
     };
   });
 

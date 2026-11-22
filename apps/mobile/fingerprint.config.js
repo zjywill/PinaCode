@@ -17,5 +17,11 @@ module.exports = {
   extraSources: [
     { type: "contents", id: "appMajorVersion", contents: majorVersion },
     { type: "dir", filePath: "../../assets/pinacode/alternates", reasons: ["Alternate app icons"] },
+    // Expo skips symlinks when hashing local modules.
+    {
+      type: "file",
+      filePath: "../../native/apple-speech/AppleSpeechEngine.swift",
+      reasons: ["appleSpeech"],
+    },
   ],
 };
