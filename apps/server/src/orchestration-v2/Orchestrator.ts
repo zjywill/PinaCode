@@ -1038,7 +1038,10 @@ function delegatedTaskTerminalStatus(
   }
 }
 
-/** Failed worktree setup keeps the queue held so queued messages cannot start in the project checkout. */
+/**
+ * Failed worktree setup keeps the queue held so queued messages cannot start in the project checkout.
+ * A run that started had its worktree, so ending it later is not a failed setup.
+ */
 function worktreeSetupPending(
   projection: Pick<OrchestrationV2ThreadProjection, "thread" | "runs">,
 ): boolean {
@@ -1047,6 +1050,7 @@ function worktreeSetupPending(
     projection.runs.some(
       (run) =>
         (run.status === "failed" || run.status === "interrupted") &&
+        run.startedAt === null &&
         run.workspacePreparation?.type === "worktree",
     )
   );
@@ -1370,21 +1374,23 @@ function providerThreadForRun(
     : projection.providerThreads.find((candidate) => candidate.id === run.providerThreadId);
 }
 
-function providerTurnForRun(
+export function providerTurnForRun(
   projection: Pick<OrchestrationV2ThreadProjection, "providerTurns" | "attempts">,
   run: OrchestrationV2Run,
 ): OrchestrationV2ProviderTurn | undefined {
   if (run.activeAttemptId === null) {
     return undefined;
   }
-
-  return (
-    latestProviderTurnForAttempt(projection.providerTurns, run.activeAttemptId) ??
-    projection.providerTurns.find((turn) => {
-      const attempt = projection.attempts.find((candidate) => candidate.id === run.activeAttemptId);
-      return attempt?.providerTurnId === turn.id;
-    })
-  );
+  const latest = latestProviderTurnForAttempt(projection.providerTurns, run.activeAttemptId);
+  if (latest !== undefined) {
+    return latest;
+  }
+  const namedTurnId = projection.attempts.find(
+    (candidate) => candidate.id === run.activeAttemptId,
+  )?.providerTurnId;
+  return namedTurnId === undefined || namedTurnId === null
+    ? undefined
+    : projection.providerTurns.find((turn) => turn.id === namedTurnId);
 }
 
 function contextSourcePointForRun(
@@ -2612,7 +2618,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       const worktreeMissing =
         endedRunId !== undefined &&
         failedRun?.id === endedRunId &&
-        failedRun?.workspacePreparation?.type === "worktree" &&
+        failedRun.startedAt === null &&
+        failedRun.workspacePreparation?.type === "worktree" &&
         projection.thread.worktreePath === null;
       const settings = yield* serverSettings.getSettings.pipe(Effect.orDie);
       const projectOverride =
@@ -3015,30 +3022,42 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
               )
           : null;
       const activeHandoff = handoff ?? legacyImportRecoveryHandoff;
+      const mapQueuedStartError = Effect.mapError(
+        (cause: unknown) =>
+          new OrchestratorDispatchError({
+            commandId,
+            commandType: "message.dispatch",
+            cause,
+          }),
+      );
+      const executionCwd =
+        storedCheckpointScope !== undefined &&
+        storedCheckpointScope.cwd === projection.thread.worktreePath
+          ? storedCheckpointScope.cwd
+          : yield* runtimePolicy
+              .resolve({ thread: projection.thread, modelSelection: queuedRun.modelSelection })
+              .pipe(
+                Effect.map(
+                  (resolvedRuntimePolicy) =>
+                    resolvedRuntimePolicy.cwd ?? projection.thread.worktreePath ?? process.cwd(),
+                ),
+                mapQueuedStartError,
+              );
+      // The thread may have moved between worktree and checkout while this message waited.
+      const reusableCheckpointScope =
+        storedCheckpointScope?.cwd === executionCwd ? storedCheckpointScope : undefined;
       const checkpointScope =
-        storedCheckpointScope ??
-        (yield* runtimePolicy
-          .resolve({ thread: projection.thread, modelSelection: queuedRun.modelSelection })
-          .pipe(
-            Effect.flatMap((resolvedRuntimePolicy) =>
-              checkpointService.prepareRootRunScope({
-                threadId,
-                runId: queuedRun.id,
-                rootNodeId: rootNode.id,
-                providerThreadId: queuedProviderThread.id,
-                cwd: resolvedRuntimePolicy.cwd ?? projection.thread.worktreePath ?? process.cwd(),
-                createdAt: now,
-              }),
-            ),
-            Effect.mapError(
-              (cause) =>
-                new OrchestratorDispatchError({
-                  commandId,
-                  commandType: "message.dispatch",
-                  cause,
-                }),
-            ),
-          ));
+        reusableCheckpointScope ??
+        (yield* checkpointService
+          .prepareRootRunScope({
+            threadId,
+            runId: queuedRun.id,
+            rootNodeId: rootNode.id,
+            providerThreadId: queuedProviderThread.id,
+            cwd: executionCwd,
+            createdAt: now,
+          })
+          .pipe(mapQueuedStartError));
       const providerSessionId =
         (!canResumeAcrossInstances &&
         queuedProviderThread.providerSessionId !== null &&
@@ -3194,7 +3213,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
               summary: activeHandoff.summaryText,
             };
       const executionIdentityEvents: ReadonlyArray<Omit<OrchestrationV2DomainEvent, "id">> =
-        storedCheckpointScope === undefined ||
+        reusableCheckpointScope === undefined ||
         storedProviderThread.id !== queuedProviderThread.id ||
         attempt.providerInstanceId !== queuedRun.providerInstanceId
           ? [
@@ -8015,6 +8034,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       activeRun === undefined &&
       (dispatchMode.type === "queue_after_active" || dispatchMode.type === "start_immediately") &&
       (latestRun?.status === "failed" || latestRun?.status === "interrupted") &&
+      latestRun.startedAt === null &&
       latestRun.workspacePreparation?.type === "worktree" &&
       projection.thread.worktreePath === null
         ? latestRun
