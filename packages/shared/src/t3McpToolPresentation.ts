@@ -398,6 +398,7 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     ["Handle", "Handling", "Handled", "pending questions"],
     "question-respond",
   ),
+  pinacode_workflow: tool(["Use", "Using", "Used", "workflow runs"], "thread-send"),
   pinacode_submit_output: tool(["Submit", "Submitting", "Submitted", "the result"], "thread-send"),
   pinacode_queue_list: tool(["List", "Listing", "Listed", "queued messages"], "queue-list"),
   pinacode_queue_read: tool(["Read", "Reading", "Read", "a queued message"], "queue-read"),

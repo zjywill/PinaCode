@@ -107,6 +107,10 @@
       "types": "./src/shell.ts",
       "import": "./src/shell.ts"
     },
+    "./windowsSystem": {
+      "types": "./src/windowsSystem.ts",
+      "import": "./src/windowsSystem.ts"
+    },
     "./envTrampoline": {
       "types": "./src/envTrampoline.ts",
       "import": "./src/envTrampoline.ts"
@@ -150,6 +154,10 @@
     "./toolOutput": {
       "types": "./src/toolOutput.ts",
       "import": "./src/toolOutput.ts"
+    },
+    "./appLinks": {
+      "types": "./src/appLinks.ts",
+      "import": "./src/appLinks.ts"
     },
     "./htmlRender": {
       "types": "./src/htmlRender.ts",

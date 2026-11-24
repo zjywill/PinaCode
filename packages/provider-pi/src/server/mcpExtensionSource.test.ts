@@ -212,7 +212,7 @@ describe("Pi MCP tool exposure", () => {
       "read",
       "tool_search",
       ...publicDirect,
-      ...aliases,
+      "mcp__pinacode_internal__pinacode_preview_snapshot",
     ]);
     assert.deepEqual(bridge.declaredTools(), publicDirect);
     assert.deepEqual(
@@ -259,9 +259,6 @@ describe("Pi MCP tool exposure", () => {
       "tool_search",
       "mcp__pinacode__pinacode_orchestrator_capabilities",
       "mcp__pinacode__pinacode_preview_snapshot",
-      "mcp__pinacode_internal__pinacode_orchestrator_capabilities",
-      "mcp__pinacode_internal__pinacode_task_status",
-      "mcp__pinacode_internal__pinacode_preview_snapshot",
     ]);
     await bridge.handlers.get("model_select")!(event, discoveryContext);
     assert.equal(
@@ -411,6 +408,37 @@ describe("Pi MCP tool schemas", () => {
     for (const tool of bridge.tools) {
       assert.deepEqual(tool.parameters, inputSchema);
     }
+  });
+
+  it("records each T3 schema once on Pi, which keeps hidden alias declarations in the transcript", async () => {
+    const inputSchema = {
+      type: "object",
+      properties: { depth: { type: "number", description: "Snapshot depth" } },
+      required: ["depth"],
+    };
+    const bridge = await loadMcpBridge({
+      modern: true,
+      inputSchema,
+      activatesOnRegistration: true,
+    });
+    await bridge.handlers.get("session_start")!(
+      { systemPrompt: "" },
+      { model: { api: "openai-completions" }, ui: { notify: assert.fail } },
+    );
+    const aliases = bridge.tools.filter((tool) => tool.name.startsWith("mcp__pinacode_internal__"));
+    assert.isAbove(aliases.length, 0);
+    for (const alias of aliases) {
+      const label = alias.name.slice("mcp__pinacode_internal__".length);
+      const publicTool = bridge.tools.find((tool) => tool.name === "mcp__pinacode__" + label)!;
+      assert.deepEqual(publicTool.parameters, inputSchema);
+      assert.deepEqual(alias.parameters, { type: "object", properties: {} });
+      assert.equal(alias.description, "Same as mcp__pinacode__" + label + ".");
+    }
+    await bridge.callModelTool("mcp__pinacode_internal__pinacode_preview_snapshot", { depth: 2 });
+    assert.deepEqual(JSON.parse(JSON.stringify(bridge.requests.at(-1))).params, {
+      name: "pinacode_preview_snapshot",
+      arguments: { depth: 2 },
+    });
   });
 });
 

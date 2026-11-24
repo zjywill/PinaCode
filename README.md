@@ -10,7 +10,7 @@ PinaCode 可以和 T3 Code 同时安装：命令是 `pinacode`，默认服务端
 
 ## 从源码运行
 
-先按[开发环境指南](./docs/operations/development.md#first-checkout)准备 Node.js 和 Vite+，然后运行：
+先按[开发环境指南](./docs/operations/00_development.md#first-checkout)准备 Node.js 和 Vite+，然后运行：
 
 ```sh
 git clone https://github.com/zjywill/PinaCode.git
