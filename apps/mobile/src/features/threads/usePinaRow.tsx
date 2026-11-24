@@ -2,11 +2,18 @@ import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { useGT, useMessages, msg } from "gt-react-native";
 import { mobilePreferencesAtom } from "../../state/preferences";
+import { resolvePinaEnvironment } from "@t3tools/client-runtime/environment";
+import { useEnvironmentsWithScope } from "../../state/session";
 import { useWorkspaceEnvironments } from "../../state/workspace";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
-import { PINA_ASSISTANT_NAME, isPinaThread, type EnvironmentId } from "@t3tools/contracts";
+import {
+  AuthOrchestrationOperateScope,
+  PINA_ASSISTANT_NAME,
+  isPinaThread,
+  type EnvironmentId,
+} from "@t3tools/contracts";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
@@ -43,19 +50,20 @@ export function usePinaEnvironment(preferred?: EnvironmentId | null) {
   const configs = useServerConfigs();
   const preferences = useAtomValue(mobilePreferencesAtom);
   const saved = AsyncResult.isSuccess(preferences) ? preferences.value : undefined;
-  const available = environments.filter(
-    (env) =>
-      env.connectionState === "connected" &&
-      configs.get(env.environmentId)?.environment.capabilities.pinaAssistant,
-  );
-  const target = preferred ?? saved?.threadListFilters?.environmentId;
-  if (target) return available.some((env) => env.environmentId === target) ? target : null;
-  return (
-    available.find((env) => env.environmentId === saved?.lastThreadProject?.environmentId)
-      ?.environmentId ??
-    available[0]?.environmentId ??
-    null
-  );
+  const permitted = useEnvironmentsWithScope(environments, AuthOrchestrationOperateScope);
+  const savedScope = saved?.threadListFilters?.environmentId;
+  return resolvePinaEnvironment({
+    requested:
+      preferred ?? environments.find((env) => env.environmentId === savedScope)?.environmentId,
+    preferred: environments.find(
+      (env) => env.environmentId === saved?.lastThreadProject?.environmentId,
+    )?.environmentId,
+    connected: environments
+      .filter((env) => env.connectionState === "connected")
+      .map((env) => env.environmentId),
+    permitted,
+    configs,
+  });
 }
 
 export function useOpenPina(props: {
@@ -74,56 +82,57 @@ export function useOpenPina(props: {
   if (!environmentId || !config?.environment.capabilities.pinaAssistant || !canOperate) {
     return null;
   }
-  const open = async () => {
-    setOpening(true);
-    try {
-      const result = await ensure({ environmentId, input: {} });
-      if (result._tag === "Failure") {
-        if (!isAtomCommandInterrupted(result)) throw squashAtomCommandFailure(result);
-        return;
-      }
-      const { threadId } = result.value;
-      const source = props.source;
-      if (source?.environmentId === environmentId && !isPinaThread(source.id)) {
-        await waitForComposerDraftsLoaded();
-        const key = scopedThreadKey(environmentId, threadId);
-        const draft = getComposerDraftSnapshot(key);
-        const record = threadContextRecord({ environmentId, threadId: source.id }, source.title);
-        const records = draft.context?.records ?? [];
-        const previous = records[0];
-        if (!records.some((entry) => entry.contextId === record.contextId)) {
-          const replacePrevious =
-            previous?.kind === "thread" &&
-            records.length === 1 &&
-            draft.attachments.length === 0 &&
-            draft.text.trim() === formatComposerContextReference(previous);
-          insertComposerDraftContext(
-            key,
-            {
-              text: formatComposerContextReference(record),
-              context: { version: 1, records: [record] },
-            },
-            {
-              text: draft.text,
-              start: replacePrevious ? 0 : draft.text.length,
-              end: draft.text.length,
-            },
-          );
-        }
-      }
-      selectDetail({ name: "Thread", params: { environmentId, threadId } });
-    } catch (error) {
-      Dialog.alert(PINA_ASSISTANT_NAME, errorDisplayMessage(error, m) ?? String(error));
-    } finally {
-      setOpening(false);
+  const openThread = async () => {
+    const result = await ensure({ environmentId, input: {} });
+    if (result._tag === "Failure") {
+      if (!isAtomCommandInterrupted(result)) throw squashAtomCommandFailure(result);
+      return;
     }
+    const { threadId } = result.value;
+    const source = props.source;
+    if (source?.environmentId === environmentId && !isPinaThread(source.id)) {
+      await waitForComposerDraftsLoaded();
+      const key = scopedThreadKey(environmentId, threadId);
+      const draft = getComposerDraftSnapshot(key);
+      const record = threadContextRecord({ environmentId, threadId: source.id }, source.title);
+      const records = draft.context?.records ?? [];
+      const previous = records[0];
+      if (!records.some((entry) => entry.contextId === record.contextId)) {
+        const replacePrevious =
+          previous?.kind === "thread" &&
+          records.length === 1 &&
+          draft.attachments.length === 0 &&
+          draft.text.trim() === formatComposerContextReference(previous);
+        insertComposerDraftContext(
+          key,
+          {
+            text: formatComposerContextReference(record),
+            context: { version: 1, records: [record] },
+          },
+          {
+            text: draft.text,
+            start: replacePrevious ? 0 : draft.text.length,
+            end: draft.text.length,
+          },
+        );
+      }
+    }
+    selectDetail({ name: "Thread", params: { environmentId, threadId } });
+  };
+  const open = () => {
+    setOpening(true);
+    return openThread()
+      .catch((error: unknown) => {
+        Dialog.alert(PINA_ASSISTANT_NAME, errorDisplayMessage(error, m) ?? String(error));
+      })
+      .finally(() => setOpening(false));
   };
   return { environmentId, opening, open };
 }
 
 export function usePinaRow(props: {
   readonly environmentId: EnvironmentId | null;
-  readonly source: EnvironmentThreadShell | undefined;
+  readonly source: Pick<EnvironmentThreadShell, "id" | "environmentId" | "title"> | null;
   readonly thread?: EnvironmentThreadShell | undefined;
   readonly environmentLabel?: string | null | undefined;
   readonly now: string;

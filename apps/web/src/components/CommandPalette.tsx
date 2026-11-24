@@ -6,6 +6,7 @@ import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-r
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 
 import {
+  pinaThreadSource,
   scopedThreadKey,
   scopeProjectRef,
   scopeThreadRef,
@@ -510,7 +511,7 @@ function OpenCommandPaletteDialog(props: {
   const desktopLocalBootstraps = useDesktopLocalBootstraps();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const availableSettingsSearchItems = useAvailableSettingsSearchItems();
-  const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread } =
+  const { activeDraftThread, activeThread, routeThreadRef, defaultProjectRef, handleNewThread } =
     useHandleNewThread();
   const paletteRouteTarget = useThreadRouteTarget();
   const projects = useProjects();
@@ -598,8 +599,9 @@ function OpenCommandPaletteDialog(props: {
     settings: clientSettings,
   });
   const pina = useOpenPina(
-    activeThread,
-    activeDraftThread?.environmentId ??
+    pinaThreadSource(routeThreadRef, activeThread),
+    routeThreadRef?.environmentId ??
+      activeDraftThread?.environmentId ??
       singleProjectGroupEnvironment(
         pickableProjectGroups(projectGroups).filter((group) =>
           resolvedKeys.includes(group.projectKey),

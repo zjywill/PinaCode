@@ -1,3 +1,5 @@
+import { pinaThreadSource, parseScopedThreadKey } from "@t3tools/client-runtime/environment";
+import { useQuietThreadShell } from "../../state/entities";
 import { usePinaRow, usePinaEnvironment } from "../threads/usePinaRow";
 import { isPinaThread } from "@t3tools/contracts";
 import { useGT, useMessages } from "gt-react-native";
@@ -255,11 +257,11 @@ export function HomeScreen(props: HomeScreenProps) {
     () => props.threads.filter((thread) => !isPinaThread(thread.id)),
     [props.threads],
   );
-  const pinaSource = props.threads.find(
-    (thread) => scopedThreadKey(thread.environmentId, thread.id) === selectedThreadKey,
-  );
+  const openThreadKey = activeNewTask ? null : primaryColumn?.selectedThreadKey;
+  const openThreadRef = openThreadKey ? parseScopedThreadKey(openThreadKey) : null;
+  const pinaSource = useQuietThreadShell(openThreadRef);
   const pinaEnvironmentId = usePinaEnvironment(
-    props.selectedEnvironmentId ?? pinaSource?.environmentId,
+    props.selectedEnvironmentId ?? openThreadRef?.environmentId,
   );
   const pinaThread = props.threads.find(
     (thread) =>
@@ -277,7 +279,7 @@ export function HomeScreen(props: HomeScreenProps) {
   const pinaRow = usePinaRow({
     now,
     environmentId: pinaEnvironmentId,
-    source: pinaSource,
+    source: pinaThreadSource(openThreadRef, pinaSource),
     thread: pinaThread,
     environmentLabel: pinaEnvironmentLabel,
     horizontalMargin: !sidebarSurface,

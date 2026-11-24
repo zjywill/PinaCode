@@ -32,6 +32,7 @@ import {
   type PullRequestComment,
   PullRequestOperationError,
   type PullRequestWatchUntil,
+  pinaThreadId,
   ProviderDriverKind,
   ProviderInstanceId,
   ProviderSessionId,
@@ -13153,14 +13154,18 @@ it.layer(layerScratchPromotionTest)("turning a No project thread into a project"
         workspaceRoot: SCRATCH_ROOT,
       });
     }
-    const createThread = (suffix: string, worktreePath: string) =>
+    const createThread = (
+      suffix: string,
+      worktreePath: string,
+      threadId = ThreadId.make(`promotion-${name}-${suffix}`),
+    ) =>
       orchestrator
         .dispatch({
           type: "thread.create",
           createdBy: "user",
           creationSource: "web",
           commandId: CommandId.make(`promotion-${name}-${suffix}-create`),
-          threadId: ThreadId.make(`promotion-${name}-${suffix}`),
+          threadId,
           projectId: SCRATCH_PROJECT_ID,
           title: `${name} ${suffix}`,
           modelSelection,
@@ -13169,7 +13174,7 @@ it.layer(layerScratchPromotionTest)("turning a No project thread into a project"
           branch: null,
           worktreePath,
         })
-        .pipe(Effect.as(ThreadId.make(`promotion-${name}-${suffix}`)));
+        .pipe(Effect.as(threadId));
     return { folder, createThread };
   });
   const shellOf = (threadId: ThreadId) =>
@@ -13222,6 +13227,22 @@ it.layer(layerScratchPromotionTest)("turning a No project thread into a project"
       const saved = (yield* tasks.list()).tasks.find((candidate) => candidate.id === task.id);
       assert.equal(saved?.projectId, projectId);
       assert.deepEqual(yield* promotion.promote({ threadId }), { projectId });
+    }),
+  );
+
+  it.effect("keeps Pina’s shared folder in No project when either thread is promoted", () =>
+    Effect.gen(function* () {
+      const promotion = yield* ScratchThreadPromotion.ScratchThreadPromotion;
+      const projects = yield* ProjectService.ProjectService;
+      const { folder, createThread } = yield* setup("pina");
+      const pina = yield* createThread("assistant", folder, pinaThreadId(SCRATCH_PROJECT_ID, 0));
+      const sibling = yield* createThread("sibling", folder);
+      for (const threadId of [sibling, pina]) {
+        const error = yield* promotion.promote({ threadId }).pipe(Effect.flip);
+        assert.include(error.message, "Pina");
+        assert.isTrue(Option.isNone(yield* projects.getByWorkspaceRoot(folder)));
+        assert.equal((yield* shellOf(threadId))?.projectId, SCRATCH_PROJECT_ID);
+      }
     }),
   );
 

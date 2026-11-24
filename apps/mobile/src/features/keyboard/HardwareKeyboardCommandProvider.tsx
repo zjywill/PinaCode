@@ -1,3 +1,4 @@
+import { pinaThreadSource } from "@t3tools/client-runtime/environment";
 import { StackActions, useNavigation } from "@react-navigation/native";
 import { msg, useMessages } from "gt-react-native";
 import { Platform } from "react-native";
@@ -68,7 +69,10 @@ export function HardwareKeyboardCommandProvider({
   const pinaEnvironmentId = usePinaEnvironment(
     activeThreadRef?.environmentId ?? (draft && flow.selectedEnvironmentId),
   );
-  const pina = useOpenPina({ environmentId: pinaEnvironmentId, source: activeThread });
+  const pina = useOpenPina({
+    environmentId: pinaEnvironmentId,
+    source: pinaThreadSource(activeThreadRef, activeThread),
+  });
   const canOpenPina = pina !== null;
   const copyTarget = useMemo(
     () =>

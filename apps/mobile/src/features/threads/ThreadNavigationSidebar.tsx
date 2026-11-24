@@ -1,3 +1,4 @@
+import { pinaThreadSource, parseScopedThreadKey } from "@t3tools/client-runtime/environment";
 import { usePinaRow, usePinaEnvironment } from "./usePinaRow";
 import { isPinaThread } from "@t3tools/contracts";
 import { useGT, useMessages } from "gt-react-native";
@@ -27,7 +28,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText as Text } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
 import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
-import { useProjects } from "../../state/entities";
+import { useProjects, useQuietThreadShell } from "../../state/entities";
 import { steadyNavigationThreadShellsAtom } from "../../state/threads";
 import { useThreadSearch } from "../../state/queries";
 import { useThreadListV2ShelfPreferences } from "./use-thread-list-v2-shelf-preferences";
@@ -170,11 +171,11 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
     () => launchingThreads.filter((thread) => !isPinaThread(thread.id)),
     [launchingThreads],
   );
-  const pinaSource = launchingThreads.find(
-    (thread) => scopedThreadKey(thread.environmentId, thread.id) === selectedThreadKey,
-  );
+  const openThreadKey = activeNewTask ? null : props.selectedThreadKey;
+  const openThreadRef = openThreadKey ? parseScopedThreadKey(openThreadKey) : null;
+  const pinaSource = useQuietThreadShell(openThreadRef);
   const pinaEnvironmentId = usePinaEnvironment(
-    options.selectedEnvironmentId ?? pinaSource?.environmentId,
+    options.selectedEnvironmentId ?? openThreadRef?.environmentId,
   );
   const pinaThread = launchingThreads.find(
     (thread) =>
@@ -192,7 +193,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
   const pinaRow = usePinaRow({
     now,
     environmentId: pinaEnvironmentId,
-    source: pinaSource,
+    source: pinaThreadSource(openThreadRef, pinaSource),
     thread: pinaThread,
     environmentLabel: pinaEnvironmentLabel,
     horizontalMargin: Platform.OS !== "ios",

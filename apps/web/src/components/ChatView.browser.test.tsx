@@ -639,9 +639,9 @@ it("opens Pina from the fixed sidebar with the source thread in its composer", a
     createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${source.id}`] }),
   );
   await router.load();
-  await using screen = await render(<AppRoot router={router} />, { router: false });
+  await using _app = await render(<AppRoot router={router} />, { router: false });
   await expect.element(page.getByText(`Answer 0 for ${source.id}.`)).toBeVisible();
-  await screen.getByRole("button", { name: "Pina", exact: true }).click();
+  await page.getByRole("button", { name: "Pina", exact: true }).click();
   await expect.element(page.getByText(`Answer 0 for ${pina.id}.`), { timeout: 3000 }).toBeVisible();
   expect(useUiStateStore.getState().sidebarProjectScopeKeys).toEqual([
     `${ENVIRONMENT_ID}:${PROJECT_ID}`,
@@ -966,7 +966,7 @@ it("a shortcut conditioned on rightPanelOpen sees the thread's open right panel"
 
 it("selecting a side-chat tab focuses that side chat's composer", async () => {
   const parent = threadWithHistory("focus-parent", 1);
-  // The shell loaded by the file's first test stays; a family read serves side chats added later.
+  // Older settled side chats load on demand through their parent's family.
   const sideChat = (name: string) => ({
     ...threadWithHistory(name, 1),
     sideChatOf: parent.id,

@@ -1,15 +1,25 @@
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate } from "@tanstack/react-router";
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { resolvePinaEnvironment, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
-import { PINA_ASSISTANT_NAME, isPinaThread, type EnvironmentId } from "@t3tools/contracts";
+import {
+  AuthOrchestrationOperateScope,
+  PINA_ASSISTANT_NAME,
+  isPinaThread,
+  type EnvironmentId,
+} from "@t3tools/contracts";
 import {
   formatComposerContextReference,
   threadContextRecord,
 } from "@t3tools/shared/composerContextReferences";
 import { composerDraftHasUserContent, useComposerDraftStore } from "../composerDraftStore";
 import { useServerConfigs } from "../state/entities";
-import { useConnectedEnvironmentIds, usePrimaryEnvironmentId } from "../state/environments";
+import {
+  useConnectedEnvironmentIds,
+  useEnvironmentIdentities,
+  usePrimaryEnvironmentId,
+} from "../state/environments";
+import { useEnvironmentsWithScope } from "../state/session";
 import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import { buildThreadRouteParams } from "../threadRoutes";
@@ -28,22 +38,21 @@ export function useOpenPina(
   const primary = usePrimaryEnvironmentId();
   const connected = useConnectedEnvironmentIds();
   const configs = useServerConfigs();
-  const environmentId =
-    source?.environmentId ??
-    preferred ??
-    (primary && connected.includes(primary) ? primary : connected[0]) ??
-    null;
+  const permitted = useEnvironmentsWithScope(
+    useEnvironmentIdentities(),
+    AuthOrchestrationOperateScope,
+  );
+  const environmentId = resolvePinaEnvironment({
+    requested: source?.environmentId ?? preferred,
+    preferred: primary,
+    connected,
+    configs,
+    permitted,
+  });
   const canOperate = useAtomValue(threadEnvironment.openPina.permissionAtom(environmentId));
   const ensure = useAtomCommand(threadEnvironment.openPina, { reportFailure: false });
   const navigate = useNavigate();
-  if (
-    !environmentId ||
-    !connected.includes(environmentId) ||
-    !canOperate ||
-    !configs.get(environmentId)?.environment?.capabilities.pinaAssistant
-  ) {
-    return null;
-  }
+  if (environmentId === null || !canOperate) return null;
   const open = async () => {
     const result = await ensure({ environmentId, input: {} });
     if (result._tag === "Failure") {

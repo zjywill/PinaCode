@@ -17,6 +17,7 @@ import {
   RunId,
   RuntimeRequestId,
   ServerConfig,
+  type ServerConfigStreamEvent,
   ThreadId,
   TurnItemId,
   WS_METHODS,
@@ -120,6 +121,7 @@ const makeServerConfig = (
     },
     auth,
     cwd: "/workspace/render",
+    scratchWorkspaceRoot: "/workspace/scratch",
     keybindingsConfigPath: "/workspace/.t3/keybindings.json",
     keybindings: [],
     issues: [],
@@ -451,6 +453,31 @@ const subscribe = <A>(first: ReadonlyArray<A>, register?: (queue: Queue.Queue<A>
     }),
   );
 
+const shellSnapshot = (): OrchestrationV2ShellStreamItem => ({
+  kind: "snapshot",
+  snapshot: {
+    schemaVersion: 1,
+    snapshotSequence: sequence,
+    projects,
+    threads: threads.filter((thread) => !thread.olderSettled).map(shellOf),
+    archivedThreads: [],
+  },
+});
+
+const configSubscribers = new Set<Queue.Queue<ServerConfigStreamEvent>>();
+const configSnapshot = () => ({
+  version: 1 as const,
+  type: "snapshot" as const,
+  config: serverConfig(),
+});
+const subscribeConfig = () =>
+  subscribe<ServerConfigStreamEvent>([configSnapshot()], (queue) => {
+    configSubscribers.add(queue);
+    return () => {
+      configSubscribers.delete(queue);
+    };
+  });
+
 const handlers: Record<string, (input: never) => unknown> = {
   // Recorded, and accepted only when the scenario asks, since a pending command holds every
   // later command on its thread. Accepted commands' events never arrive.
@@ -496,19 +523,7 @@ const handlers: Record<string, (input: never) => unknown> = {
     }),
   [ORCHESTRATION_V2_WS_METHODS.subscribeShell]: () =>
     subscribe<OrchestrationV2ShellStreamItem>(
-      [
-        {
-          kind: "snapshot",
-          snapshot: {
-            schemaVersion: 1,
-            snapshotSequence: sequence,
-            projects,
-            threads: threads.filter((thread) => !thread.olderSettled).map(shellOf),
-            archivedThreads: [],
-          },
-        },
-        { kind: "synchronized" },
-      ],
+      [shellSnapshot(), { kind: "synchronized" }],
       (queue) => {
         shellSubscriber = queue;
         return () => {
@@ -551,8 +566,7 @@ const handlers: Record<string, (input: never) => unknown> = {
         if (vcsStatusSubscriber === queue) vcsStatusSubscriber = null;
       };
     }),
-  [WS_METHODS.subscribeServerConfig]: () =>
-    subscribe([{ version: 1 as const, type: "snapshot" as const, config: serverConfig() }]),
+  [WS_METHODS.subscribeServerConfig]: subscribeConfig,
 };
 
 // Unanswered calls stay pending, like a server that has not replied yet.
@@ -568,8 +582,7 @@ const client = new Proxy(handlers, {
 const session: EnvironmentConnectionLease["session"] = {
   client: client as unknown as WsRpcProtocolClient,
   initialConfig: Effect.sync(serverConfig),
-  subscribeServerConfig: () =>
-    subscribe([{ version: 1 as const, type: "snapshot" as const, config: serverConfig() }]),
+  subscribeServerConfig: subscribeConfig,
   ready: Effect.void,
   probe: Effect.void,
   inboundFrames: Effect.succeed(0),
@@ -623,6 +636,7 @@ export function installFakeEnvironment(
     ),
     keybindings: options?.keybindings ?? DEFAULT_RESOLVED_KEYBINDINGS,
   };
+  for (const queue of configSubscribers) Queue.offerUnsafe(queue, configSnapshot());
   dispatched = [];
   acceptCommands = options?.acceptCommands === true;
   projects = [
@@ -633,6 +647,10 @@ export function installFakeEnvironment(
       workspaceRoot: `/workspace/${extra.title}`,
     })),
   ];
+  if (shellSubscriber !== null) {
+    sequence += 1;
+    Queue.offerUnsafe(shellSubscriber, shellSnapshot());
+  }
   holdCommand = options?.holdCommand ?? (() => false);
   globalThis.fetch = async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);

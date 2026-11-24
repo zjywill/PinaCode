@@ -1,5 +1,6 @@
 import {
   CommandId,
+  isPinaThread,
   type OrchestrationV2ThreadShell,
   ProjectId,
   type ThreadId,
@@ -100,6 +101,11 @@ const make = Effect.gen(function* () {
     }
 
     for (const candidate of moveSet.values()) {
+      if (isPinaThread(candidate.id)) {
+        return yield* new ScratchThreadPromotionError({
+          reason: "The folder containing Pina cannot be turned into a project.",
+        });
+      }
       const records = yield* threads
         .getThreadRecords(candidate.id, ["runs", "runtimeRequests"], { turnItemTypes: [] })
         .pipe(Effect.mapError(fail(`Could not read "${candidate.title}".`)));
