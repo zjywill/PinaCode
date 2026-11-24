@@ -58,6 +58,7 @@ import { THEME_GUIDE } from "@t3tools/shared/themeCss";
 import { formatThreadLink } from "@t3tools/shared/threadLinks";
 import { buildCodexAdditionalContext } from "../../apps/server/src/provider/CodexDeveloperInstructions.ts";
 import { PULL_REQUEST_LINKING_INSTRUCTIONS } from "@t3tools/provider-core/server/runtimeInstructions";
+import { pinaInstructions } from "../../apps/server/src/orchestration-v2/pinaInstructions.ts";
 import { makeSideChatContext } from "../../apps/server/src/orchestration-v2/ContextHandoffService.ts";
 import { withInlineContext } from "../../apps/server/src/orchestration-v2/ContextHandoffDelivery.ts";
 import { AttachmentToolkit } from "../../apps/server/src/mcp/toolkits/attachment/tools.ts";
@@ -373,6 +374,7 @@ export const McpToolUseCase = Schema.Struct({
     shellMocks: Schema.optional(
       Schema.Array(Schema.Struct({ match: Schema.String, output: Schema.String })),
     ),
+    pina: Schema.optional(Schema.Boolean),
     /** The thread is a side chat's first turn: T3 puts the parent's digest ahead of `prompt`. */
     sideChat: Schema.optional(
       Schema.Struct({ parentThreadId: Schema.String, digest: Schema.Array(Schema.String) }),
@@ -1237,8 +1239,11 @@ export const buildMessages = (sample: Sample) => {
     testCase.promptContext === undefined
       ? workflowPrompt
       : projectComposerContextForProvider({ text: workflowPrompt, ...testCase.promptContext });
+  const inlineContext = testCase.setup.pina
+    ? pinaInstructions(ThreadId.make("pina-assistant-scratch-0"))
+    : sideChatContext;
   const prompt =
-    sideChatContext === undefined ? userText : withInlineContext(sideChatContext, userText);
+    inlineContext === undefined ? userText : withInlineContext(inlineContext, userText);
   const childPrompt = () =>
     taskPrompt({
       task: prompt,

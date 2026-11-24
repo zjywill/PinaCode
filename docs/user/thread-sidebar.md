@@ -61,6 +61,21 @@ in a new thread's model picker to add or remove them. A regular click returns to
 single model. Choose a base branch and send. Each selection starts a separate thread
 and worktree while you stay in the new thread composer. This requires a Git project.
 
+## Ask Pina about your threads
+
+Open **Pina** at the top of the thread list and ask “Which threads need my input?”
+Pina can look across projects on the connected environment, read a conversation,
+and send it a follow-up. Open Pina from a thread to attach a reference to it.
+You can remove the reference in the composer before sending. With a hardware keyboard,
+press `Cmd+Option+P` on macOS or iOS, or `Ctrl+Alt+P` on Windows, Linux or Android.
+
+Try “Tell this thread to add a regression test.” Pina links to the destination
+and reports whether the message started a turn, reached the running agent, or
+was queued. Pina starts with the environment’s default access mode. If a thread
+requires higher access, follow its link to send the message there, or change
+Pina’s access mode in the composer before asking it to send again. Connect your phone and desktop to the same environment to continue
+the same Pina conversation. Each environment keeps its own history in **No project**.
+
 ## Coordinate independent agents
 
 Ask your main agent to assign each issue to an independent PinaCode session, use a

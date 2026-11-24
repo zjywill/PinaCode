@@ -1,4 +1,5 @@
 import {
+  PINA_ASSISTANT_NAME,
   STATIC_KEYBINDING_COMMANDS,
   type ClientSettings,
   type KeybindingCommand,
@@ -535,6 +536,7 @@ const LATE_COMMAND_LABELS: Partial<Record<KeybindingCommand, string>> = {
 };
 
 export function commandLabel(command: KeybindingCommand, resolve: MessageResolver = m): string {
+  if (command === "pina.open") return PINA_ASSISTANT_NAME;
   const label = COMMAND_LABELS[command];
   if (label) return resolve(label);
   const usageLabel = USAGE_COMMAND_LABELS[command as keyof typeof USAGE_COMMAND_LABELS];

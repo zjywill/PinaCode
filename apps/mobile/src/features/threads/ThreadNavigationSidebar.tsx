@@ -1,3 +1,5 @@
+import { usePinaRow, usePinaEnvironment } from "./usePinaRow";
+import { isPinaThread } from "@t3tools/contracts";
 import { useGT, useMessages } from "gt-react-native";
 import { useActiveNewTask } from "../../state/active-new-task";
 import { ThreadUndoNotice } from "../home/ThreadUndoNotice";
@@ -164,6 +166,37 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
   );
   const { options, setSelectedEnvironmentId, setSelectedProjectKey } =
     useHomeListOptions(availableEnvironmentIds);
+  const ordinaryThreads = useMemo(
+    () => launchingThreads.filter((thread) => !isPinaThread(thread.id)),
+    [launchingThreads],
+  );
+  const pinaSource = launchingThreads.find(
+    (thread) => scopedThreadKey(thread.environmentId, thread.id) === selectedThreadKey,
+  );
+  const pinaEnvironmentId = usePinaEnvironment(
+    options.selectedEnvironmentId ?? pinaSource?.environmentId,
+  );
+  const pinaThread = launchingThreads.find(
+    (thread) =>
+      thread.environmentId === pinaEnvironmentId &&
+      thread.archivedAt === null &&
+      isPinaThread(thread.id),
+  );
+  const pinaEnvironmentLabel =
+    options.selectedEnvironmentId === null &&
+    pinaEnvironmentId !== null &&
+    Object.keys(savedConnectionsById).length > 1
+      ? (savedConnectionsById[pinaEnvironmentId]?.environmentLabel ?? null)
+      : null;
+  const now = useThreadListNow(threads);
+  const pinaRow = usePinaRow({
+    now,
+    environmentId: pinaEnvironmentId,
+    source: pinaSource,
+    thread: pinaThread,
+    environmentLabel: pinaEnvironmentLabel,
+    horizontalMargin: Platform.OS !== "ios",
+  });
   const searchEnvironmentIds =
     options.selectedEnvironmentId === null
       ? workspaceEnvironments
@@ -191,7 +224,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
   const projectFilterOptions = pickableProjectGroups(
     sortHomeProjectScopes({
       scopes: projectScopes,
-      threads,
+      threads: ordinaryThreads,
       pendingTasks: [],
       projectSortOrder: "updated_at",
     }),
@@ -255,7 +288,6 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
     toggleSnoozedShelf,
     toggleWorkingShelf,
   } = useThreadListV2ShelfPreferences();
-  const now = useThreadListNow(threads);
   const listEnvironments = useAtomValue(threadListEnvironmentsAtom);
   const {
     providersByEnvironmentId,
@@ -278,7 +310,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
     contentOnlyThreadKeys,
     olderSettledShelf,
   } = useThreadListV2({
-    threads: launchingThreads,
+    threads: ordinaryThreads,
     pendingTasks,
     environmentId: options.selectedEnvironmentId,
     projectRefs: selectedProjectScope === null ? null : selectedProjectScope.projectRefs,
@@ -628,6 +660,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
                 itemsAreEqual={sidebarItemsAreEqual}
                 keyExtractor={(item) => item.key}
                 renderItem={renderListItem}
+                ListHeaderComponent={pinaRow ?? undefined}
                 automaticallyAdjustsScrollIndicatorInsets
                 // The column lays the list under its bar, glass or solid; UIKit insets it past both.
                 contentInsetAdjustmentBehavior="automatic"
@@ -669,6 +702,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
           overflow: "hidden",
         }}
       >
+        {pinaRow}
         {listItems.length === 0 ? (
           <View className="flex-1 items-center justify-center">{listEmpty}</View>
         ) : (

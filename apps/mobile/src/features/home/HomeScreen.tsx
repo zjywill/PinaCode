@@ -1,3 +1,5 @@
+import { usePinaRow, usePinaEnvironment } from "../threads/usePinaRow";
+import { isPinaThread } from "@t3tools/contracts";
 import { useGT, useMessages } from "gt-react-native";
 
 import { useContentTopInset } from "../../components/ui/useBarInset";
@@ -249,6 +251,42 @@ export function HomeScreen(props: HomeScreenProps) {
           )
         ? [props.selectedEnvironmentId]
         : [];
+  const ordinaryThreads = useMemo(
+    () => props.threads.filter((thread) => !isPinaThread(thread.id)),
+    [props.threads],
+  );
+  const pinaSource = props.threads.find(
+    (thread) => scopedThreadKey(thread.environmentId, thread.id) === selectedThreadKey,
+  );
+  const pinaEnvironmentId = usePinaEnvironment(
+    props.selectedEnvironmentId ?? pinaSource?.environmentId,
+  );
+  const pinaThread = props.threads.find(
+    (thread) =>
+      thread.environmentId === pinaEnvironmentId &&
+      thread.archivedAt === null &&
+      isPinaThread(thread.id),
+  );
+  const pinaEnvironmentLabel =
+    props.selectedEnvironmentId === null &&
+    pinaEnvironmentId !== null &&
+    Object.keys(props.savedConnectionsById).length > 1
+      ? (props.savedConnectionsById[pinaEnvironmentId]?.environmentLabel ?? null)
+      : null;
+  const now = useThreadListNow(props.threads);
+  const pinaRow = usePinaRow({
+    now,
+    environmentId: pinaEnvironmentId,
+    source: pinaSource,
+    thread: pinaThread,
+    environmentLabel: pinaEnvironmentLabel,
+    horizontalMargin: !sidebarSurface,
+  });
+  const fixedPinaRow = pinaRow && (
+    <View style={{ paddingTop: contentTopInset, paddingHorizontal: sidebarSurface ? 8 : 0 }}>
+      {pinaRow}
+    </View>
+  );
   const handleSwipeableWillOpen = (methods: SwipeableMethods) => {
     if (openSwipeableRef.current !== methods) {
       openSwipeableRef.current?.close();
@@ -397,7 +435,6 @@ export function HomeScreen(props: HomeScreenProps) {
     toggleSnoozedShelf,
     toggleWorkingShelf,
   } = useThreadListV2ShelfPreferences();
-  const now = useThreadListNow(props.threads);
   const listEnvironments = useAtomValue(threadListEnvironmentsAtom);
   const {
     providersByEnvironmentId,
@@ -420,7 +457,7 @@ export function HomeScreen(props: HomeScreenProps) {
     contentOnlyThreadKeys,
     olderSettledShelf,
   } = useThreadListV2({
-    threads: props.threads,
+    threads: ordinaryThreads,
     pendingTasks: props.pendingTasks,
     environmentId: props.selectedEnvironmentId,
     projectRefs: v2ScopedProjectGroup === null ? null : v2ScopedProjectGroup.projectRefs,
@@ -617,7 +654,7 @@ export function HomeScreen(props: HomeScreenProps) {
   };
 
   const hasAnyThreads =
-    props.threads.some((thread) => thread.archivedAt === null) ||
+    ordinaryThreads.some((thread) => thread.archivedAt === null) ||
     props.pendingTasks.length > 0 ||
     threadListV2Layout.settledCount > 0;
   // A hidden list gets no layout, so it never reports its rows as laid out.
@@ -637,6 +674,7 @@ export function HomeScreen(props: HomeScreenProps) {
     return (
       <View className={containerClassName}>
         <ScreenContent surface={sidebarSurface ? "drawer" : "screen"}>
+          {fixedPinaRow}
           <View
             className={cn(
               "flex-1 items-center justify-center px-8",
@@ -645,7 +683,8 @@ export function HomeScreen(props: HomeScreenProps) {
             style={{
               paddingBottom:
                 Platform.OS === "ios" ? iosBottomClearance : Math.max(insets.bottom, 24),
-              paddingTop: emptyTopInset,
+
+              paddingTop: pinaRow ? 0 : emptyTopInset,
               paddingLeft: 32 + (contentSideInsets?.left ?? 0),
               paddingRight: 32 + (contentSideInsets?.right ?? 0),
             }}
@@ -686,6 +725,7 @@ export function HomeScreen(props: HomeScreenProps) {
   const v2ListHeader = (
     <>
       {listHeader}
+      {Platform.OS === "ios" ? pinaRow : null}
       {Platform.OS === "ios" && workspace ? (
         <ThreadListFilters
           gutter={sidebarSurface ? 8 : 0}
@@ -693,7 +733,7 @@ export function HomeScreen(props: HomeScreenProps) {
           projects={pickableProjectGroups(
             sortHomeProjectScopes({
               scopes: projectScopes,
-              threads: props.threads,
+              threads: ordinaryThreads,
               pendingTasks: [],
               projectSortOrder: "updated_at",
             }),
@@ -754,6 +794,7 @@ export function HomeScreen(props: HomeScreenProps) {
   if (Platform.OS === "android" && threadListV2Items.length === 0) {
     return (
       <ScreenContent surface="screen">
+        {fixedPinaRow}
         <View
           className="flex-1 items-center justify-center px-4"
           style={{ paddingBottom: insets.bottom }}
@@ -768,6 +809,7 @@ export function HomeScreen(props: HomeScreenProps) {
     <View className={containerClassName}>
       <ScreenContent surface="screen">
         <View className={cn("flex-1", Platform.OS !== "android" && contentBackground)}>
+          {Platform.OS === "ios" ? null : fixedPinaRow}
           <SwipeableScrollGateProvider enabled={swipeEnabled} activation={swipeRowActivation}>
             <GestureDetector gesture={homeScrollGesture}>
               <AnimatedLegendList

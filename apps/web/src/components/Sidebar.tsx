@@ -1,3 +1,4 @@
+import { useOpenPina } from "../hooks/useOpenPina";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { msg, T, useGT, useMessages } from "gt-react";
 import { m } from "../i18n/messages";
@@ -29,6 +30,7 @@ import {
 import { SortableContext } from "@dnd-kit/sortable";
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import {
+  isThreadWokeUnseen,
   canSnooze,
   effectiveSnoozed,
   threadWokeAt,
@@ -59,6 +61,8 @@ import {
 } from "@t3tools/client-runtime/environment";
 import {
   AuthOrchestrationOperateScope,
+  isPinaThread,
+  PINA_ASSISTANT_NAME,
   type ContextMenuSource,
   ProjectId,
   type ScopedThreadRef,
@@ -70,6 +74,8 @@ import {
 } from "@t3tools/client-runtime/state/threads";
 
 import {
+  AlarmClockIcon,
+  MessagesSquareIcon,
   CheckIcon,
   ChevronDownIcon,
   FolderIcon,
@@ -117,6 +123,7 @@ import {
 import {
   buildSidebarProjectPickerEntries,
   projectGroupsSpanEnvironments,
+  singleProjectGroupEnvironment,
   resolveSidebarProjectScopeKeys,
   getSidebarProjectSettingsKey,
   type SidebarProjectSnapshot,
@@ -257,9 +264,10 @@ import {
   ComboboxTrigger,
   useComboboxFilter,
 } from "./ui/combobox";
-import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
+import { SidebarContent, SidebarGroup, SidebarMenuButton, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
+import { ThreadRowLeadingStatus, ThreadRowTrailingStatus } from "./ThreadStatusIndicators";
 import { TooltipProvider } from "./ui/tooltip";
 import {
   composerDraftHasUserContent,
@@ -1111,6 +1119,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const chosenProjectGroups = scopeGroups.filter((project) =>
     chosenProjectScopeKeys.includes(project.projectKey),
   );
+  const pina = useOpenPina(
+    newThreadContext.activeThread,
+    newThreadContext.activeDraftThread?.environmentId ??
+      singleProjectGroupEnvironment(chosenProjectGroups),
+  );
   const chosenScopeProjectKeys =
     chosenProjectGroups.length === 0
       ? null
@@ -1123,18 +1136,26 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         );
   const threads = useQuietThreadShells();
   const promotingDraftThreadKeys = usePromotingDraftThreadKeys();
+  const pinaThread =
+    pina &&
+    threads.find(
+      (thread) =>
+        thread.environmentId === pina.environmentId &&
+        thread.archivedAt === null &&
+        isPinaThread(thread.id),
+    );
+  const ordinaryThreads = threads.filter((thread) => !isPinaThread(thread.id));
   const listedThreads =
     promotingDraftThreadKeys.length === 0
-      ? threads
-      : threads.map((thread) =>
+      ? ordinaryThreads
+      : ordinaryThreads.map((thread) =>
           promotingDraftThreadKeys.includes(threadShellKey(thread))
             ? asLaunchingThread(thread)
             : thread,
         );
-  const routeRowThreadKey =
-    routeThreadRef === null
-      ? null
-      : scopedThreadKey(resolveListedAncestorThreadRef(routeThreadRef, threads));
+  const routeRowRef =
+    routeThreadRef === null ? null : resolveListedAncestorThreadRef(routeThreadRef, threads);
+  const routeRowThreadKey = routeRowRef === null ? null : scopedThreadKey(routeRowRef);
   const isSearchingThreads = threadSearchQuery.trim().length > 0;
   // The open draft's first send names its thread in place; a finalized draft reached by
   // navigation resolves through its redirect instead, and still reveals.
@@ -1151,7 +1172,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     isSearching: isSearchingThreads,
     scopedProjectKeys: chosenScopeProjectKeys,
     delegatedUnderParent,
-    findThread: (key) => threads.find((candidate) => threadShellKey(candidate) === key),
+    findThread: (key) => ordinaryThreads.find((candidate) => threadShellKey(candidate) === key),
   });
   const projectScopeKeys = revealWidensScope ? [] : chosenProjectScopeKeys;
   const projectScopeKey = projectScopeKeys.length === 0 ? null : projectScopeKeys.join("\n");
@@ -3020,6 +3041,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         platform: navigator.platform,
         context: threadShortcutContext(routeThreadRef),
       });
+      if (command === "pina.open" && pina) {
+        event.preventDefault();
+        void pina.open();
+        return;
+      }
       const navigateToRowKey = (targetRowKey: string | null) => {
         if (!targetRowKey) return false;
         const targetDraftId = draftIdByRowKey.get(targetRowKey);
@@ -3051,6 +3077,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     return () => window.removeEventListener("keydown", onWindowKeyDown);
   }, [
     draftIdByRowKey,
+    pina,
     keybindings,
     navigateToDraft,
     navigateToThread,
@@ -3110,6 +3137,18 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     (shouldCreateNewThreadInCurrentProject(false, scopeGroups.length, projectGroups.length)
       ? shortcutLabelForCommand(keybindings, "chat.newLocal")
       : undefined);
+  const pinaClock = useSnoozeWakeClock(pinaThread ? [pinaThread] : []);
+  const pinaWokeAt = pinaThread
+    ? threadWokeAt(pinaThread, { now: new Date(pinaClock).toISOString() })
+    : null;
+  const pinaWokeUnseen =
+    pinaThread &&
+    isThreadWokeUnseen({
+      wokeAt: pinaWokeAt,
+      lastVisitedAt: pinaThread.lastVisitedAt,
+      latestRunCompletedAt: pinaThread.latestRun?.completedAt ?? null,
+      settled: pinaThread.settledOverride === "settled",
+    });
   const newThreadInProjectShortcutLabel = shortcutLabelForCommand(keybindings, "chat.newLocal");
   return (
     <SidebarFolderDrop>
@@ -3119,6 +3158,38 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         className="min-h-full"
         fixedHeader={
           <SidebarGroup className="z-[1]">
+            {pina && (
+              <SidebarMenuButton
+                aria-label={PINA_ASSISTANT_NAME}
+                isActive={
+                  routeRowRef !== null &&
+                  routeRowRef.environmentId === pina.environmentId &&
+                  isPinaThread(routeRowRef.threadId)
+                }
+                onClick={() => {
+                  if (isMobile) setOpenMobile(false);
+                  if (pinaThread && pinaWokeUnseen && pinaWokeAt) {
+                    acknowledgeWoke(scopeThreadRef(pina.environmentId, pinaThread.id), pinaWokeAt);
+                  }
+                  void pina.open();
+                }}
+              >
+                <MessagesSquareIcon aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{PINA_ASSISTANT_NAME}</span>
+                {pinaThread ? (
+                  <>
+                    {pinaWokeUnseen && (
+                      <AlarmClockIcon
+                        role="img"
+                        aria-label={gt("Woke", { $context: "thread status: woke from snooze" })}
+                      />
+                    )}
+                    <ThreadRowLeadingStatus thread={pinaThread} />
+                    <ThreadRowTrailingStatus thread={pinaThread} />
+                  </>
+                ) : null}
+              </SidebarMenuButton>
+            )}
             <SidebarThreadHeader
               hasProjects={projectGroups.length > 0}
               projectScope={

@@ -48,6 +48,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import {
+  PINA_ASSISTANT_NAME,
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
   AuthFilesystemReadScope,
@@ -80,6 +81,7 @@ import {
   PinIcon,
   PinOffIcon,
   PlugIcon,
+  MessagesSquareIcon,
   SquarePenIcon,
   TextSearchIcon,
   UserPlusIcon,
@@ -130,6 +132,7 @@ import { sourceControlEnvironment } from "../state/sourceControl";
 import { useAtomCommand } from "../state/use-atom-command";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
+import { useOpenPina } from "../hooks/useOpenPina";
 import { useScratchProject } from "../hooks/useScratchProject";
 import { useWorkflowEnvironmentIds } from "./workflows/useWorkflowEnvironmentIds";
 import { useStartTriage } from "../hooks/useStartTriage";
@@ -287,7 +290,12 @@ import {
   isPickableProjectMember,
   pickableProjectGroups,
 } from "@t3tools/client-runtime/state/project-grouping";
-import { buildSidebarProjectPickerEntries } from "../sidebarProjectGrouping";
+import { useUiStateStore } from "../uiStateStore";
+import {
+  buildSidebarProjectPickerEntries,
+  resolveSidebarProjectScopeKeys,
+  singleProjectGroupEnvironment,
+} from "../sidebarProjectGrouping";
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { readPullRequestListPreferences } from "~/components/pullRequest/pullRequestListPreferences";
 import { readIssueListPreferences } from "~/components/issue/issueListPreferences";
@@ -583,6 +591,21 @@ function OpenCommandPaletteDialog(props: {
   const [isRemoteProjectCloning, setIsRemoteProjectCloning] = useState(false);
   const { environmentLabelById, projectEnvironmentLocationById } = useEnvironmentLookups();
   const projectGroups = useSortedProjectGroups(environmentLabelById);
+  const scopeKeys = useUiStateStore((store) => store.sidebarProjectScopeKeys);
+  const resolvedKeys = resolveSidebarProjectScopeKeys({
+    groups: projectGroups,
+    keys: scopeKeys,
+    settings: clientSettings,
+  });
+  const pina = useOpenPina(
+    activeThread,
+    activeDraftThread?.environmentId ??
+      singleProjectGroupEnvironment(
+        pickableProjectGroups(projectGroups).filter((group) =>
+          resolvedKeys.includes(group.projectKey),
+        ),
+      ),
+  );
   const contextualProjectRef = resolveThreadActionProjectRef({
     activeDraftThread,
     activeThread: activeThread ?? undefined,
@@ -1396,6 +1419,17 @@ function OpenCommandPaletteDialog(props: {
     });
   }
 
+  if (pina) {
+    actionItems.push({
+      kind: "action",
+      value: "action:open-pina",
+      title: PINA_ASSISTANT_NAME,
+      searchTerms: ["pina", "assistant", "chat"],
+      icon: <MessagesSquareIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "pina.open",
+      run: pina.open,
+    });
+  }
   if (triageEnvironmentId !== null && canTriage) {
     actionItems.push({
       kind: "action",
@@ -2707,14 +2741,15 @@ function OpenCommandPaletteDialog(props: {
     }
     // Global new-thread handlers ignore shortcuts while the palette is open.
     const isJump = threadJumpIndexFromCommand(command ?? "") !== null;
-    const isNewThread =
+    const isThreadAction =
       !event.nativeEvent.isComposing &&
       event.keyCode !== 229 &&
       (command === "chat.new" ||
         command === "chat.newLocal" ||
-        command === "chat.newWithoutProject");
+        command === "chat.newWithoutProject" ||
+        command === "pina.open");
     const matchingItem =
-      isJump || isNewThread
+      isJump || isThreadAction
         ? displayedGroups
             .flatMap((group) => group.items)
             .find((item) => item.shortcutCommand === command)

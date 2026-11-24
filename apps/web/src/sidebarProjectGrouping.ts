@@ -54,6 +54,15 @@ export interface SidebarProjectSnapshot extends Project {
   archived: boolean;
 }
 
+export function singleProjectGroupEnvironment(groups: ReadonlyArray<SidebarProjectSnapshot>) {
+  const first = groups[0]?.memberProjectRefs[0]?.environmentId;
+  return groups.every((group) =>
+    group.memberProjectRefs.every((ref) => ref.environmentId === first),
+  )
+    ? first
+    : undefined;
+}
+
 export function projectGroupsSpanEnvironments(
   groups: ReadonlyArray<Pick<SidebarProjectSnapshot, "memberProjects">>,
 ): boolean {

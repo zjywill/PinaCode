@@ -10,6 +10,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 import {
+  isPinaThread,
   AuthOrchestrationOperateScope,
   type ScopedThreadRef,
   type ThreadId,
@@ -130,17 +131,19 @@ export function useThreadActionMenu(input: {
       }
       const now = new Date();
       const configLoaded = readEnvironmentServerConfigLoaded(threadRef.environmentId);
+      const fixedAssistant = isPinaThread(threadRef.threadId);
       const supports = {
         settlement: configLoaded,
         autoSettleOptOut: readEnvironmentSupportsAutoSettleOptOut(threadRef.environmentId),
         snooze: configLoaded,
-        pinning: configLoaded,
-        titleRegeneration: configLoaded,
+        pinning: configLoaded && !fixedAssistant,
+        titleRegeneration: configLoaded && !fixedAssistant,
       };
       const isRegeneratingTitle = thread.titleRegeneration != null;
       const snoozePresets = resolveSnoozePresets(now, timestampFormat, threadRef.environmentId);
       const items = buildThreadActionMenuItems({
         canOperate: readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope),
+        canRename: !fixedAssistant,
         canFind: onFind !== undefined,
         branch: thread.branch ?? null,
         projectFilter: null,
@@ -155,7 +158,7 @@ export function useThreadActionMenu(input: {
         supports,
         snoozePresets,
         canShareWithGuest,
-        canTurnIntoProject: canTurnThreadIntoProject(threadRef),
+        canTurnIntoProject: !fixedAssistant && canTurnThreadIntoProject(threadRef),
       });
       const clicked = await settlePromise(() => api.contextMenu.show(items, position, source));
       if (clicked._tag === "Failure" || clicked.value === null) return;

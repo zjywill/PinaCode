@@ -18,6 +18,7 @@ import { useStableCallback } from "../../hooks/useStableCallback";
 import { useDeadlinePassed, useNowAfter } from "../../hooks/useDeadline";
 import type { usePendingThreadRequests } from "./usePendingThreadRequests";
 import {
+  isPinaThread,
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
   type EnvironmentId,
@@ -729,6 +730,7 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
       }
       if (!readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return false;
       if (!activeThreadShell || !activeThreadRef || !serverConfigLoaded) return;
+      if (isPinaThread(activeThreadRef.threadId)) return;
       void (
         activeThreadPinned ? confirmAndUnpinThread(activeThreadRef) : pinThread(activeThreadRef)
       ).then(
@@ -740,7 +742,8 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
     "thread.regenerateTitle": () => {
       if (!readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return false;
       if (!activeThreadShell || !activeThreadRef || !serverConfigLoaded) return;
-      if (activeThreadShell.titleRegeneration != null) return;
+      if (isPinaThread(activeThreadRef.threadId) || activeThreadShell.titleRegeneration != null)
+        return;
       void regenerateThreadTitle({
         environmentId: activeThreadRef.environmentId,
         input: { threadId: activeThreadRef.threadId },

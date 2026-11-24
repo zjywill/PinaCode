@@ -778,5 +778,17 @@ describe("resolveListedAncestorThreadRef", () => {
     expect(rowOf(task.id, environmentId, [parent, task])).toEqual(
       ref(remoteEnvironmentId, parent.id),
     );
+
+    const pinaParent = listed("pina-assistant-scratch-0", remoteEnvironmentId);
+    const pinaTask = listed("thread-pina-task", environmentId, {
+      delegatedFrom: {
+        environmentId: remoteEnvironmentId,
+        threadId: pinaParent.id,
+        title: "Pina",
+      },
+    });
+    expect(rowOf(pinaTask.id, environmentId, [pinaParent, pinaTask])).toEqual(
+      ref(environmentId, pinaTask.id),
+    );
   });
 });

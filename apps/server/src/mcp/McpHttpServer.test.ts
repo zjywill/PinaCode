@@ -2022,11 +2022,14 @@ it.effect(
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const scopeFor = (token: string): McpInvocationContext.McpThreadInvocationScope => ({
+        const scopeFor = (
+          token: string,
+          threadId = ThreadId.make(`thread-${token}`),
+        ): McpInvocationContext.McpThreadInvocationScope => ({
           environmentId,
           requestNamespace: token,
           thread: {
-            threadId: ThreadId.make(`thread-${token}`),
+            threadId,
             providerSessionId: token,
             providerInstanceId: ProviderInstanceId.make("copilot"),
           },
@@ -2036,6 +2039,7 @@ it.effect(
         });
         const scopes = new Map([
           ["deferringToken", scopeFor("deferringToken")],
+          ["pinaToken", scopeFor("pinaToken", ThreadId.make("pina-assistant-scratch-0"))],
           ["otherToken", scopeFor("otherToken")],
         ]);
         const tool = (name: string, description: string) =>
@@ -2049,6 +2053,9 @@ it.effect(
           tool("pinacode_delegate_task", "Delegates a task."),
           tool("pinacode_preview_open", "Opens a browser preview."),
           tool("pinacode_schedule_task", "Schedules a task."),
+          tool("pinacode_thread_list", "Lists threads."),
+          tool("pinacode_thread_read", "Reads a thread."),
+          tool("pinacode_thread_send", "Sends to a thread."),
         );
         const reads = McpToolAccess.reads(() => Effect.succeed({}));
         const serverLayer = McpHttpServer.layerMcpTransport(
@@ -2059,6 +2066,9 @@ it.effect(
                 pinacode_delegate_task: reads,
                 pinacode_preview_open: reads,
                 pinacode_schedule_task: reads,
+                pinacode_thread_list: reads,
+                pinacode_thread_read: reads,
+                pinacode_thread_send: reads,
               }),
             ),
             McpHttpServer.layerToolSearch,
@@ -2132,12 +2142,23 @@ it.effect(
           });
 
         const deferring = yield* session("deferringToken", true);
+        const pina = yield* session("pinaToken", true);
         const other = yield* session("otherToken", false);
         expect(yield* deferring.listed).toEqual(["pinacode_delegate_task", "pinacode_tool_search"]);
+        expect(yield* pina.listed).toEqual([
+          "pinacode_delegate_task",
+          "pinacode_thread_list",
+          "pinacode_thread_read",
+          "pinacode_thread_send",
+          "pinacode_tool_search",
+        ]);
         expect(yield* other.listed).toEqual([
           "pinacode_delegate_task",
           "pinacode_preview_open",
           "pinacode_schedule_task",
+          "pinacode_thread_list",
+          "pinacode_thread_read",
+          "pinacode_thread_send",
         ]);
         // Unlisted tools stay callable.
         expect((yield* deferring.call("pinacode_schedule_task", {})).structuredContent).toEqual({});
@@ -2156,6 +2177,9 @@ it.effect(
           "pinacode_delegate_task",
           "pinacode_preview_open",
           "pinacode_schedule_task",
+          "pinacode_thread_list",
+          "pinacode_thread_read",
+          "pinacode_thread_send",
         ]);
       }),
     ).pipe(Effect.provide(NodeHttpServer.layerTest)),

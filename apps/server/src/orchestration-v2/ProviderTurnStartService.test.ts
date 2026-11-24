@@ -26,6 +26,7 @@ import {
   ThreadId,
   TurnItemId,
   ProjectId,
+  pinaThreadId,
   EnvironmentId,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   type OrchestrationV2ThreadProjection,
@@ -529,10 +530,14 @@ function makeLocalCommandHarness(input: {
     readonly switchedProvider?: boolean;
     readonly threadRuntimeMode?: OrchestrationV2ThreadProjection["thread"]["runtimeMode"];
   };
+  readonly pina?: "first" | "delivered" | "legacy" | "replacement";
 }) {
   const settledRuns: Array<string> = [];
   const now = DateTime.makeUnsafe("2026-09-04T12:00:00Z");
-  const threadId = ThreadId.make("thread-native-account-command");
+  const threadId =
+    input.pina === undefined
+      ? ThreadId.make("thread-native-account-command")
+      : pinaThreadId(ProjectId.make("project-scratch"), 0);
   const runId = RunId.make("run-native-account-command");
   const rootNodeId = NodeId.make("root-native-account-command");
   const attemptId = RunAttemptId.make("attempt-native-account-command");
@@ -1193,8 +1198,75 @@ function makeLocalCommandHarness(input: {
       : (input: ProviderAdapter.ProviderAdapterV2ResumeTurnInput) =>
           startTurn(ProviderAdapter.resumeTurnInput(input)),
   };
+  if (input.pina && input.pina !== "first") {
+    const firstRunId = RunId.make("pina-first-run");
+    const firstAttemptId = RunAttemptId.make("pina-first-attempt");
+    const firstMessageId = MessageId.make("pina-first-message");
+    projection = {
+      ...projection,
+      providerThreads: [
+        {
+          ...providerThread,
+          nativeThreadRef: {
+            driver: providerThread.driver,
+            nativeId: "side-chat-native",
+            strength: "strong",
+          },
+          status: "active",
+        },
+      ],
+      runs: [
+        {
+          ...run,
+          id: firstRunId,
+          ordinal: 1,
+          userMessageId: firstMessageId,
+          activeAttemptId: firstAttemptId,
+          status: "completed",
+          startedAt: now,
+          completedAt: now,
+        },
+        run,
+      ],
+      messages: [
+        {
+          ...message,
+          id: firstMessageId,
+          runId: firstRunId,
+          text: "Which threads are running?",
+        },
+        message,
+      ],
+      attempts: [
+        {
+          ...projection.attempts[0]!,
+          id: firstAttemptId,
+          runId: firstRunId,
+          nativeThreadId: input.pina === "replacement" ? "retired-native" : "side-chat-native",
+          ...(input.pina === "legacy" ? {} : { includesPinaInstructions: true as const }),
+          status: "completed",
+          startedAt: now,
+          completedAt: now,
+        },
+        ...projection.attempts,
+      ],
+      providerTurns: [
+        {
+          id: ProviderTurnId.make("pina-first-turn"),
+          providerThreadId,
+          nodeId: rootNodeId,
+          runAttemptId: firstAttemptId,
+          ordinal: 1,
+          nativeTurnRef: null,
+          status: "completed",
+          startedAt: now,
+          completedAt: now,
+        },
+      ],
+    };
+  }
   const open = vi.fn(() =>
-    input.sideChat !== undefined
+    input.sideChat !== undefined || input.pina !== undefined
       ? Effect.succeed(sideChatSession as never)
       : input.interruptOpen === true
         ? Effect.interrupt
@@ -1230,7 +1302,7 @@ function makeLocalCommandHarness(input: {
       input: RunExecutionService.RunExecutionServiceV2StartRootRunInput,
     ) => Effect.Effect<void, RunExecutionService.RunExecutionServiceV2Error>
   >((runInput) =>
-    input.sideChat !== undefined
+    input.sideChat !== undefined || input.pina !== undefined
       ? (runInput.resume
           ? runInput.session.resumeTurn!({
               ...runInput,
@@ -3666,5 +3738,47 @@ effectIt.effect("rejects citation expansion before opening a provider session", 
       },
     ]);
     expect(harness.projection().messages[0]?.text).toBe(text);
+  }),
+);
+
+effectIt.effect("delivers Pina instructions once per native session with Pina's thread id", () =>
+  Effect.gen(function* () {
+    const first = makeLocalCommandHarness({
+      text: "Which threads need my input?",
+      pina: "first",
+    });
+    yield* first.start;
+    const firstPrompt = first.startTurn.mock.calls[0]?.[0].message.text;
+    expect(firstPrompt).toContain("You are Pina, the user's personal assistant");
+    expect(firstPrompt).toContain(
+      `Exclude your own conversation (${first.projection().thread.id}).`,
+    );
+    expect(firstPrompt).toContain("Which threads need my input?");
+
+    for (const pina of ["legacy", "replacement"] as const) {
+      const reopened = makeLocalCommandHarness({ text: "What needs my input?", pina });
+      yield* reopened.start;
+      expect(reopened.startTurn.mock.calls[0]?.[0].message.text).toContain("You are Pina");
+    }
+
+    const resume = makeLocalCommandHarness({
+      text: "",
+      pina: "first",
+      manualContinuation: true,
+      nativeResumeUnsupported: true,
+    });
+    yield* resume.start;
+    expect(resume.settledRuns).toEqual(["failed"]);
+    expect(resume.startTurn).not.toHaveBeenCalled();
+    expect(resume.startRootRun).not.toHaveBeenCalled();
+
+    const second = makeLocalCommandHarness({
+      text: "Tell the login thread to add a test.",
+      pina: "delivered",
+    });
+    yield* second.start;
+    expect(second.startTurn.mock.calls[0]?.[0].message.text).toBe(
+      "Tell the login thread to add a test.",
+    );
   }),
 );

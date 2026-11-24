@@ -526,6 +526,10 @@ export function createThreadEnvironmentAtoms<R, E>(
       ),
   };
   return {
+    openPina: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:threads:open-pina",
+      tag: WS_METHODS.openPina,
+    }),
     ...commands,
     regenerateTitle,
     rowActionsAtom,

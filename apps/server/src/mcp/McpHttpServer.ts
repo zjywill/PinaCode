@@ -25,6 +25,7 @@ import {
   ProviderInteractionMode,
   type RunId,
   RuntimeMode,
+  isPinaThread,
   OrchestrationV2LinkedSender,
   ThreadId,
 } from "@t3tools/contracts";
@@ -1522,6 +1523,12 @@ const layerToolExposure = Layer.effect(
   }),
 );
 
+const PINA_DIRECT_TOOLS: ReadonlySet<string> = new Set([
+  "pinacode_thread_list",
+  "pinacode_thread_read",
+  "pinacode_thread_send",
+]);
+
 /**
  * A provider session that sends `MCP_TOOL_EXPOSURE_HEADER: deferred` lists only
  * the direct tools and what its `pinacode_tool_search` calls loaded. Calls are never
@@ -1534,11 +1541,17 @@ const layerDeferredListing = McpServer.visibility(
     return Effect.fnUntraced(function* ({ method, target, headers }: McpServer.MiddlewareOptions) {
       if (method !== "tools/list") return true;
       const scope = yield* Effect.serviceOption(McpInvocationContext.McpInvocationContext);
-      const providerSessionId = Option.getOrUndefined(scope)?.thread?.providerSessionId;
+      const threadScope = Option.getOrUndefined(scope)?.thread;
+      const providerSessionId = threadScope?.providerSessionId;
       if (headers[MCP_TOOL_EXPOSURE_HEADER] !== "deferred" || providerSessionId === undefined) {
         return target !== McpToolExposure.TOOL_SEARCH;
       }
-      return exposure.isListed(providerSessionId, target);
+      return (
+        (threadScope !== undefined &&
+          isPinaThread(threadScope.threadId) &&
+          PINA_DIRECT_TOOLS.has(target)) ||
+        exposure.isListed(providerSessionId, target)
+      );
     });
   }),
   { global: true },

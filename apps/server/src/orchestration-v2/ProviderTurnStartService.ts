@@ -1,3 +1,4 @@
+import { pinaInstructions } from "./pinaInstructions.ts";
 import {
   expandPullRequestWorkflowPrompt,
   hasOngoingPullRequestFollowUp,
@@ -10,6 +11,7 @@ import {
   CommandId,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   latestProviderTurnForAttempt,
+  isPinaThread,
   withMessageSenderNote,
   type OrchestrationV2DomainEvent,
   type OrchestrationV2ContextHandoff,
@@ -1987,7 +1989,19 @@ export const layer: Layer.Layer<
         budget,
       } = handoffContext;
       const retryHandoff = resumedRetryHandoff ?? (yield* prepareRetryHandoff(handoffContext));
+      const needsPinaContext =
+        isPinaThread(projection.thread.id) &&
+        !slashCommand &&
+        !(manualResume && unsentResumeMessage === undefined) &&
+        !acceptedAttempts.some(
+          (prior) =>
+            prior.includesPinaInstructions === true &&
+            (prior.nativeThreadId === undefined
+              ? sameNativeThread
+              : prior.nativeThreadId === loadedProviderThread.nativeThreadRef?.nativeId),
+        );
       const carriesPendingContext =
+        needsPinaContext ||
         effectiveHandoffs.length > 0 ||
         retryHandoff.handoffs.length > 0 ||
         retryHandoff.attachments.length > 0 ||
@@ -2038,6 +2052,7 @@ export const layer: Layer.Layer<
       };
       const runningAttempt: OrchestrationV2RunAttempt = {
         ...attempt,
+        ...(needsPinaContext ? { includesPinaInstructions: true as const } : {}),
         ...(runningProviderThread.nativeThreadRef?.nativeId == null
           ? {}
           : { nativeThreadId: runningProviderThread.nativeThreadRef.nativeId }),
@@ -2223,7 +2238,11 @@ export const layer: Layer.Layer<
             ),
             ...(sideChatContext === "" || sideChatHandoff === undefined ? [] : [sideChatHandoff]),
           ];
-          const context = [delivery.context, sideChatContext, restartNote]
+          const pinaContext =
+            needsPinaContext && !compact && !slashCommand && !turnInput.resume
+              ? pinaInstructions(projection.thread.id)
+              : "";
+          const context = [pinaContext, delivery.context, sideChatContext, restartNote]
             .filter((part) => part !== "")
             .join("\n\n");
           const { restartContinuationOfRunId: _resumedRunId, ...promptedInput } = turnInput;

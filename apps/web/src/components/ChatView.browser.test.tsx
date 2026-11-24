@@ -2,8 +2,10 @@ import { createMemoryHistory } from "@tanstack/react-router";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   EnvironmentId,
+  pinaThreadId,
   IssueTrackerKind,
   ORCHESTRATION_V2_WS_METHODS,
+  ProjectId,
   RunId,
   ThreadId,
   WS_METHODS,
@@ -35,6 +37,7 @@ import { startWorkspaceFocus } from "~/lib/workspaceFocus";
 import { usePromptStashStore } from "~/promptStashStore";
 import { useRightPanelStore } from "~/rightPanelStore";
 import { getRouter } from "~/router";
+import { useUiStateStore } from "~/uiStateStore";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { environmentThreadDetails } from "~/state/threads";
 import {
@@ -607,6 +610,64 @@ it("opens the thread actions menu for an older settled thread the shell leaves o
   await expect
     .element(page.getByRole("menuitem", { name: "Rename thread" }), { timeout: 5_000 })
     .toBeVisible();
+});
+
+it("opens Pina from the fixed sidebar with the source thread in its composer", async () => {
+  await page.viewport(1400, 900);
+  const style = document.createElement("style");
+  style.textContent = stylesheet;
+  document.head.append(style);
+  using _style = { [Symbol.dispose]: () => style.remove() };
+  const source = threadWithHistory("login", 1);
+  const other = threadWithHistory("billing", 1);
+  const pina = {
+    ...threadWithHistory(pinaThreadId(ProjectId.make("project-scratch"), 0), 1),
+    projectId: ProjectId.make("project-scratch"),
+    title: "Pina",
+  };
+  using _environment = installFakeEnvironment([source, other, pina]);
+  using _ensure = answerRpc(WS_METHODS.openPina, () => Effect.succeed({ threadId: pina.id }));
+  __setClientSettingsForTests({
+    ...DEFAULT_CLIENT_SETTINGS,
+    onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+  });
+  useUiStateStore.getState().setSidebarProjectScopeKeys([`${ENVIRONMENT_ID}:${PROJECT_ID}`]);
+  using _scope = {
+    [Symbol.dispose]: () => useUiStateStore.getState().setSidebarProjectScopeKeys([]),
+  };
+  const router = getRouter(
+    createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${source.id}`] }),
+  );
+  await router.load();
+  await using screen = await render(<AppRoot router={router} />, { router: false });
+  await expect.element(page.getByText(`Answer 0 for ${source.id}.`)).toBeVisible();
+  await screen.getByRole("button", { name: "Pina", exact: true }).click();
+  await expect.element(page.getByText(`Answer 0 for ${pina.id}.`), { timeout: 3000 }).toBeVisible();
+  expect(useUiStateStore.getState().sidebarProjectScopeKeys).toEqual([
+    `${ENVIRONMENT_ID}:${PROJECT_ID}`,
+  ]);
+  expect(
+    useComposerDraftStore.getState().getComposerDraft(scopeThreadRef(ENVIRONMENT_ID, pina.id))
+      ?.threadContexts,
+  ).toMatchObject([{ threadId: source.id, environmentId: ENVIRONMENT_ID }]);
+  await router.navigate({
+    to: "/$environmentId/$threadId",
+    params: { environmentId: ENVIRONMENT_ID, threadId: other.id },
+  });
+  await expect.element(page.getByText(`Answer 0 for ${other.id}.`)).toBeVisible();
+  await userEvent.keyboard("{ControlOrMeta>}{Alt>}p{/Alt}{/ControlOrMeta}");
+  await expect.element(page.getByText(`Answer 0 for ${pina.id}.`), { timeout: 3000 }).toBeVisible();
+  expect(
+    useComposerDraftStore.getState().getComposerDraft(scopeThreadRef(ENVIRONMENT_ID, pina.id))
+      ?.threadContexts,
+  ).toMatchObject([{ threadId: other.id, environmentId: ENVIRONMENT_ID }]);
+  await page.getByRole("button", { name: "Thread actions for Pina" }).click({ timeout: 3000 });
+  await expect
+    .element(page.getByRole("menuitem", { name: "Rename thread" }), { timeout: 3000 })
+    .toBeDisabled();
+  for (const name of ["Pin thread", "Regenerate title", "Turn into project"]) {
+    await expect.element(page.getByRole("menuitem", { name })).not.toBeInTheDocument();
+  }
 });
 
 it("retains each thread's diff selection when returning from another thread or Settings", async () => {

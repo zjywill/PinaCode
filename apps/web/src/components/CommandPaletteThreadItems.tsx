@@ -12,7 +12,7 @@ import {
   pickedQuery,
   rankMessageMatches,
 } from "@t3tools/shared/paletteSearch";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { isPinaThread, type EnvironmentId, type ThreadId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate } from "@tanstack/react-router";
 import { MessageSquareIcon } from "lucide-react";
@@ -102,7 +102,7 @@ export function useCommandPaletteThreadItems(input: {
   const messages = useMessages();
   const gt = useGT();
   const navigate = useNavigate();
-  const threads = useVisibleThreadShells();
+  const threads = useVisibleThreadShells().filter((thread) => !isPinaThread(thread.id));
   const delegatedUnderParent = useDelegatedUnderParent();
   const { projectEnvironmentLocationById } = useEnvironmentLookups();
   const providerEntryByEnvironmentAndInstanceId = useProviderEntryByEnvironmentAndInstanceId();

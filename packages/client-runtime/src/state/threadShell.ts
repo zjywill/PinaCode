@@ -10,6 +10,7 @@ import type {
 } from "@t3tools/contracts";
 import {
   isListedThreadLineage,
+  isPinaThread,
   isProviderNativeSubagentThread,
   OrchestrationV2ThreadShell,
 } from "@t3tools/contracts";
@@ -99,7 +100,13 @@ export function resolveListedAncestorThreadRef(
         threadId: thread.delegatedFrom.threadId,
       };
       // Mirrors delegatedUnderParent: a task whose parent is not listed keeps its own row.
-      if (findThread(parent)?.archivedAt !== null) return current;
+      const parentThread = findThread(parent);
+      if (
+        parentThread === undefined ||
+        parentThread.archivedAt !== null ||
+        isPinaThread(parent.threadId)
+      )
+        return current;
     } else {
       return current;
     }
@@ -751,6 +758,7 @@ export function createEnvironmentThreadShellAtoms(input: {
         const parent = thread.delegatedFrom;
         if (
           parent !== undefined &&
+          !isPinaThread(parent.threadId) &&
           environmentIds.has(parent.environmentId) &&
           // An archived parent leaves navigation; its task there stays listed on its own.
           get(environmentThreadIndexAtom(parent.environmentId)).get(parent.threadId)?.archivedAt ===

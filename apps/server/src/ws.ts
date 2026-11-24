@@ -3013,6 +3013,15 @@ export const layerWsRpc = (
                 Effect.ignoreCause({ log: true }),
               ),
           }),
+        [WS_METHODS.openPina]: () =>
+          startup.enqueueCommand(threadLaunch.openPina()).pipe(
+            Effect.catchTags({
+              ServerRuntimeStartupError: (cause) =>
+                Effect.fail(
+                  new OrchestrationDispatchCommandError({ message: cause.message, cause }),
+                ),
+            }),
+          ),
         [WS_METHODS.projectsEnsureScratch]: () =>
           managedFolders.ensureScratchProject.pipe(
             Effect.mapError(

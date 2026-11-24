@@ -1,3 +1,4 @@
+import { isPinaThread } from "@t3tools/contracts";
 import { useMessages } from "gt-react";
 
 import { orderItemsByPreferredIds, sortSidebarV2ProjectGroups } from "../components/Sidebar.logic";
@@ -15,7 +16,7 @@ export function useSidebarProjectGroups() {
   const projects = useProjects();
   // Activity order lags a running thread's streaming ticks until its next
   // real change; reading every tick re-rendered the whole sidebar with it.
-  const threads = useQuietThreadShells();
+  const threads = useQuietThreadShells().filter((thread) => !isPinaThread(thread.id));
   const delegatedUnderParent = useDelegatedUnderParent();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const sortOrder = useClientSettings((s) => s.sidebarProjectSortOrder);

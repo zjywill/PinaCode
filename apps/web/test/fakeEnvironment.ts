@@ -69,6 +69,7 @@ const descriptor = {
   orchestrationProtocolVersion: ORCHESTRATION_PROTOCOL_VERSION,
   capabilities: {
     repositoryIdentity: true,
+    pinaAssistant: true,
     sideChats: true,
     freshContext: true,
     fileAttachments: { maxUploadBytes: 10_000_000 },

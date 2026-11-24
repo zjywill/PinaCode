@@ -25,6 +25,9 @@ import { T3KeyboardCommands } from "../../native/T3KeyboardCommands";
 import { useThreadShell } from "../../state/entities";
 import type { GitActionProgress } from "../../state/use-vcs-action-state";
 import { GitActionProgressOverlay } from "../threads/GitActionProgressOverlay";
+import { useActiveNewTask } from "../../state/active-new-task";
+import { useNewTaskFlow } from "../threads/new-task-flow-provider";
+import { useOpenPina, usePinaEnvironment } from "../threads/usePinaRow";
 import { CommandPalette } from "./CommandPalette";
 import {
   dispatchHardwareKeyboardCommand,
@@ -60,6 +63,13 @@ export function HardwareKeyboardCommandProvider({
   const closePalette = useCallback(() => setPaletteOpen(false), []);
   const activeThreadRef = useMemo(() => parseActiveThreadPath(pathname), [pathname]);
   const activeThread = useThreadShell(activeThreadRef);
+  const draft = useActiveNewTask();
+  const flow = useNewTaskFlow();
+  const pinaEnvironmentId = usePinaEnvironment(
+    activeThreadRef?.environmentId ?? (draft && flow.selectedEnvironmentId),
+  );
+  const pina = useOpenPina({ environmentId: pinaEnvironmentId, source: activeThread });
+  const canOpenPina = pina !== null;
   const copyTarget = useMemo(
     () =>
       activeThreadRef === null
@@ -112,6 +122,7 @@ export function HardwareKeyboardCommandProvider({
   );
   const enabledCommands = useMemo(() => {
     const commands = new Set<HardwareKeyboardCommand>(getRegisteredHardwareKeyboardCommands());
+    if (canOpenPina) commands.add("openPina");
     commands.add("newTask");
     commands.add("commandPalette");
     if (pathname !== "/" && !pathname.startsWith("/threads/")) {
@@ -128,10 +139,15 @@ export function HardwareKeyboardCommandProvider({
     }
     return [...commands];
     // oxlint-disable-next-line react/memo-dependencies -- registrationVersion invalidates the snapshot of the external keyboard-command registry.
-  }, [activeThreadRef, pathname, registrationVersion, navigation]);
+  }, [activeThreadRef, pathname, registrationVersion, navigation, canOpenPina]);
 
   const onCommand = useCallback(
     (command: HardwareKeyboardCommand) => {
+      if (command === "openPina") {
+        closePalette();
+        void pina?.open();
+        return;
+      }
       if (command === "commandPalette") {
         setPaletteOpen(true);
         return;
@@ -188,7 +204,7 @@ export function HardwareKeyboardCommandProvider({
         navigation.navigate("ThreadReview", thread);
       }
     },
-    [copyTarget, navigation, pathname, showCopyFeedback],
+    [copyTarget, navigation, pathname, showCopyFeedback, pina, closePalette],
   );
 
   const palette = useMemo(

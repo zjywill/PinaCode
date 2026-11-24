@@ -10,7 +10,11 @@ import {
   type ShownOrder,
 } from "@t3tools/client-runtime/state/thread-search";
 import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
-import { THREAD_JUMP_KEYBINDING_COMMANDS } from "@t3tools/contracts";
+import {
+  isPinaThread,
+  PINA_ASSISTANT_NAME,
+  THREAD_JUMP_KEYBINDING_COMMANDS,
+} from "@t3tools/contracts";
 import {
   foldSearchQuery,
   PALETTE_MESSAGE_LIMIT,
@@ -62,6 +66,7 @@ import { useWorkspaceEnvironments } from "../../state/workspace";
 import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
 import { useAppearancePreferences } from "../settings/appearance/AppearancePreferencesProvider";
 import { ThreadSearchMatchExcerpt } from "../threads/thread-search-match";
+import { useOpenPina, usePinaEnvironment } from "../threads/usePinaRow";
 import { pickTriageEnvironment } from "../triage/triageTarget";
 import { useStartTriage } from "../triage/useStartTriage";
 import { useNewTaskFlow } from "../threads/new-task-flow-provider";
@@ -278,8 +283,9 @@ export function CommandPalette(props: {
   const serverConfigs = useServerConfigs();
   const startTriage = useStartTriage();
   const newTaskFlow = useNewTaskFlow();
+  const activeDraft = useActiveNewTask();
   const draftEnvironmentId =
-    useActiveNewTask() === null ? null : (newTaskFlow.selectedProject?.environmentId ?? null);
+    activeDraft === null ? null : (newTaskFlow.selectedProject?.environmentId ?? null);
   const triageEnvironmentId = pickTriageEnvironment({
     // The route names the machine even before the thread shell loads.
     onScreen: activeThreadRef?.environmentId ?? draftEnvironmentId,
@@ -287,6 +293,10 @@ export function CommandPalette(props: {
     supportsTriage: (environmentId) =>
       serverConfigs.get(environmentId)?.environment.capabilities.triage === true,
   });
+  const pinaEnvironmentId = usePinaEnvironment(
+    activeThreadRef?.environmentId ?? (activeDraft && newTaskFlow.selectedEnvironmentId),
+  );
+  const pina = useOpenPina({ environmentId: pinaEnvironmentId, source: activeThread });
   const canTriage =
     useAtomValue(serverEnvironment.prepareTriage.permissionAtom(triageEnvironmentId)) &&
     triageEnvironmentId !== null &&
@@ -356,6 +366,22 @@ export function CommandPalette(props: {
         run: () => openSettings(navigation, "SettingsArchive"),
       },
     ];
+    if (pina) {
+      const pinaEnvironmentLabel =
+        environments.length > 1
+          ? savedConnectionsById[pina.environmentId]?.environmentLabel
+          : undefined;
+      actions.push({
+        key: "pina",
+        kind: "action",
+        title: PINA_ASSISTANT_NAME,
+        ...(pinaEnvironmentLabel !== undefined
+          ? { detail: gt("On {environment}", { environment: pinaEnvironmentLabel }) }
+          : {}),
+        searchTerms: ["pina", "assistant", "chat"],
+        run: () => void pina.open(),
+      });
+    }
     if (canTriage) {
       const triageEnvironmentLabel = savedConnectionsById[triageEnvironmentId]?.environmentLabel;
       actions.push({
@@ -454,6 +480,7 @@ export function CommandPalette(props: {
       .filter(
         (thread) =>
           thread.archivedAt === null &&
+          !isPinaThread(thread.id) &&
           !isShownUnderParent(
             { environmentId: thread.environmentId, threadId: thread.id },
             thread.lineage,
@@ -498,6 +525,7 @@ export function CommandPalette(props: {
     activeThread,
     activeThreadRef,
     environments.length,
+    pina,
     canTriage,
     canShareWithGuest,
     navigation,

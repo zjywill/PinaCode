@@ -1122,7 +1122,10 @@ it.effect("a rejected initial message leaves no title change and no new thread",
 // Stands `projectId` in for a plain folder, not a Git repository, so Git fails
 // there with the error a real one raises. It is the Scratch project unless
 // `scratch` is false.
-function scratchHarness({ scratch = true }: { readonly scratch?: boolean } = {}) {
+function scratchHarness({
+  scratch = true,
+  ...options
+}: Pick<HarnessOptions, "providers" | "serverSettings"> & { readonly scratch?: boolean } = {}) {
   const claimed: Array<ThreadId> = [];
   const scratchRoot = project.workspaceRoot;
   const notARepository = (operation: string, cwd: string) =>
@@ -1133,8 +1136,10 @@ function scratchHarness({ scratch = true }: { readonly scratch?: boolean } = {})
       detail: "Failed to resolve the VCS driver for this Git command.",
     });
   const harness = makeHarness({
+    ...options,
     managedFolders: Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
       namedProjectsRoot: "/projects",
+      ensureScratchProject: Effect.succeed({ projectId }),
       isScratchProject: (id) => Effect.succeed(scratch && id === projectId),
       folderForThread: (input) =>
         Effect.sync(() => {
@@ -1189,6 +1194,75 @@ function scratchHarness({ scratch = true }: { readonly scratch?: boolean } = {})
     layer: Layer.mergeAll(harness.layer, layerScheduledTasks),
   };
 }
+
+it.effect("opens Pina with an available provider and the configured access ceiling", () => {
+  const provider: ServerProvider = {
+    instanceId: modelSelection.instanceId,
+    driver: adapter.driver,
+    enabled: true,
+    installed: true,
+    status: "ready",
+    version: "test",
+    auth: { status: "authenticated" },
+    checkedAt: project.createdAt,
+    models: [{ slug: modelSelection.model, name: "Test", isCustom: false, capabilities: null }],
+    skills: [],
+    slashCommands: [],
+  };
+  const harness = scratchHarness({
+    providers: [
+      {
+        ...provider,
+        instanceId: claudeModelSelection.instanceId,
+        auth: { status: "unauthenticated" },
+      },
+      provider,
+    ],
+    serverSettings: {
+      defaultModelSelection: claudeModelSelection,
+      defaultRuntimeMode: "approval-required",
+    },
+  });
+  return Effect.gen(function* () {
+    const { threadId } = yield* (yield* ThreadLaunch.ThreadLaunchService).openPina();
+    const thread = yield* (yield* ThreadManagement.ThreadManagementService).getThreadShell(
+      threadId,
+    );
+    assert.deepEqual(thread?.modelSelection, modelSelection);
+    assert.equal(thread?.runtimeMode, "approval-required");
+  }).pipe(Effect.provide(harness.layer));
+});
+
+it.effect("opens one Pina history across concurrent clients, archive and deletion", () => {
+  const harness = scratchHarness();
+  return Effect.gen(function* () {
+    const launches = yield* ThreadLaunch.ThreadLaunchService;
+    const threads = yield* ThreadManagement.ThreadManagementService;
+    const [desktop, phone] = yield* Effect.all([launches.openPina(), launches.openPina()], {
+      concurrency: 2,
+    });
+    assert.deepEqual(desktop, phone);
+    const { threadId } = desktop;
+    const shell = yield* threads.getThreadShell(threadId);
+    assert.equal(shell?.title, "Pina");
+    assert.deepEqual(harness.claimed, [threadId]);
+    yield* threads.dispatch({
+      type: "thread.archive",
+      commandId: CommandId.make("archive-pina"),
+      threadId,
+    });
+    assert.deepEqual(yield* launches.openPina(), phone);
+    assert.equal((yield* threads.getThreadShell(threadId))?.archivedAt, null);
+    yield* threads.dispatch({
+      type: "thread.delete",
+      commandId: CommandId.make("delete-pina"),
+      threadId,
+    });
+    const replacement = yield* launches.openPina();
+    assert.notEqual(replacement.threadId, threadId);
+    assert.deepEqual(yield* launches.openPina(), replacement);
+  }).pipe(Effect.provide(harness.layer));
+});
 
 const worktreeStrategy = { type: "worktree", baseRef: "main", startFromOrigin: true } as const;
 
@@ -2793,6 +2867,7 @@ it.effect("shared intake preserves durable attachment bytes after a lost launch 
               }),
             ),
           ),
+        openPina: launches.openPina,
         checkWorktreeBase: launches.checkWorktreeBase,
         isNonGitProject: launches.isNonGitProject,
         retryPreparation: launches.retryPreparation,

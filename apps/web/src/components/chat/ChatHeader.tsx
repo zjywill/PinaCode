@@ -1,4 +1,5 @@
 import {
+  isPinaThread,
   AuthOrchestrationOperateScope,
   type EnvironmentId,
   type ScopedThreadRef,
@@ -164,6 +165,7 @@ export const ChatHeader = memo(function ChatHeader({
   const startRename = () => {
     if (
       !isServerThread ||
+      isPinaThread(activeThreadId) ||
       !readEnvironmentScope(activeThreadEnvironmentId, AuthOrchestrationOperateScope)
     )
       return;
