@@ -9,11 +9,13 @@ can be picked up in the other.
 1. Open **Settings → Providers → Add provider → Dim** and choose the server that will run it.
 2. If Pina Code offers **Install Dim**, use it to install the CLI on that server. You can also run
    `npm install -g dimcode-alpha@alpha` on the server yourself.
-3. Select **Sign in**, open the verification page, and enter the displayed device code. Once Dim
-   confirms sign-in, Pina Code refreshes the model list and subscription usage.
+3. If **Sign in** is available, open the verification page and enter the displayed device code.
+   Once Dim confirms sign-in, Pina Code refreshes the model list and subscription usage. For other
+   Dim builds, configure the model provider in `dima`, then refresh Dim in Pina Code.
 
-Dim shares its account with the `dima` CLI. Use **Sign out** in the same provider settings to sign out
-of that Dim home. Subscription credits and token windows appear under **Usage → Limits**.
+Pina Code lists the selectable models from the running Dim daemon. When the daemon exposes a Dim
+account, Pina Code shares it with the `dima` CLI. **Sign out** signs out of that Dim home, and
+subscription credits and token windows appear under **Usage → Limits** when Dim provides them.
 
 On upgrade, DimCode Alpha and the Registry edition move to Dim and keep their Pina Code chat
 history. The Registry edition uses a separate session store. Sign in to Dima if needed, then continue

@@ -77,6 +77,7 @@ import { DIM_LEGACY_MODEL_PREFIX } from "@t3tools/shared/model";
 import type { McpProviderSessionConfig } from "@t3tools/provider-core/server/mcpSession";
 import type { DimDaemonError } from "./daemon.ts";
 import type { DimConnection, DimConnectionError } from "./transport.ts";
+import { DIM_USAGE_PROVIDER_ID } from "./usageLimits.ts";
 
 export const DIM_PROVIDER: ProviderDriverKind = ProviderDriverKind.make("dim");
 
@@ -1705,6 +1706,36 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         selection: ModelSelection,
       ) {
         const wanted = dimSelection(selection);
+        if (
+          wanted.model?.provider === DIM_USAGE_PROVIDER_ID &&
+          connection.hello.daemonProfile.kind === "product" &&
+          connection.hello.features?.includes("provider.models.query")
+        ) {
+          const original = wanted.model;
+          const isSelectable = Effect.fn("DimAdapter.isSelectable")(function* (
+            providerId: string,
+            modelId: string,
+          ) {
+            const result = yield* connection.request("provider.models.query", {
+              providerId,
+              modelId,
+              selectableOnly: true,
+              limit: 2,
+            });
+            return (recordArray(result, "models") ?? []).some(
+              (entry) =>
+                recordString(entry, "providerId") === providerId &&
+                recordString(recordField(entry, "model"), "id") === modelId,
+            );
+          });
+          if (yield* isSelectable(original.provider, original.modelId)) return wanted;
+          // Newer Dim product daemons moved OAuth models under Magpie's dim-oauth route.
+          const modelId = `dim-oauth/${original.modelId}`;
+          if (yield* isSelectable("magpie", modelId)) {
+            return { ...wanted, model: { provider: "magpie", modelId } };
+          }
+          return yield* unavailablePreviousModel;
+        }
         if (!selection.model.startsWith(DIM_LEGACY_MODEL_PREFIX)) return wanted;
         const modelId = selection.model.slice(DIM_LEGACY_MODEL_PREFIX.length);
         const attached = appliedModel === null ? null : parseDimModelSlug(appliedModel);
@@ -2057,6 +2088,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         threadState = { sessionId: created.sessionId, cwd: sessionEntity.cwd, providerThread };
         appliedModel =
           wanted.model === null ? null : `${wanted.model.provider}/${wanted.model.modelId}`;
+        if (appliedModel !== null) sessionEntity = { ...sessionEntity, model: appliedModel };
         appliedEffort = wanted.effort;
         appliedPreset = dimPreset(threadInput.runtimePolicy, threadInput.modelSelection);
         yield* emit({ type: "provider_thread.updated", driver: DIM_PROVIDER, providerThread });

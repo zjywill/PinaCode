@@ -34,7 +34,12 @@ export const refreshDimAccountModels = (request: DimConnection["request"]) =>
 export const readDimAuth = Effect.fn("DimAuth.readStatus")(function* (
   request: DimConnection["request"],
 ) {
-  const reply = yield* request("account.status", target);
+  const reply = yield* request("account.status", target).pipe(
+    Effect.catchTags({
+      DimRpcError: (cause) =>
+        cause.appError === "account_provider_unavailable" ? Effect.undefined : Effect.fail(cause),
+    }),
+  );
   const account = recordField(reply, "account");
   const email = recordString(account, "email")?.trim();
   if (isRecord(account)) {

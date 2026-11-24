@@ -5,8 +5,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
-import { makeDimAuth } from "./auth.ts";
-import type { DimConnection } from "./transport.ts";
+import { makeDimAuth, readDimAuth } from "./auth.ts";
+import { DimRpcError, type DimConnection } from "./transport.ts";
 
 const instanceId = ProviderInstanceId.make("dim");
 const device = {
@@ -109,4 +109,20 @@ it.effect("cancels the Dim daemon attempt when the client cancels sign-in", () =
     });
     assert.strictEqual(harness.refreshes(), 0);
   }).pipe(Effect.scoped, Effect.provide(NodeCrypto.layer)),
+);
+
+it.effect("leaves account status unknown when the daemon dropped the Dim OAuth plugin", () =>
+  Effect.gen(function* () {
+    const status = yield* readDimAuth((method) =>
+      Effect.fail(
+        new DimRpcError({
+          method,
+          code: -32000,
+          appError: "account_provider_unavailable",
+          detail: "Managed provider plugin is unavailable",
+        }),
+      ),
+    );
+    assert.isUndefined(status);
+  }),
 );

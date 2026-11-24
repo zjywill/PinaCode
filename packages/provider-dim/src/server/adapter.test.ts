@@ -101,6 +101,7 @@ class FakeDim {
   failQuestionRespond = false;
   pendingQuestionBatches: ReadonlyArray<unknown> = [];
   failPreview = false;
+  selectableModels: ReadonlyArray<{ providerId: string; model: { id: string } }> | undefined;
   defaultModel = { providerId: "fixture", modelId: "default-model" };
   historyEvents: Array<{
     readonly id: string;
@@ -139,8 +140,15 @@ class FakeDim {
       instanceId: "dim-instance",
       serverVersion: "0.1.0-alpha.26",
       protocolVersion: 4,
-      daemonProfile: { kind: "mock" as const },
-      features: ["session.create", "session.submit"],
+      daemonProfile:
+        this.selectableModels === undefined
+          ? { kind: "mock" as const }
+          : { kind: "product" as const },
+      features: [
+        "session.create",
+        "session.submit",
+        ...(this.selectableModels === undefined ? [] : ["provider.models.query"]),
+      ],
     };
   }
 
@@ -230,6 +238,13 @@ class FakeDim {
           self.preset = policy["preset"] as "read-only" | "workspace-write" | "full-access";
           return { version: 1, policy };
         }
+        case "provider.models.query":
+          return {
+            models: self.selectableModels?.filter(
+              ({ providerId, model }) =>
+                providerId === params["providerId"] && model.id === params["modelId"],
+            ),
+          };
         case "session.model.preview":
           if (self.failPreview) {
             return yield* new DimTransportError({ detail: "preview failed" });
@@ -354,9 +369,11 @@ const openHarness = (input?: {
   readonly runtimePolicy?: ReturnType<typeof runtimePolicy>;
   readonly modelSelection?: ModelSelection;
   readonly initialNativeThreadId?: string;
+  readonly selectableModels?: FakeDim["selectableModels"];
 }) =>
   Effect.gen(function* () {
     const fake = yield* makeFakeDim;
+    fake.selectableModels = input?.selectableModels;
     const adapter = yield* makeDimAdapterV2({
       instanceId: INSTANCE_ID,
       connections: { connect: () => Effect.succeed(fake.connection) },
@@ -625,6 +642,34 @@ describe("DimAdapter turn start", () => {
 });
 
 describe("DimAdapter runtime policy and model preferences", () => {
+  it.effect.each([
+    { providerId: "magpie", id: "dim-oauth/flash" },
+    { providerId: "dimcode-api-oauth", id: "flash" },
+  ])("keeps a saved Dim OAuth model on the offered route $providerId/$id", ({ providerId, id }) =>
+    Effect.gen(function* () {
+      const selection = modelSelection("dimcode-api-oauth/flash", "high");
+      const harness = yield* openHarness({
+        modelSelection: selection,
+        selectableModels: [{ providerId, model: { id } }],
+      });
+      const thread = yield* harness.runtime.ensureThread({
+        threadId: THREAD_ID,
+        modelSelection: selection,
+        runtimePolicy: runtimePolicy("full-access"),
+      });
+
+      assert.deepEqual(harness.fake.requestsOf("session.create")[0]?.["model"], {
+        provider: providerId,
+        modelId: id,
+      });
+      assert.deepEqual(harness.fake.requestsOf("session.create")[0]?.["modelPreferences"], {
+        reasoningEffort: "high",
+      });
+      yield* harness.runtime.startTurn(turnInput(thread, { modelSelection: selection }));
+      assert.deepEqual(harness.fake.requestsOf("session.model.update"), []);
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+
   it.effect("creates with the requested preset and effort, then narrows before a turn", () =>
     Effect.gen(function* () {
       const harness = yield* openHarness({
