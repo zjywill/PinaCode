@@ -4,7 +4,7 @@
 
 # PinaCode
 
-PinaCode 是 [T3 Code](https://github.com/pingdotgg/t3code) 的独立分支。你可以在同一个界面里使用 Codex、Claude Code 等已登录的编程助手，在电脑上开始工作，再从手机接着操作。
+PinaCode 是 [T3 Code](https://github.com/pingdotgg/t3code) 的非官方独立分支。你可以在同一个界面里使用 Codex、Claude Code 等已登录的编程助手，在电脑上开始工作，再从手机接着操作。
 
 PinaCode 可以和 T3 Code 同时安装：命令是 `pinacode`，默认服务端口是 `4773`，数据保存在 `~/.pinacode`（可通过 `PINACODE_HOME` 修改）。使用本地环境或直接配对的环境无需 T3 账号；编程助手仍需各自登录。
 
@@ -43,4 +43,4 @@ git merge upstream/main
 
 [使用文档](./docs/README.md)涵盖[编程助手配置](./docs/user/install.md#providers)、[远程连接](./docs/user/remote-access.md)和[源码管理](./docs/user/source-control.md)。文档中的 T3 Code 官方下载链接提供的是上游版本。
 
-PinaCode 保留原项目的 [MIT 许可证](./LICENSE)。感谢 T3 Code 维护者和贡献者。
+PinaCode 保留原项目的 [MIT 许可证](./LICENSE)。上游品牌的使用见[商标说明](./TRADEMARK.md)。感谢 T3 Code 维护者和贡献者。

@@ -2197,7 +2197,17 @@ const productRefusal = (sample: Sample, name: string, input: Readonly<Record<str
   ) {
     return "Current branch has not been pushed. Push before creating a PR.";
   }
-  if (name === "pinacode_pull_request_merge" && typeof input.expectedHeadSha === "string") {
+  if (
+    name === "pinacode_pull_request_review" &&
+    input.verdict === "approve" &&
+    typeof input.expectedHeadSha !== "string"
+  ) {
+    return "Approving needs expectedHeadSha: the headSha pinacode_pull_request_read reported for the commits you reviewed.";
+  }
+  if (
+    (name === "pinacode_pull_request_merge" || name === "pinacode_pull_request_review") &&
+    typeof input.expectedHeadSha === "string"
+  ) {
     const own = branchPullRequest(sample);
     const number = input.number ?? own.number;
     const pr = worldPullRequests(sample).find((candidate) => Number(candidate.number) === number);

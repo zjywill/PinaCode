@@ -32,7 +32,7 @@ as `op://vault/item/field`. Copy the reference from 1Password with **Copy Secret
 Select the check button next to a reference to read it now. If it reads, providers that use it
 start using the new value.
 
-T3 Code reads the secret when it needs it, for example when a provider starts. Change the
+Pina Code reads the secret when it needs it, for example when a provider starts. Change the
 credential in 1Password and refresh to use the new value.
 
 ## When a secret cannot be read
@@ -55,7 +55,8 @@ you to paste it into the chat. Type or paste the value and select **Save securel
 **Decline**. You can answer from web, desktop, or mobile.
 
 If the environment has a secret provider, the card also lets you pick it and enter a reference
-instead of the value. T3 Code reads the secret once, when you answer. If 1Password is locked, the
+instead of the value. Answering with a reference needs permission to manage providers, as saving a
+reference in Settings does; a session without it sees only the value field. Pina Code reads the secret once, when you answer. If 1Password is locked, the
 card says so and the request stays open: unlock it and try again, or enter the value.
 
 The value never appears in the conversation. Most requests keep it from the agent too: T3 Code

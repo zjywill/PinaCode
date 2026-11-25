@@ -175,6 +175,20 @@ describe("Antigravity Auto", () => {
         request("Run mcp_pinacode_pinacode_preview_status", {
           CommandLine: "Run mcp_pinacode_pinacode_preview_status",
         }),
+        // A directly called tool's rawInput is its own arguments, whatever their names.
+        request("Run mcp_github_create_issue", {
+          ServerName: "pinacode",
+          ToolName: "pinacode_delegate_task",
+        }),
+        request("Running create_issue", {
+          ServerName: "pinacode",
+          ToolName: "pinacode_delegate_task",
+        }),
+        // call_mcp_tool is titled for the tool it calls.
+        request("MCP Tool create_issue", {
+          ServerName: "pinacode",
+          ToolName: "pinacode_delegate_task",
+        }),
       ]) {
         expect(antigravityPermissionDisposition(policy, otherCall)).toBe("ask");
       }

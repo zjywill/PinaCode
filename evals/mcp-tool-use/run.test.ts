@@ -1567,6 +1567,7 @@ it.effect("the raw arm drops T3's forge tools and text; both arms meet T3's refu
     for (const name of [
       "pinacode_pull_request_create",
       "pinacode_pull_request_merge",
+      "pinacode_pull_request_review",
       "pinacode_ci_rerun",
     ]) {
       sample.tools.push({ name: `mcp__pinacode__${name}` });
@@ -1619,6 +1620,23 @@ it.effect("the raw arm drops T3's forge tools and text; both arms meet T3's refu
       expectedHeadSha: head,
     });
     assert.isNotTrue(full.is_error);
+
+    const unpinned = yield* call("e", "pinacode_pull_request_review", {
+      number: 7,
+      verdict: "approve",
+    });
+    assert.include(String(unpinned.content), "Approving needs expectedHeadSha");
+    const stale = { number: 7, verdict: "approve", expectedHeadSha: "c3a91f2" };
+    assert.isTrue((yield* call("f", "pinacode_pull_request_review", stale)).is_error);
+    const pinned = { number: 7, verdict: "approve", expectedHeadSha: head };
+    assert.isNotTrue((yield* call("g", "pinacode_pull_request_review", pinned)).is_error);
+    assert.isNotTrue(
+      (yield* call("h", "pinacode_pull_request_review", {
+        number: 7,
+        verdict: "comment",
+        body: "A question.",
+      })).is_error,
+    );
 
     // Without headRefOid, the branch's own PR is at the checkout's latest commit, as reads say.
     const ownSetup = {

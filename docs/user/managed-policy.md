@@ -170,6 +170,7 @@ A few settings need care:
     "webhookTasks": false,
     "browserCookieImport": false,
     "previewTunnel": false,
+    "worktreeLayoutCommands": false,
     "telemetry": false,
     "providers": {
       "allowedDrivers": ["claudeAgent", "codex"],
@@ -210,7 +211,7 @@ ACP agents' own mode menus have no effect under `maxRuntimeMode`, except Antigra
 T3 Code can place under the limit. Users still choose which ACP Registry agent runs; leave
 `acpRegistry` out of `allowedDrivers` to stop that.
 
-The limit decides which modes T3 Code asks the provider for. It is not a sandbox; see
+The limit decides which modes Pina Code asks the provider for. It is not a sandbox; see
 [What a policy does not cover](#what-a-policy-does-not-cover).
 
 ### Clients and T3 Connect
@@ -256,9 +257,14 @@ so restart T3 Code after that.
   Browser tabs stream from it instead, and port forwarding and **Open on this device** are
   unavailable. This wins over the user's
   [Preview tunnel setting](./remote-access.md#browser-on-a-remote-environment).
+- `worktreeLayoutCommands: false`: Pina Code does not run the
+  [worktree layout commands](./multi-repo-projects.md#lay-the-folder-out-yourself) a project's
+  `t3.json` declares, whether or not a user approved them. Such a project gets no new worktree
+  threads; existing thread folders are restored as plain checkouts and removed without the
+  project's `remove` command.
 - `telemetry: false`: the server and desktop app send no [product usage data](./telemetry.md) or
-  relay connection traces. A policy cannot turn them on. A browser that opens the server, such as
-  app.t3.codes, still sends its own relay traces.
+  relay connection traces, and neither does a browser opened from the server. A policy cannot turn
+  them on. The hosted web app at app.t3.codes and the mobile app still send their own relay traces.
 
 ### Providers
 
