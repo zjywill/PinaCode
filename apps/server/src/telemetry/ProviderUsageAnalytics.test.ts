@@ -107,7 +107,7 @@ describe("provider usage reporting", () => {
     return Effect.gen(function* () {
       const analytics = yield* ProviderTurnAnalytics;
       const root = context("run-a", "initial");
-      yield* analytics.runStarted({ runId: root.runId, driver: "codex", context: root });
+      yield* analytics.runStarted({ runId: RunId.make("run-a"), driver: "codex", context: root });
       yield* analytics.turnCompleted({
         driver: "codex",
         context: root,
