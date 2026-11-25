@@ -65,8 +65,7 @@ and worktree while you stay in the new thread composer. This requires a Git proj
 
 Open **Pina** at the top of the thread list and ask “Which threads need my input?”
 Pina can look across projects on the connected environment, read a conversation,
-and send it a follow-up. Open Pina from a thread to attach a reference to it.
-You can remove the reference in the composer before sending. With a hardware keyboard,
+and send it a follow-up. To ask about a specific thread, copy its reference and paste it into Pina’s composer. With a hardware keyboard,
 press `Cmd+Option+P` on macOS or iOS, or `Ctrl+Alt+P` on Windows, Linux or Android.
 
 Try “Tell this thread to add a regression test.” Pina links to the destination

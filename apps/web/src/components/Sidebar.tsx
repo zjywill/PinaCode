@@ -54,7 +54,6 @@ import {
   type EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/models";
 import {
-  pinaThreadSource,
   parseScopedThreadKey,
   scopeProjectRef,
   scopeThreadRef,
@@ -1129,7 +1128,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     chosenProjectScopeKeys.includes(project.projectKey),
   );
   const pina = useOpenPina(
-    pinaThreadSource(newThreadContext.routeThreadRef, newThreadContext.activeThread),
     routeThreadRef?.environmentId ??
       newThreadContext.activeDraftThread?.environmentId ??
       singleProjectGroupEnvironment(chosenProjectGroups),

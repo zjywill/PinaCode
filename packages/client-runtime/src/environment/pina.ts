@@ -1,4 +1,4 @@
-import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
+import type { EnvironmentId } from "@t3tools/contracts";
 
 export function resolvePinaEnvironment(input: {
   readonly requested: EnvironmentId | null | undefined;
@@ -34,17 +34,4 @@ export function resolvePinaEnvironment(input: {
     return input.preferred;
   }
   return input.connected.find(available) ?? null;
-}
-
-export function pinaThreadSource(
-  ref: ScopedThreadRef | null,
-  shell: { readonly title: string } | null | undefined,
-) {
-  return (
-    ref && {
-      environmentId: ref.environmentId,
-      id: ref.threadId,
-      title: shell?.title ?? ref.threadId,
-    }
-  );
 }

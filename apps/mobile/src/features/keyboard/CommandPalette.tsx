@@ -1,4 +1,3 @@
-import { pinaThreadSource } from "@t3tools/client-runtime/environment";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useAtomValue } from "@effect/atom-react";
 import { uuidv4 } from "../../lib/uuid";
@@ -297,10 +296,7 @@ export function CommandPalette(props: {
   const pinaEnvironmentId = usePinaEnvironment(
     activeThreadRef?.environmentId ?? (activeDraft && newTaskFlow.selectedEnvironmentId),
   );
-  const pina = useOpenPina({
-    environmentId: pinaEnvironmentId,
-    source: pinaThreadSource(activeThreadRef, activeThread),
-  });
+  const pina = useOpenPina(pinaEnvironmentId);
   const canTriage =
     useAtomValue(serverEnvironment.prepareTriage.permissionAtom(triageEnvironmentId)) &&
     triageEnvironmentId !== null &&

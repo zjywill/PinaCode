@@ -6,7 +6,6 @@ import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-r
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 
 import {
-  pinaThreadSource,
   scopedThreadKey,
   scopeProjectRef,
   scopeThreadRef,
@@ -604,7 +603,6 @@ function OpenCommandPaletteDialog(props: {
     settings: clientSettings,
   });
   const pina = useOpenPina(
-    pinaThreadSource(routeThreadRef, activeThread),
     routeThreadRef?.environmentId ??
       activeDraftThread?.environmentId ??
       singleProjectGroupEnvironment(

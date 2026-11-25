@@ -638,7 +638,7 @@ it("opens the thread actions menu for an older settled thread the shell leaves o
     .toBeVisible();
 });
 
-it("opens Pina from the fixed sidebar with the source thread in its composer", async () => {
+it("opens Pina without adding the previous thread to its composer", async () => {
   await page.viewport(1400, 900);
   const style = document.createElement("style");
   style.textContent = stylesheet;
@@ -672,10 +672,12 @@ it("opens Pina from the fixed sidebar with the source thread in its composer", a
   expect(useUiStateStore.getState().sidebarProjectScopeKeys).toEqual([
     `${ENVIRONMENT_ID}:${PROJECT_ID}`,
   ]);
-  expect(
-    useComposerDraftStore.getState().getComposerDraft(scopeThreadRef(ENVIRONMENT_ID, pina.id))
-      ?.threadContexts,
-  ).toMatchObject([{ threadId: source.id, environmentId: ENVIRONMENT_ID }]);
+  const editor = page.getByRole("textbox", { name: "Message Pina", exact: true });
+  await editor.click();
+  const pinaRef = scopeThreadRef(ENVIRONMENT_ID, pina.id);
+  const readPrompt = () => useComposerDraftStore.getState().getComposerDraft(pinaRef)?.prompt ?? "";
+  expect(readPrompt()).toBe("");
+  await userEvent.keyboard("Keep this draft");
   await router.navigate({
     to: "/$environmentId/$threadId",
     params: { environmentId: ENVIRONMENT_ID, threadId: other.id },
@@ -683,10 +685,7 @@ it("opens Pina from the fixed sidebar with the source thread in its composer", a
   await expect.element(page.getByText(`Answer 0 for ${other.id}.`)).toBeVisible();
   await userEvent.keyboard("{ControlOrMeta>}{Alt>}p{/Alt}{/ControlOrMeta}");
   await expect.element(page.getByText(`Answer 0 for ${pina.id}.`), { timeout: 3000 }).toBeVisible();
-  expect(
-    useComposerDraftStore.getState().getComposerDraft(scopeThreadRef(ENVIRONMENT_ID, pina.id))
-      ?.threadContexts,
-  ).toMatchObject([{ threadId: other.id, environmentId: ENVIRONMENT_ID }]);
+  expect(readPrompt()).toBe("Keep this draft");
   await page.getByRole("button", { name: "Thread actions for Pina" }).click({ timeout: 3000 });
   await expect
     .element(page.getByRole("menuitem", { name: "Rename thread" }), { timeout: 3000 })

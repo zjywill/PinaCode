@@ -1,18 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate } from "@tanstack/react-router";
 import { resolvePinaEnvironment, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import {
   AuthOrchestrationOperateScope,
   PINA_ASSISTANT_NAME,
-  isPinaThread,
   type EnvironmentId,
 } from "@t3tools/contracts";
-import {
-  formatComposerContextReference,
-  threadContextRecord,
-} from "@t3tools/shared/composerContextReferences";
-import { composerDraftHasUserContent, useComposerDraftStore } from "../composerDraftStore";
 import { useServerConfigs } from "../state/entities";
 import {
   useConnectedEnvironmentIds,
@@ -31,10 +24,7 @@ import {
 import { m } from "../i18n/messages";
 import { toastManager } from "../components/ui/toast";
 
-export function useOpenPina(
-  source: Pick<EnvironmentThreadShell, "id" | "title" | "environmentId"> | null | undefined,
-  preferred?: EnvironmentId | null,
-) {
+export function useOpenPina(preferred?: EnvironmentId | null) {
   const primary = usePrimaryEnvironmentId();
   const connected = useConnectedEnvironmentIds();
   const configs = useServerConfigs();
@@ -43,7 +33,7 @@ export function useOpenPina(
     AuthOrchestrationOperateScope,
   );
   const environmentId = resolvePinaEnvironment({
-    requested: source?.environmentId ?? preferred,
+    requested: preferred,
     preferred: primary,
     connected,
     configs,
@@ -65,26 +55,6 @@ export function useOpenPina(
       return;
     }
     const target = scopeThreadRef(environmentId, result.value.threadId);
-    if (source && source.environmentId === environmentId && !isPinaThread(source.id)) {
-      const store = useComposerDraftStore.getState();
-      const existingDraft = store.getComposerDraft(target);
-      const previous = existingDraft?.threadContexts[0];
-      const record = threadContextRecord(
-        scopeThreadRef(source.environmentId, source.id),
-        source.title,
-      );
-      if (
-        existingDraft &&
-        previous &&
-        existingDraft.threadContexts.length === 1 &&
-        existingDraft.prompt.trim() === formatComposerContextReference(previous) &&
-        !composerDraftHasUserContent({ ...existingDraft, prompt: "", threadContexts: [] })
-      ) {
-        store.setThreadContexts(target, [record]);
-      } else {
-        store.addThreadContexts(target, [record], { insertAtCaret: false });
-      }
-    }
     await navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(target) });
   };
   return { environmentId, open };

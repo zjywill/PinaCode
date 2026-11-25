@@ -1,7 +1,7 @@
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId } from "@t3tools/contracts";
 import { expect, it } from "vite-plus/test";
 
-import { pinaThreadSource, resolvePinaEnvironment } from "./pina.ts";
+import { resolvePinaEnvironment } from "./pina.ts";
 
 const local = EnvironmentId.make("local");
 const remote = EnvironmentId.make("remote");
@@ -56,18 +56,4 @@ it("falls back only when no machine was explicitly selected", () => {
   }
   expect(resolvePinaEnvironment({ ...input, preferred: offline })).toBe(local);
   expect(resolvePinaEnvironment({ ...input, permitted: new Set() })).toBeNull();
-});
-
-it("keeps the exact open thread reference when the sidebar has not loaded its title", () => {
-  const threadId = ThreadId.make("side-chat");
-  const ref = { environmentId: remote, threadId };
-  expect(pinaThreadSource(ref, null)).toEqual({
-    environmentId: remote,
-    id: threadId,
-    title: threadId,
-  });
-  expect(pinaThreadSource(ref, { title: "Implementation notes" })?.title).toBe(
-    "Implementation notes",
-  );
-  expect(pinaThreadSource(null, null)).toBeNull();
 });

@@ -13,29 +13,20 @@ import {
   PINA_ASSISTANT_NAME,
   isPinaThread,
   type EnvironmentId,
+  type ScopedThreadRef,
 } from "@t3tools/contracts";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import {
-  formatComposerContextReference,
-  threadContextRecord,
-} from "@t3tools/shared/composerContextReferences";
 import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import * as Dialog from "../../components/ui/Dialog";
 import { m } from "../../i18n/messages";
-import { scopedThreadKey } from "../../lib/scopedEntities";
 import { useEnvironmentServerConfig, useServerConfigs } from "../../state/entities";
 import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
-import {
-  getComposerDraftSnapshot,
-  insertComposerDraftContext,
-  waitForComposerDraftsLoaded,
-} from "../../state/use-composer-drafts";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import {
   resolveThreadListV2RowStatus,
@@ -66,14 +57,7 @@ export function usePinaEnvironment(preferred?: EnvironmentId | null) {
   });
 }
 
-export function useOpenPina(props: {
-  readonly environmentId: EnvironmentId | null;
-  readonly source:
-    | Pick<EnvironmentThreadShell, "id" | "title" | "environmentId">
-    | null
-    | undefined;
-}) {
-  const environmentId = props.environmentId;
+export function useOpenPina(environmentId: EnvironmentId | null) {
   const config = useEnvironmentServerConfig(environmentId);
   const canOperate = useAtomValue(threadEnvironment.openPina.permissionAtom(environmentId));
   const ensure = useAtomCommand(threadEnvironment.openPina, { reportFailure: false });
@@ -89,34 +73,6 @@ export function useOpenPina(props: {
       return;
     }
     const { threadId } = result.value;
-    const source = props.source;
-    if (source?.environmentId === environmentId && !isPinaThread(source.id)) {
-      await waitForComposerDraftsLoaded();
-      const key = scopedThreadKey(environmentId, threadId);
-      const draft = getComposerDraftSnapshot(key);
-      const record = threadContextRecord({ environmentId, threadId: source.id }, source.title);
-      const records = draft.context?.records ?? [];
-      const previous = records[0];
-      if (!records.some((entry) => entry.contextId === record.contextId)) {
-        const replacePrevious =
-          previous?.kind === "thread" &&
-          records.length === 1 &&
-          draft.attachments.length === 0 &&
-          draft.text.trim() === formatComposerContextReference(previous);
-        insertComposerDraftContext(
-          key,
-          {
-            text: formatComposerContextReference(record),
-            context: { version: 1, records: [record] },
-          },
-          {
-            text: draft.text,
-            start: replacePrevious ? 0 : draft.text.length,
-            end: draft.text.length,
-          },
-        );
-      }
-    }
     selectDetail({ name: "Thread", params: { environmentId, threadId } });
   };
   const open = () => {
@@ -132,18 +88,19 @@ export function useOpenPina(props: {
 
 export function usePinaRow(props: {
   readonly environmentId: EnvironmentId | null;
-  readonly source: Pick<EnvironmentThreadShell, "id" | "environmentId" | "title"> | null;
+  readonly openThreadRef: ScopedThreadRef | null;
   readonly thread?: EnvironmentThreadShell | undefined;
   readonly environmentLabel?: string | null | undefined;
   readonly now: string;
   readonly horizontalMargin?: boolean | undefined;
 }) {
-  const pina = useOpenPina({ environmentId: props.environmentId, source: props.source });
+  const pina = useOpenPina(props.environmentId);
   const gt = useGT();
   const resolve = useMessages();
   if (!pina) return null;
   const selected =
-    props.source?.environmentId === pina.environmentId && isPinaThread(props.source.id);
+    props.openThreadRef?.environmentId === pina.environmentId &&
+    isPinaThread(props.openThreadRef.threadId);
   const status = props.thread ? resolveThreadListV2RowStatus(props.thread) : "ready";
   const woke =
     props.thread && !selected && resolveThreadListV2WokeAt(props.thread, { now: props.now });
