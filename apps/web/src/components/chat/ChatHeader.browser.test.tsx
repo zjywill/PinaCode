@@ -1,4 +1,5 @@
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, pinaThreadId, ProjectId, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentProject } from "@t3tools/client-runtime/state/models";
 import { expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
@@ -24,15 +25,19 @@ vi.mock(import("~/hooks/useThreadActionMenu"), () => ({
 import { render, stubGlobal } from "../../../test/render";
 import { ChatHeader } from "./ChatHeader";
 
-function header(title: string) {
+function header(
+  title: string,
+  threadId = ThreadId.make("thread"),
+  project: EnvironmentProject | null = null,
+) {
   return (
     <>
       <ChatHeader
         activeThreadEnvironmentId={EnvironmentId.make("environment")}
-        activeThreadId={ThreadId.make("thread")}
+        activeThreadId={threadId}
         activeThreadTitle={title}
         isServerThread
-        activeProject={null}
+        activeProject={project}
         parentThreadLink={null}
         onOpenThread={() => {}}
         rightPanelOpen={false}
@@ -102,4 +107,23 @@ it("keeps the Escape that cancels a rename from also reaching window shortcuts",
   await expect.element(input).not.toBeInTheDocument();
   expect(persisted.title).toBe("New thread");
   expect(windowEscapes).toEqual([true]);
+});
+
+it("omits the project breadcrumb only for the dedicated Pina thread", async () => {
+  const project: EnvironmentProject = {
+    id: ProjectId.make("scratch"),
+    environmentId: EnvironmentId.make("environment"),
+    isScratch: true,
+    title: "No project",
+    workspaceRoot: "/scratch",
+    defaultModelSelection: null,
+    scripts: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  await using screen = await render(header("Pina", pinaThreadId(project.id, 0), project));
+  const breadcrumb = screen.getByRole("navigation", { name: "Thread breadcrumb" });
+  await expect.element(breadcrumb).toHaveTextContent(/^Pina$/);
+  await screen.rerender(header("Pina", ThreadId.make("ordinary"), project));
+  await expect.element(breadcrumb).toHaveTextContent(/No project.*\/.*Pina/);
 });
