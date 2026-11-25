@@ -2819,3 +2819,183 @@ it.effect("a local task runs in this thread's project", () =>
     }),
   ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );
+
+const otherThreadId = ThreadId.make("thread:laptop-other-project");
+
+/** A top-level thread in another project here, idle, as Pina finds one to send to. */
+const seedOtherProjectThread = (laptopEnv: Effect.Success<ReturnType<typeof makeLaptop>>) =>
+  laptopEnv.orchestrator.dispatch({
+    type: "thread.create",
+    createdBy: "user",
+    creationSource: "web",
+    commandId: CommandId.make("command:create:laptop-other-project"),
+    threadId: otherThreadId,
+    projectId: ProjectId.make("project:other"),
+    title: "Memory investigation",
+    modelSelection,
+    runtimeMode: "full-access",
+    interactionMode: "default",
+    branch: null,
+    worktreePath: null,
+  });
+
+const sendToOther = (
+  laptopEnv: Effect.Success<ReturnType<typeof makeLaptop>>,
+  args: Record<string, unknown>,
+) =>
+  laptopEnv
+    .call("pinacode_thread_send", {
+      threadId: otherThreadId,
+      message: "File the plan as an issue and send me its link.",
+      clientRequestId: "file-issue",
+      ...args,
+    })
+    .pipe(
+      Effect.map((result) => {
+        expect(result.isError, JSON.stringify(result.content)).toBe(false);
+        return result.structuredContent as {
+          runId: RunId;
+          messageId: MessageId;
+          delivery: string;
+          taskId?: NodeId;
+        };
+      }),
+    );
+
+/** Ends `runId` on the other thread with `reply`, as its provider would. */
+const finishOther = (
+  laptopEnv: Effect.Success<ReturnType<typeof makeLaptop>>,
+  runId: RunId,
+  reply: string,
+) =>
+  Effect.gen(function* () {
+    const now = yield* DateTime.now;
+    const run = (yield* laptopEnv.orchestrator.getThreadProjection(otherThreadId)).runs.find(
+      (candidate) => candidate.id === runId,
+    );
+    if (run === undefined) return yield* Effect.die("The send started no run.");
+    yield* laptopEnv.sink.write({
+      commandId: CommandId.make(`command:finish:${runId}`),
+      events: [
+        {
+          id: EventId.make(`event:reply:${runId}`),
+          type: "message.updated",
+          threadId: otherThreadId,
+          runId,
+          occurredAt: now,
+          payload: {
+            id: MessageId.make(`message:reply:${runId}`),
+            threadId: otherThreadId,
+            runId,
+            nodeId: null,
+            role: "assistant",
+            text: reply,
+            attachments: [],
+            streaming: false,
+            createdBy: "agent",
+            creationSource: "server",
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+        {
+          id: EventId.make(`event:finished:${runId}`),
+          type: "run.updated",
+          threadId: otherThreadId,
+          runId,
+          occurredAt: now,
+          payload: { ...run, status: "completed", startedAt: now, completedAt: now },
+        },
+      ],
+    });
+  });
+
+it.effect("a send with reportBack to another project here wakes the parent with its result", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const offers = yield* SubscriptionRef.make<
+        ReadonlyArray<ProviderContinuationRequests.ProviderContinuationRequest>
+      >([]);
+      const database = yield* SqlitePersistence.layerMemory.pipe(Layer.build);
+      const a = yield* makeLaptop(database, offers);
+      yield* seedParent(a);
+      yield* seedOtherProjectThread(a);
+
+      const sent = yield* sendToOther(a, { reportBack: true });
+      expect(sent.delivery).toBe("started");
+      expect(sent.taskId).toBeDefined();
+      const taskId = sent.taskId!;
+      // A retry with the same key records nothing new.
+      expect((yield* sendToOther(a, { reportBack: true })).taskId).toBe(taskId);
+      const parent = yield* a.orchestrator.getThreadProjection(parentThreadId);
+      expect(parent.subagents).toHaveLength(1);
+      expect(parent.subagents[0]).toMatchObject({
+        id: taskId,
+        childThreadId: null,
+        remoteChild: {
+          environmentId: laptop.environmentId,
+          threadId: otherThreadId,
+          runId: sent.runId,
+        },
+        status: "running",
+      });
+
+      yield* finishOther(a, sent.runId, "Filed https://github.com/acme/app/issues/12");
+      expect(yield* taskResult(a, taskId)).toMatchObject({
+        status: "completed",
+        result: "Filed https://github.com/acme/app/issues/12",
+      });
+      const parentRun = (yield* a.orchestrator.getThreadProjection(parentThreadId)).runs.find(
+        (run) => run.id === parentRunId,
+      );
+      expect(parentRun?.delegatedCompletion?.delivery?.taskIds).toEqual([taskId]);
+      const offered = yield* SubscriptionRef.changes(offers).pipe(
+        Stream.filter((seen) => seen.some((offer) => offer.threadId === parentThreadId)),
+        Stream.runHead,
+      );
+      expect(Option.isSome(offered)).toBe(true);
+    }),
+  ).pipe(Effect.provide(NodeHttpServer.layerTest)),
+);
+
+it.effect("a send without reportBack to another project here records no task", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const offers = yield* SubscriptionRef.make<
+        ReadonlyArray<ProviderContinuationRequests.ProviderContinuationRequest>
+      >([]);
+      const database = yield* SqlitePersistence.layerMemory.pipe(Layer.build);
+      const a = yield* makeLaptop(database, offers);
+      yield* seedParent(a);
+      yield* seedOtherProjectThread(a);
+
+      const sent = yield* sendToOther(a, {});
+      expect(sent.taskId).toBeUndefined();
+      expect((yield* a.orchestrator.getThreadProjection(parentThreadId)).subagents).toEqual([]);
+    }),
+  ).pipe(Effect.provide(NodeHttpServer.layerTest)),
+);
+
+it.effect("cancelling a reported task here stops its thread in the other project", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const offers = yield* SubscriptionRef.make<
+        ReadonlyArray<ProviderContinuationRequests.ProviderContinuationRequest>
+      >([]);
+      const database = yield* SqlitePersistence.layerMemory.pipe(Layer.build);
+      const a = yield* makeLaptop(database, offers);
+      yield* seedParent(a);
+      yield* seedOtherProjectThread(a);
+
+      const sent = yield* sendToOther(a, { reportBack: true });
+      const cancelled = yield* a.call("pinacode_task_cancel", { taskId: sent.taskId });
+      expect(cancelled.isError, JSON.stringify(cancelled.content)).toBe(false);
+      expect(yield* taskResult(a, sent.taskId!)).toMatchObject({ status: "cancelled" });
+      const run = (yield* a.orchestrator.getThreadProjection(otherThreadId)).runs.find(
+        (candidate) => candidate.id === sent.runId,
+      );
+      expect(run?.status).not.toBe("running");
+      expect(["cancelled", "interrupted", "completed"]).toContain(run?.status);
+    }),
+  ).pipe(Effect.provide(NodeHttpServer.layerTest)),
+);

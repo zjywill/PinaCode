@@ -2957,7 +2957,7 @@ const make = Effect.gen(function* () {
       ) {
         return yield* failure(
           "invalid_request",
-          "A local task runs in this thread's project. Omit target.projectId, or pass target.environmentId to run it in that environment's project.",
+          "A local task runs in this thread's project. Omit target.projectId, pass target.environmentId to run it in that environment's project, or use pinacode_thread_launch with that projectId and reportBack: true to be woken with its result.",
         );
       }
       const parentRun =
@@ -3776,7 +3776,8 @@ const make = Effect.gen(function* () {
       yield* assertLiveCallerForOtherThread(scope, parent, target);
       yield* assertTargetWithinLimits(limits, target.thread);
 
-      const mode = input.mode ?? "auto";
+      // A reported turn is its own run, so its result answers only this message.
+      const mode = input.reportBack === true ? "queue" : (input.mode ?? "auto");
       const key = yield* requestKey(input.clientRequestId);
       const messageId = stableOperationMessageId({
         scope,
@@ -3816,7 +3817,7 @@ const make = Effect.gen(function* () {
                 ),
           ),
         );
-      return {
+      const sent = {
         threadId: input.threadId,
         link: threadLinkFor(scope, input.threadId, target.thread.title),
         messageId,
@@ -3825,6 +3826,12 @@ const make = Effect.gen(function* () {
         status: result.run.status,
         delivery: result.delivery,
       } satisfies OrchestratorMcpThreadSendResult;
+      // A thread in another project has no parent here; the caller's task follows it.
+      return input.reportBack !== true ||
+        parent === undefined ||
+        target.thread.id === parent.thread.id
+        ? sent
+        : yield* remoteDelegation.followUp(scope, scope.environmentId, input, sent);
     }),
     waitForThread: Effect.fn("OrchestratorMcpService.waitForThread")(function* (scope, input) {
       const { parent, target } = yield* loadScopedThread(scope, input.threadId, []);

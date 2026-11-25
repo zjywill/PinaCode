@@ -17,6 +17,8 @@ import {
   ProjectUpdatePayload,
   ProjectId,
   OrchestratorMcpClientRequestId,
+  OrchestratorMcpReportBackDescription,
+  NodeId,
   OrchestratorMcpEnvironmentTarget,
   OrchestratorMcpFailure,
   SourceControlCloneRepositoryInput,
@@ -163,6 +165,9 @@ const ThreadLaunchTool = Tool.make("pinacode_thread_launch", {
         description: "As in `pinacode_thread_send`. Needs `message`.",
       }),
     ),
+    reportBack: Schema.optional(
+      Schema.Boolean.annotate({ description: OrchestratorMcpReportBackDescription }),
+    ),
     clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),
     /** Set by a linked environment launching its agent's delegated task here; ignored otherwise. */
     delegatedFrom: Schema.optional(OrchestrationV2DelegatedFrom),
@@ -176,6 +181,8 @@ const ThreadLaunchTool = Tool.make("pinacode_thread_launch", {
     modelSelection: ModelSelection,
     runId: Schema.NullOr(RunId),
     status: Schema.NullOr(OrchestrationV2RunStatus),
+    /** With `reportBack`: the task whose result wakes the caller. */
+    taskId: Schema.optional(NodeId),
   }),
   dependencies: [
     ...shared.dependencies,

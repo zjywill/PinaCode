@@ -568,6 +568,10 @@ export const OrchestratorMcpThreadReadResult = Schema.Struct({
 });
 export type OrchestratorMcpThreadReadResult = typeof OrchestratorMcpThreadReadResult.Type;
 
+/** `reportBack` on `pinacode_thread_send` and `pinacode_thread_launch`. */
+export const OrchestratorMcpReportBackDescription =
+  "Record this turn as your task: when it ends, you are woken with its result even after your turn ends, as for `pinacode_delegate_task`. Use it when you will report the result. Never steers.";
+
 export const OrchestratorMcpThreadSendInput = Schema.Struct({
   environmentId: OrchestratorMcpEnvironmentTarget,
   threadId: ThreadId,
@@ -583,6 +587,11 @@ export const OrchestratorMcpThreadSendInput = Schema.Struct({
     Schema.Record(Schema.String, Schema.Json).annotate({
       description:
         "JSON Schema for a result the turn must return as data, read back as `output` from `pinacode_thread_wait`. Never steers.",
+    }),
+  ),
+  reportBack: Schema.optional(
+    Schema.Boolean.annotate({
+      description: OrchestratorMcpReportBackDescription,
     }),
   ),
   clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),
