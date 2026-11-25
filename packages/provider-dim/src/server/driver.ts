@@ -185,7 +185,11 @@ export const DimDriver: ProviderDriver<DimSettings, DimDriverEnv> = {
     const resolveMaintenance = yield* makeCachedProviderMaintenanceResolution(
       resolveProviderMaintenanceCapabilitiesEffect(
         dimMaintenance(effectiveConfig, processEnvironment),
-        { binaryPath: effectiveConfig.binaryPath, env: processEnvironment },
+        {
+          binaryPath: effectiveConfig.binaryPath,
+          env: processEnvironment,
+          npmCacheDir: path.join(host.paths.providerStatusCacheDir, "npm"),
+        },
       ).pipe(Effect.provideContext(services)),
     );
     const snapshot = yield* makeManagedServerProvider<ProviderSnapshotSettings<DimSettings>>({

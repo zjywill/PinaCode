@@ -385,6 +385,7 @@
   "834ca879c14c167b": "Trabajando",
   "582d6df7dfab86fb": "En pausa",
   "ea6583ce92507ee3": "Durmiendo",
+  "7150557773b3818b": "En cola",
   "7ea8cb8af281ce93": "Esperando",
   "1347868f2523140e": "Terminada",
   "57d76c4614054271": "Detenida",
@@ -396,6 +397,7 @@
   "d3890f4eb1508781": "Ejecuta sus propios pasos",
   "3e7ced10c9482af0": "{step} está trabajando",
   "237e1bcb1cf1bdec": "Durmiendo en {step}",
+  "efbeb3993ee2c3f5": "En cola para {pool}",
   "3f7b17ac5a20c8d2": "Ejecuta {run}",
   "0306f5f324b8aaa5": "{count} ejecuciones en curso",
   "e8fd779b84a202a2": "Esperando",
@@ -1534,6 +1536,7 @@
   "6848f5bbb2bd9eec": "Documento PDF",
   "7873a79df0cf6d0e": "Página del navegador",
   "0b55696e27387e4e": "Pulsa Shift+Escape para salir de la página del navegador.",
+  "90dfebe26eb86b2d": "Opciones de selección de la página",
   "737d3c6bec93f9e6": "Elige archivos para la página",
   "e6a3fa7cfc14f86a": "Cuadro de diálogo del navegador",
   "61a552a67e9e3eac": "Respuesta al cuadro de diálogo",
@@ -1796,7 +1799,7 @@
   "67f5b13c3c7bcd40": "Compartir con un invitado",
   "82da5b8b340217ac": "Reiniciar sesión del agente",
   "963d099509eabcd6": "La sesión del agente se reiniciará",
-  "1d384d4fe7888a09": "Tu próximo mensaje inicia una sesión nueva.",
+  "71ed7c0da0b93c77": "Tu próximo mensaje reinicia el agente. Esta conversación se conserva.",
   "e4b61c891fed297e": "Ir al archivo",
   "d2ccdb8cd3297212": "Añadir proyecto",
   "594bcbef04093f72": "Abrir carpeta de WSL",
@@ -2021,6 +2024,8 @@
   "b2c35cd235de63e0": "Cargando cambios...",
   "bcbd16c97c6c1215": "No hay cambios netos en esta selección.",
   "7e9cb3ca9f5470ae": "No hay ningún parche disponible para esta selección.",
+  "ccd5fc4db08374d7": "{count, plural, one {{count} archivo de prueba oculto} other {{count} archivos de prueba ocultos}}",
+  "a92edf8d81354772": "Mostrar archivos de prueba",
   "e797245c587e7e29": "Cambiar el tamaño de los archivos de Cambios",
   "99c76aa12c632a36": "Archivos de {section}",
   "3e9ddb26c2c59bcc": "Cambios",
@@ -3140,7 +3145,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "en el ordenador que abrió esta página"]
+      "c": [
+        " ",
+        "en el ordenador que abrió esta página"
+      ]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3152,7 +3160,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "· quien lo ejecute obtiene este acceso"]
+      "c": [
+        " ",
+        "· quien lo ejecute obtiene este acceso"
+      ]
     }
   ],
   "c54cc9c75db9dc58": "Aprueba solo un inicio de sesión que acabes de iniciar.",
@@ -4487,6 +4498,7 @@
       "c": "”"
     }
   ],
+  "91aadfc843c600de": "Verificar cuenta de Google",
   "a2aaca7ff8310186": "Abrir chat",
   "a3048aaa541b7744": "Actividad",
   "4a3cbccb2beedeb0": "imagen",
@@ -6378,7 +6390,6 @@
   "2250f241daadd71b": "Añadir al agente",
   "be9b06fae29cc07a": "Todos los commits",
   "5ef391d5403d7bdd": "{count, plural, one {Mostrar más (queda {count})} other {Mostrar más (quedan {count})}}",
-  "ccd5fc4db08374d7": "{count, plural, one {{count} archivo de prueba oculto} other {{count} archivos de prueba ocultos}}",
   "c12871955b159db4": "visto en {app}",
   "98b353c208fd7977": "vistos",
   "d65b870952bbe4f0": "Estas marcas se guardan aquí, no en el host",
@@ -6387,7 +6398,6 @@
   "a35be3a33a60ada9": "Parte de este diff no se mostró",
   "74c7bae34db3147e": "Los comentarios de línea se escriben sobre el cambio completo",
   "4050f873dc790f8f": "Opciones del diff",
-  "a92edf8d81354772": "Mostrar archivos de prueba",
   "48be78e4550011d3": "Cargando el diff de la {term, select, mr {merge request} cr {solicitud de cambios} other {pull request}}...",
   "e76a1455903eef18": "Esta {term, select, mr {merge request} cr {solicitud de cambios} other {pull request}} no tiene cambios en archivos.",
   "50abbcbc41691cb5": "Este commit no tiene cambios en archivos.",
@@ -8538,7 +8548,7 @@
   "a9cdd8c7073be920": "Paleta de comandos: alternar",
   "4e0943e8c7a465d1": "Selector de archivos: alternar",
   "df5fdcdf26a6b52a": "Búsqueda en el proyecto: alternar",
-  "a8ff6d33b060736f": "Uso: abrir",
+  "0ca6fd2b8fcab2c3": "Uso: Mostrar u ocultar",
   "a513d51b71b95674": "Tema: seleccionar",
   "1ffd8427452372e1": "Apariencia: alternar",
   "3a3bb4a7551a87cc": "Editor de temas: alternar",
@@ -11935,6 +11945,7 @@
   "9c015d3d034316cb": "Usa las flechas para ajustar el valor enfocado. Mantén Shift para pasos más grandes. Usa Inicio y Fin para el mínimo y el máximo. Pulsa Tab para pasar entre saturación y brillo.",
   "8639d5532561f87f": "Cerrar",
   "e1186ad82ee08b33": "Cerrar",
+  "a4579e548b768663": "Mostrar barra lateral",
   "a1b11a1cf39c9dc9": "Cambiar el tamaño de la barra lateral",
   "c557090df5722838": "Alternar barra lateral",
   "bbde430e56272901": "Arrastra para cambiar el tamaño de la barra lateral",
@@ -12044,10 +12055,9 @@
   "d2d071e45a2d6b89": "Selecciona un entorno para ver los límites.",
   "c9180daea905a0a6": "Selecciona un entorno para ver el uso.",
   "f0297ec79e896a13": "{environment}: {error}",
-  "6dcbf651d51d4023": "{count, plural, one {{formatted} sesión} other {{formatted} sesiones}}",
+  "61571f4542da9903": "{count, plural, one {{formatted} sesión} other {{formatted} sesiones}}",
   "b01bf98dd90ee819": "Estimación de API",
   "bab34b28e9ee8e88": "Detalles del uso sin precio",
-  "61571f4542da9903": "{count, plural, one {{formatted} sesión} other {{formatted} sesiones}}",
   "2a57181a9d128463": "{share} del coste · {tokens} tokens",
   "d8a6a99fbdda0d3e": "{share} de los tokens · {cost}",
   "ae86762909d453d2": "Tokens procesados por hora",
@@ -12223,6 +12233,8 @@
   "b8dcbc93a2ca1861": "Esta ejecución ya no lo incluye.",
   "115c69de3202f664": "Abrir",
   "644eafa9048b62df": "{count, plural, =1 {1.er intento} =2 {2.º intento} =3 {3.er intento} other {{count}.º intento}}",
+  "0398ca6c1d24b92d": "en cola, el siguiente",
+  "0af6d5ffd5166214": "{count, plural, one {en cola, {count} delante} other {en cola, {count} delante}}",
   "e39f89c909df4db0": "No se pudo reanudar la ejecución",
   "865f034346b82f47": "¿Cancelar {title}? Sus agentes se detienen y la ejecución no se podrá reanudar.",
   "6bc75632fd9c9136": "No se pudo cancelar la ejecución",
@@ -12249,11 +12261,17 @@
   "dd7a1e58c2553933": "despierta en {duration}",
   "95cc952724dd7310": "a punto de despertar",
   "3cc34921c0128593": "en curso",
-  "e777db2880f53a46": "nadie respondió",
   "dc90739d391a5e67": "Dijiste {choice}",
+  "4e96712d839ccbff": "{who} dijo {choice}",
+  "e777db2880f53a46": "nadie respondió",
+  "201490988858b511": "retirada por {by}",
   "389f2563b5b763fd": "Pasos rápidos",
+  "99451a5d2d40440f": "Retirada por {by}.",
+  "3ee30a50b70fffab": "Retirada por {by}: {reason}",
+  "92e129bf413a1220": "retirada",
   "a41c8d758121ad81": "en espera",
   "9db248b770096984": "esperó",
+  "49be26a27dcb30e5": "en cola",
   "c76124517af28686": "en ejecución desde hace {duration}",
   "89102905bf09b0e8": "Ver en directo",
   "bdf338cdff4118f0": "Transcripción",
@@ -12287,6 +12305,49 @@
   "8bffb377e2a6a7de": "su versión ya no está registrada",
   "f92d9132f7b85d1a": "Cargando pasos…",
   "6ebc59f64c761a49": "Nada todavía.",
+  "19097cfb8f5a79cf": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " dijo",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    },
+    "."
+  ],
+  "e7bbf693910057bf": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " dijo",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    },
+    ": ",
+    {
+      "i": 4,
+      "k": "_gt_value_4",
+      "v": "v"
+    }
+  ],
   "a759dccd157d7dae": [
     "Dijiste",
     " ",
@@ -12320,6 +12381,15 @@
       "v": "v"
     }
   ],
+  "3759768c5d342c22": [
+    "respondida",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
   "c98009be9a273b31": "Abrir ejecución",
   "c8eb9be36d4d51ad": [
     "Hilo en ",
@@ -12345,6 +12415,14 @@
   ],
   "02dfe6c63fd0b8a1": "Añadir un motivo",
   "19abd94828a3bdbc": "Preguntar antes al agente",
+  "e114d37b32ab0dc7": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " necesita un motivo."
+  ],
   "a18721fa8f328361": "Te necesitan",
   "bbf24e7920c1e86b": "En ejecución",
   "8d6e18d2ad832db6": "Todas",

@@ -385,6 +385,7 @@
   "834ca879c14c167b": "Arbetar",
   "582d6df7dfab86fb": "Pausad",
   "ea6583ce92507ee3": "Sover",
+  "7150557773b3818b": "I kö",
   "7ea8cb8af281ce93": "Väntar",
   "1347868f2523140e": "Klar",
   "57d76c4614054271": "Stoppad",
@@ -396,6 +397,7 @@
   "d3890f4eb1508781": "Kör sina egna steg",
   "3e7ced10c9482af0": "{step} arbetar",
   "237e1bcb1cf1bdec": "Sover vid {step}",
+  "efbeb3993ee2c3f5": "Köar för {pool}",
   "3f7b17ac5a20c8d2": "Kör {run}",
   "0306f5f324b8aaa5": "{count} körningar pågår",
   "e8fd779b84a202a2": "Väntar",
@@ -1882,6 +1884,7 @@
   "69c659d8b6e271cc": "Sidan ber om en fil.",
   "a6efeb99b479990a": "Välj filer",
   "59c87648d44b958c": "Välj fil",
+  "6f321f153b8711bb": "Välj ett alternativ",
   "61a552a67e9e3eac": "Dialogsvar",
   "1d9bd868fafea18a": "Avvisa",
   "1d0a7acef4a95536": "Godkänn",
@@ -4831,6 +4834,7 @@
   "5a2d803b3ea43f18": "Användningsgränsen har nåtts.",
   "d5365c5e28a18442": "{summary}: {message}",
   "bff5692f10fc10b0": "Tryck länge för att kopiera.",
+  "1a1beecff68a6e61": "Verifiera Google-konto",
   "a1984c617f973156": "{preview}, verktygsanropet misslyckades",
   "38574c0d1e49b278": "{preview}, inloggad",
   "fd0d04d5a6627f70": "Öppnar agentens tråd. Tryck länge för att kopiera.",
@@ -5071,7 +5075,7 @@
   "0b363b02a7e17bcb": "Rå tokenkostnad",
   "ea4beda46b22b8b0": "Bearbetade token",
   "212d974007cacf3f": "* om det debiterades till fullt API-pris",
-  "82bc7f1cc5a039fc": "{count, plural, one {Över {sessions} session} other {Över {sessions} sessioner}}",
+  "45340a7dc1f89d51": "{count, plural, one {Över {sessions} session} other {Över {sessions} sessioner}}",
   "2a57181a9d128463": "{share} av kostnaden · {tokens} token",
   "d8a6a99fbdda0d3e": "{share} av token · {cost}",
   "19a3f4f2ba09e787": "Totalt",
@@ -5134,6 +5138,8 @@
   "cd5d90cbbfae32f6": "Spelar in {time}",
   "6236e2f587bc4eb4": "Transkriberar",
   "4e430d5ea01c249b": "Kunde inte skicka svaret",
+  "a3c43735e1a81498": "Skäl för {title}",
+  "bfad234f016cfa3f": "Varför, i en mening. Det följer med vilket svar du än väljer.",
   "e721a8b98f44d5f7": "Fråga agenten först",
   "e39f89c909df4db0": "Kunde inte återuppta körningen",
   "28c9dd162825c117": "Avbryta den här körningen?",
@@ -5160,6 +5166,14 @@
       "v": "v"
     }
   ],
+  "e114d37b32ab0dc7": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " kräver en anledning."
+  ],
   "9de4e24c9273b496": "Den här anslutningen kan läsa körningar men inte svara på dem.",
   "6dac41769b114edf": [
     {
@@ -5180,16 +5194,56 @@
   "59a3213338779c6e": "Klar",
   "5a3b1fe78182d8dc": "Svarade {choice}",
   "b17bd06e3b1ec0d2": "Svarade {choice}: {reason}",
+  "99451a5d2d40440f": "Återkallad av {by}.",
+  "3ee30a50b70fffab": "Återkallad av {by}: {reason}",
   "89102905bf09b0e8": "Följ live",
   "eea0013efc9e4339": "Transkript",
   "ba8337dca3232880": "Öppna körning",
+  "235902a19e95833b": [
+    "av dig,",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "3759768c5d342c22": [
+    "besvarad",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
+  "8afa4fbe16f95bcf": [
+    "av ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    ",",
+    " ",
+    {
+      "i": 2,
+      "k": "_gt_value_2",
+      "v": "v"
+    }
+  ],
   "cab70ed0237438ef": "Läser in steget…",
   "30a5be40eb956663": "arbetar",
   "edc8f6e9720f4eda": "sover",
   "0684698b49273da5": "väntar",
+  "0398ca6c1d24b92d": "i kö, näst på tur",
+  "0af6d5ffd5166214": "{count, plural, one {i kö, {count} före} other {i kö, {count} före}}",
   "063173aa16052cb9": "pågår",
   "3ba4cf953dd20f22": "misslyckades",
+  "0f93532dd76391fc": "Du svarade {choice}",
+  "7e1fd2eb570a372b": "{who} svarade {choice}",
   "e777db2880f53a46": "ingen svarade",
+  "201490988858b511": "återkallad av {by}",
   "34f59bbbead0b97f": "{names} och {count} till",
   "ac1556f6ce89a5ea": "{count} parallellt",
   "e197c4963bacc746": "{count} körs",

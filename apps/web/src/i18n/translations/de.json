@@ -385,6 +385,7 @@
   "834ca879c14c167b": "Arbeitet",
   "582d6df7dfab86fb": "Pausiert",
   "ea6583ce92507ee3": "Schläft",
+  "7150557773b3818b": "In der Warteschlange",
   "7ea8cb8af281ce93": "Wartet",
   "1347868f2523140e": "Fertig",
   "57d76c4614054271": "Gestoppt",
@@ -396,6 +397,7 @@
   "d3890f4eb1508781": "Führt eigene Schritte aus",
   "3e7ced10c9482af0": "{step} arbeitet",
   "237e1bcb1cf1bdec": "Schläft bei {step}",
+  "efbeb3993ee2c3f5": "Wartet auf {pool}",
   "3f7b17ac5a20c8d2": "Führt {run} aus",
   "0306f5f324b8aaa5": "{count} Ausführungen laufen",
   "e8fd779b84a202a2": "Wartet",
@@ -1534,6 +1536,7 @@
   "6848f5bbb2bd9eec": "PDF-Dokument",
   "7873a79df0cf6d0e": "Browserseite",
   "0b55696e27387e4e": "Drücke Shift+Escape, um die Browserseite zu verlassen.",
+  "90dfebe26eb86b2d": "Auswahloptionen der Seite",
   "737d3c6bec93f9e6": "Dateien für die Seite auswählen",
   "e6a3fa7cfc14f86a": "Browserdialog",
   "61a552a67e9e3eac": "Antwort auf Dialog",
@@ -1795,7 +1798,7 @@
   "67f5b13c3c7bcd40": "Mit Gast teilen",
   "82da5b8b340217ac": "Agentensitzung neu starten",
   "963d099509eabcd6": "Die Agentensitzung wird neu gestartet",
-  "1d384d4fe7888a09": "Deine nächste Nachricht startet eine neue Sitzung.",
+  "71ed7c0da0b93c77": "Deine nächste Nachricht startet den Agenten neu. Diese Unterhaltung bleibt erhalten.",
   "e4b61c891fed297e": "Gehe zu Datei",
   "d2ccdb8cd3297212": "Projekt hinzufügen",
   "594bcbef04093f72": "WSL-Ordner öffnen",
@@ -2020,6 +2023,8 @@
   "b2c35cd235de63e0": "Änderungen werden geladen...",
   "bcbd16c97c6c1215": "Keine Nettoänderungen in dieser Auswahl.",
   "7e9cb3ca9f5470ae": "Für diese Auswahl ist kein Patch verfügbar.",
+  "ccd5fc4db08374d7": "{count, plural, one {{count} Testdatei ausgeblendet} other {{count} Testdateien ausgeblendet}}",
+  "a92edf8d81354772": "Testdateien anzeigen",
   "e797245c587e7e29": "Größe der Änderungsdateien anpassen",
   "99c76aa12c632a36": "Dateien: {section}",
   "3e9ddb26c2c59bcc": "Änderungen",
@@ -3141,7 +3146,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "auf dem Computer, der diese Seite geöffnet hat"]
+      "c": [
+        " ",
+        "auf dem Computer, der diese Seite geöffnet hat"
+      ]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3153,7 +3161,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "· wer es ausführt, erhält diesen Zugriff"]
+      "c": [
+        " ",
+        "· wer es ausführt, erhält diesen Zugriff"
+      ]
     }
   ],
   "c54cc9c75db9dc58": "Genehmige nur eine Anmeldung, die du gerade selbst gestartet hast.",
@@ -4490,6 +4501,7 @@
       "c": "“ wird gelesen"
     }
   ],
+  "91aadfc843c600de": "Google-Konto bestätigen",
   "a2aaca7ff8310186": "Chat öffnen",
   "a3048aaa541b7744": "Aktivität",
   "4a3cbccb2beedeb0": "Bild",
@@ -6379,7 +6391,6 @@
   "2250f241daadd71b": "Zum Agenten hinzufügen",
   "be9b06fae29cc07a": "Alle Commits",
   "5ef391d5403d7bdd": "{count, plural, one {Mehr anzeigen (noch {count})} other {Mehr anzeigen (noch {count})}}",
-  "ccd5fc4db08374d7": "{count, plural, one {{count} Testdatei ausgeblendet} other {{count} Testdateien ausgeblendet}}",
   "c12871955b159db4": "in {app} angesehen",
   "98b353c208fd7977": "angesehen",
   "d65b870952bbe4f0": "Diese Häkchen werden hier gespeichert, nicht auf dem Host",
@@ -6388,7 +6399,6 @@
   "a35be3a33a60ada9": "Ein Teil dieses Diffs wurde nicht angezeigt",
   "74c7bae34db3147e": "Zeilenkommentare werden zur gesamten Änderung geschrieben",
   "4050f873dc790f8f": "Diff-Optionen",
-  "a92edf8d81354772": "Testdateien anzeigen",
   "48be78e4550011d3": "{term, select, mr {Diff des Merge Requests wird geladen...} cr {Diff der Änderungsanfrage wird geladen...} other {Diff des Pull Requests wird geladen...}}",
   "e76a1455903eef18": "{term, select, mr {Dieser Merge Request hat keine Dateiänderungen.} cr {Diese Änderungsanfrage hat keine Dateiänderungen.} other {Dieser Pull Request hat keine Dateiänderungen.}}",
   "50abbcbc41691cb5": "Dieser Commit hat keine Dateiänderungen.",
@@ -8541,7 +8551,7 @@
   "a9cdd8c7073be920": "Befehlspalette: Umschalten",
   "4e0943e8c7a465d1": "Dateiauswahl: Umschalten",
   "df5fdcdf26a6b52a": "Projektsuche: Umschalten",
-  "a8ff6d33b060736f": "Nutzung: Öffnen",
+  "0ca6fd2b8fcab2c3": "Nutzung: Umschalten",
   "a513d51b71b95674": "Design: Auswählen",
   "1ffd8427452372e1": "Darstellung: Wechseln",
   "3a3bb4a7551a87cc": "Design-Editor: Umschalten",
@@ -11943,6 +11953,7 @@
   "9c015d3d034316cb": "Verwende die Pfeiltasten, um den fokussierten Wert anzupassen. Halte Shift für größere Schritte. Pos1 und Ende setzen Minimum und Maximum. Mit Tab wechselst du zwischen Sättigung und Helligkeit.",
   "8639d5532561f87f": "Schließen",
   "e1186ad82ee08b33": "Schließen",
+  "a4579e548b768663": "Seitenleiste einblenden",
   "a1b11a1cf39c9dc9": "Seitenleiste skalieren",
   "c557090df5722838": "Seitenleiste umschalten",
   "bbde430e56272901": "Ziehen, um die Seitenleiste zu skalieren",
@@ -12052,10 +12063,9 @@
   "d2d071e45a2d6b89": "Wähle eine Umgebung, um Limits zu sehen.",
   "c9180daea905a0a6": "Wähle eine Umgebung, um die Nutzung zu sehen.",
   "f0297ec79e896a13": "{environment}: {error}",
-  "6dcbf651d51d4023": "{count, plural, one {{formatted} Sitzung} other {{formatted} Sitzungen}}",
+  "61571f4542da9903": "{count, plural, one {{formatted} Sitzung} other {{formatted} Sitzungen}}",
   "b01bf98dd90ee819": "API-Schätzung",
   "bab34b28e9ee8e88": "Details zur Nutzung ohne Preis",
-  "61571f4542da9903": "{count, plural, one {{formatted} Sitzung} other {{formatted} Sitzungen}}",
   "2a57181a9d128463": "{share} der Kosten · {tokens} Tokens",
   "d8a6a99fbdda0d3e": "{share} der Tokens · {cost}",
   "ae86762909d453d2": "Verarbeitete Tokens pro Stunde",
@@ -12231,6 +12241,8 @@
   "b8dcbc93a2ca1861": "Diese Ausführung führt es nicht mehr auf.",
   "115c69de3202f664": "Öffnen",
   "644eafa9048b62df": "{count, plural, =1 {1. Versuch} =2 {2. Versuch} =3 {3. Versuch} other {{count}. Versuch}}",
+  "0398ca6c1d24b92d": "wartet, als Nächstes dran",
+  "0af6d5ffd5166214": "{count, plural, one {wartet, {count} davor} other {wartet, {count} davor}}",
   "e39f89c909df4db0": "Die Ausführung konnte nicht fortgesetzt werden",
   "865f034346b82f47": "{title} abbrechen? Die Agenten stoppen und die Ausführung kann nicht fortgesetzt werden.",
   "6bc75632fd9c9136": "Die Ausführung konnte nicht abgebrochen werden",
@@ -12257,11 +12269,17 @@
   "dd7a1e58c2553933": "wacht in {duration} auf",
   "95cc952724dd7310": "wacht gleich auf",
   "3cc34921c0128593": "läuft",
-  "e777db2880f53a46": "niemand hat geantwortet",
   "dc90739d391a5e67": "Du hast {choice} gesagt",
+  "4e96712d839ccbff": "{who} hat {choice} gesagt",
+  "e777db2880f53a46": "niemand hat geantwortet",
+  "201490988858b511": "zurückgezogen von {by}",
   "389f2563b5b763fd": "Kurze Schritte",
+  "99451a5d2d40440f": "Zurückgezogen von {by}.",
+  "3ee30a50b70fffab": "Zurückgezogen von {by}: {reason}",
+  "92e129bf413a1220": "zurückgezogen",
   "a41c8d758121ad81": "hat geschlafen",
   "9db248b770096984": "hat gewartet",
+  "49be26a27dcb30e5": "gewartet",
   "c76124517af28686": "läuft seit {duration}",
   "89102905bf09b0e8": "Live ansehen",
   "bdf338cdff4118f0": "Transkript",
@@ -12295,6 +12313,49 @@
   "8bffb377e2a6a7de": "ihre Version ist nicht mehr registriert",
   "f92d9132f7b85d1a": "Schritte werden geladen…",
   "6ebc59f64c761a49": "Noch nichts.",
+  "19097cfb8f5a79cf": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " hat",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    },
+    " gesagt."
+  ],
+  "e7bbf693910057bf": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " hat",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    },
+    " gesagt: ",
+    {
+      "i": 4,
+      "k": "_gt_value_4",
+      "v": "v"
+    }
+  ],
   "a759dccd157d7dae": [
     "Du hast",
     " ",
@@ -12328,6 +12389,15 @@
       "v": "v"
     }
   ],
+  "3759768c5d342c22": [
+    "beantwortet",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
   "c98009be9a273b31": "Ausführung öffnen",
   "c8eb9be36d4d51ad": [
     "Thread auf ",
@@ -12353,6 +12423,14 @@
   ],
   "02dfe6c63fd0b8a1": "Begründung hinzufügen",
   "19abd94828a3bdbc": "Erst den Agenten fragen",
+  "e114d37b32ab0dc7": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " braucht eine Begründung."
+  ],
   "a18721fa8f328361": "Braucht dich",
   "bbf24e7920c1e86b": "Läuft",
   "8d6e18d2ad832db6": "Alle",

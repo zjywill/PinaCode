@@ -385,6 +385,7 @@
   "834ca879c14c167b": "Working",
   "582d6df7dfab86fb": "Paused",
   "ea6583ce92507ee3": "Sleeping",
+  "7150557773b3818b": "Queued",
   "7ea8cb8af281ce93": "Waiting",
   "1347868f2523140e": "Done",
   "57d76c4614054271": "Stopped",
@@ -396,6 +397,7 @@
   "d3890f4eb1508781": "Running its own steps",
   "3e7ced10c9482af0": "{step} is working",
   "237e1bcb1cf1bdec": "Sleeping at {step}",
+  "efbeb3993ee2c3f5": "Queued for {pool}",
   "3f7b17ac5a20c8d2": "Runs {run}",
   "0306f5f324b8aaa5": "{count} runs under way",
   "e8fd779b84a202a2": "Waiting",
@@ -1534,6 +1536,7 @@
   "6848f5bbb2bd9eec": "PDF document",
   "7873a79df0cf6d0e": "Browser page",
   "0b55696e27387e4e": "Press Shift+Escape to leave the browser page.",
+  "90dfebe26eb86b2d": "Page select options",
   "737d3c6bec93f9e6": "Choose files for the page",
   "e6a3fa7cfc14f86a": "Browser dialog",
   "61a552a67e9e3eac": "Dialog response",
@@ -1796,7 +1799,7 @@
   "67f5b13c3c7bcd40": "Share with guest",
   "82da5b8b340217ac": "Restart agent session",
   "963d099509eabcd6": "Agent session will restart",
-  "1d384d4fe7888a09": "Your next message starts a fresh session.",
+  "71ed7c0da0b93c77": "Your next message restarts the agent. This conversation is kept.",
   "e4b61c891fed297e": "Go to file",
   "d2ccdb8cd3297212": "Add project",
   "594bcbef04093f72": "Open WSL folder",
@@ -2021,6 +2024,8 @@
   "b2c35cd235de63e0": "Loading changes...",
   "bcbd16c97c6c1215": "No net changes in this selection.",
   "7e9cb3ca9f5470ae": "No patch available for this selection.",
+  "ccd5fc4db08374d7": "{count, plural, one {{count} test file hidden} other {{count} test files hidden}}",
+  "a92edf8d81354772": "Show test files",
   "e797245c587e7e29": "Resize Changes files",
   "99c76aa12c632a36": "{section} files",
   "3e9ddb26c2c59bcc": "Changes",
@@ -3140,7 +3145,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "on the computer that opened this page"]
+      "c": [
+        " ",
+        "on the computer that opened this page"
+      ]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3152,7 +3160,10 @@
     {
       "t": "span",
       "i": 2,
-      "c": [" ", "· whoever runs it gets this access"]
+      "c": [
+        " ",
+        "· whoever runs it gets this access"
+      ]
     }
   ],
   "c54cc9c75db9dc58": "Only approve a sign-in you just started.",
@@ -4489,6 +4500,7 @@
       "c": "”"
     }
   ],
+  "91aadfc843c600de": "Verify Google account",
   "a2aaca7ff8310186": "Open chat",
   "a3048aaa541b7744": "Activity",
   "4a3cbccb2beedeb0": "image",
@@ -6385,7 +6397,6 @@
   "2250f241daadd71b": "Add to agent",
   "be9b06fae29cc07a": "All commits",
   "5ef391d5403d7bdd": "{count, plural, one {Show more ({count} left)} other {Show more ({count} left)}}",
-  "ccd5fc4db08374d7": "{count, plural, one {{count} test file hidden} other {{count} test files hidden}}",
   "c12871955b159db4": "viewed in {app}",
   "98b353c208fd7977": "viewed",
   "d65b870952bbe4f0": "These ticks are kept here, not on the host",
@@ -6394,7 +6405,6 @@
   "a35be3a33a60ada9": "Some of this diff was not shown",
   "74c7bae34db3147e": "Line comments are written from the whole change",
   "4050f873dc790f8f": "Diff options",
-  "a92edf8d81354772": "Show test files",
   "48be78e4550011d3": "Loading {term, select, mr {merge request} cr {change request} other {pull request}} diff...",
   "e76a1455903eef18": "This {term, select, mr {merge request} cr {change request} other {pull request}} has no file changes.",
   "50abbcbc41691cb5": "This commit has no file changes.",
@@ -8548,7 +8558,7 @@
   "a9cdd8c7073be920": "Command Palette: Toggle",
   "4e0943e8c7a465d1": "File Picker: Toggle",
   "df5fdcdf26a6b52a": "Project Search: Toggle",
-  "a8ff6d33b060736f": "Usage: Open",
+  "0ca6fd2b8fcab2c3": "Usage: Toggle",
   "a513d51b71b95674": "Theme: Select",
   "1ffd8427452372e1": "Appearance: Cycle",
   "3a3bb4a7551a87cc": "Theme Editor: Toggle",
@@ -11950,6 +11960,7 @@
   "9c015d3d034316cb": "Use arrow keys to adjust the focused value. Hold Shift for larger steps. Use Home and End for the minimum and maximum. Press Tab to move between saturation and brightness.",
   "8639d5532561f87f": "Close",
   "e1186ad82ee08b33": "Close",
+  "a4579e548b768663": "Show sidebar",
   "a1b11a1cf39c9dc9": "Resize Sidebar",
   "c557090df5722838": "Toggle Sidebar",
   "bbde430e56272901": "Drag to resize sidebar",
@@ -12059,10 +12070,9 @@
   "d2d071e45a2d6b89": "Select an environment to see limits.",
   "c9180daea905a0a6": "Select an environment to see usage.",
   "f0297ec79e896a13": "{environment}: {error}",
-  "6dcbf651d51d4023": "{count, plural, one {{formatted} sessions} other {{formatted} sessions}}",
+  "61571f4542da9903": "{count, plural, one {{formatted} session} other {{formatted} sessions}}",
   "b01bf98dd90ee819": "API estimate",
   "bab34b28e9ee8e88": "Unpriced usage details",
-  "61571f4542da9903": "{count, plural, one {{formatted} session} other {{formatted} sessions}}",
   "2a57181a9d128463": "{share} of cost · {tokens} tokens",
   "d8a6a99fbdda0d3e": "{share} of tokens · {cost}",
   "ae86762909d453d2": "Hourly processed tokens",
@@ -12238,6 +12248,8 @@
   "b8dcbc93a2ca1861": "This run no longer lists it.",
   "115c69de3202f664": "Open",
   "644eafa9048b62df": "{count, plural, =1 {1st try} =2 {2nd try} =3 {3rd try} other {{count}th try}}",
+  "0398ca6c1d24b92d": "queued, next in line",
+  "0af6d5ffd5166214": "{count, plural, one {queued, {count} ahead} other {queued, {count} ahead}}",
   "e39f89c909df4db0": "Could not resume the run",
   "865f034346b82f47": "Cancel {title}? Its agents stop and the run cannot be resumed.",
   "6bc75632fd9c9136": "Could not cancel the run",
@@ -12264,11 +12276,17 @@
   "dd7a1e58c2553933": "wakes in {duration}",
   "95cc952724dd7310": "about to wake",
   "3cc34921c0128593": "running",
-  "e777db2880f53a46": "nobody answered",
   "dc90739d391a5e67": "You said {choice}",
+  "4e96712d839ccbff": "{who} said {choice}",
+  "e777db2880f53a46": "nobody answered",
+  "201490988858b511": "withdrawn by {by}",
   "389f2563b5b763fd": "Quick steps",
+  "99451a5d2d40440f": "Withdrawn by {by}.",
+  "3ee30a50b70fffab": "Withdrawn by {by}: {reason}",
+  "92e129bf413a1220": "withdrawn",
   "a41c8d758121ad81": "slept",
   "9db248b770096984": "waited",
+  "49be26a27dcb30e5": "queued",
   "c76124517af28686": "running for {duration}",
   "89102905bf09b0e8": "Watch live",
   "bdf338cdff4118f0": "Transcript",
@@ -12302,6 +12320,49 @@
   "8bffb377e2a6a7de": "its version is no longer registered",
   "f92d9132f7b85d1a": "Loading steps…",
   "6ebc59f64c761a49": "Nothing yet.",
+  "19097cfb8f5a79cf": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " said",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    },
+    "."
+  ],
+  "e7bbf693910057bf": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " said",
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": {
+        "i": 3,
+        "k": "_gt_value_3",
+        "v": "v"
+      }
+    },
+    ": ",
+    {
+      "i": 4,
+      "k": "_gt_value_4",
+      "v": "v"
+    }
+  ],
   "a759dccd157d7dae": [
     "You said",
     " ",
@@ -12335,6 +12396,15 @@
       "v": "v"
     }
   ],
+  "3759768c5d342c22": [
+    "answered",
+    " ",
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    }
+  ],
   "c98009be9a273b31": "Open run",
   "c8eb9be36d4d51ad": [
     "Thread on ",
@@ -12360,6 +12430,14 @@
   ],
   "02dfe6c63fd0b8a1": "Add a reason",
   "19abd94828a3bdbc": "Ask the agent first",
+  "e114d37b32ab0dc7": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " needs a reason."
+  ],
   "a18721fa8f328361": "Needs you",
   "bbf24e7920c1e86b": "Running",
   "8d6e18d2ad832db6": "All",

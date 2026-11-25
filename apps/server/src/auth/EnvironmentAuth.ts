@@ -100,11 +100,17 @@ export interface McpClientSession {
   readonly sessionId: AuthSessionId;
   readonly label: string;
   readonly access: AuthMcpClientAccess;
-  /** Another T3 Code environment's link, whose work here stays within it. */
+  /** Another Pina Code environment's link, whose work here stays within it. */
   readonly peerLink: boolean;
   /** When a peer link's session ends unless it is used again; the linking side keeps this. */
   readonly linkExpiresAt?: DateTime.Utc;
 }
+
+/** What Connections calls a client session: its label, or its browser and system. */
+export const clientSessionLabel = (client: AuthClientMetadata | undefined): string =>
+  client?.label ??
+  ([client?.browser, client?.os].filter((part) => part !== undefined).join(" on ") ||
+    "Pina Code client");
 
 export interface AuthenticatedSession {
   readonly sessionId: AuthSessionId;
@@ -936,6 +942,7 @@ export const make = Effect.gen(function* () {
             auth: descriptor,
             ...authScopeResponse(session.scopes),
             sessionMethod: session.method,
+            sessionId: session.sessionId,
             ...(session.expiresAt ? { expiresAt: DateTime.toUtc(session.expiresAt) } : {}),
           }) satisfies AuthSessionState,
       ),
