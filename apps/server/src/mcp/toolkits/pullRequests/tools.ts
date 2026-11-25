@@ -443,16 +443,16 @@ const UnwatchPullRequestTool = Tool.make("pinacode_unwatch_pull_request", {
 
 const PullRequestWorkflowTool = Tool.make("pinacode_pr_workflow", {
   description:
-    "Load PinaCode's built-in independent issue/PR follow-up skill and recover this coordinator's persisted issue sessions and PR watches. Use when asked to keep issues moving through review, CI and conflicts until mergeable, or when resuming that work. Not for a one-off fix or read-only review. This read does not start or stop watches.",
+    "Read the persisted issue sessions and PR watches for an existing independent follow-up.",
   parameters: Schema.Struct({
     environmentId: OrchestratorMcpEnvironmentTarget,
     threadId: PullRequestTargetInput.fields.threadId,
   }),
-  success: Schema.Struct({ skill: Schema.String, ...PullRequestWorkflowState.fields }),
+  success: PullRequestWorkflowState,
   failure: PullRequestToolError,
   dependencies: watchDependencies,
 })
-  .annotate(Tool.Title, "Load PR follow-up workflow")
+  .annotate(Tool.Title, "Read PR follow-up state")
   .annotate(Tool.Readonly, true)
   .annotate(Tool.Destructive, false)
   .annotate(Tool.Idempotent, true)

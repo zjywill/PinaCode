@@ -516,7 +516,7 @@ const WATCHING_CLOSING =
 const WATCHING_CLOSING_PLURAL =
   "For the ordinary PR watches above, act as your task requires and end your turn while waiting. Unwatch each ordinary PR whose monitoring goal is met before handing back. Keep the registered independent follow-ups active under their own instructions.";
 const FOLLOW_UP_CLOSING =
-  "This PR has a registered independent follow-up. Call pinacode_pr_workflow to recover its rules and original session mapping. Progress reports and readiness do not end this follow-up. Unwatch it only when the user explicitly stops it or it merges or closes.";
+  "This PR has a registered independent follow-up. Call pinacode_pr_workflow to recover its original session mapping. Progress reports and readiness do not end this follow-up. Unwatch it only when the user explicitly stops it or it merges or closes.";
 
 export interface PullRequestWatchWake {
   readonly text: string;

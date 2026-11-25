@@ -137,7 +137,7 @@ export type ServerProviderSkill = typeof ServerProviderSkill.Type;
 
 export const PINACODE_PR_WORKFLOW_SKILL = {
   name: "following-pull-requests",
-  displayName: "Follow issues and PRs",
+  displayName: "Auto-follow issues and PRs",
   description:
     "PinaCode built-in workflow: keep independent issue sessions moving through PR review, CI and conflict repairs until mergeable.",
   path: "pinacode://skills/following-pull-requests",

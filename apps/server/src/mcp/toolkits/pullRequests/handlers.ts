@@ -27,7 +27,6 @@ import * as GitManager from "../../../git/GitManager.ts";
 import * as Orchestrator from "../../../orchestration-v2/Orchestrator.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import * as PullRequestWatchService from "../../../pullRequest/PullRequestWatchService.ts";
-import { PULL_REQUEST_WORKFLOW_SKILL } from "../../../pullRequest/pullRequestWorkflow.ts";
 import { resolveTarget, type ResolvedTarget } from "../../../pullRequest/pullRequestTarget.ts";
 import * as PullRequestReviewGuideService from "../../../pullRequest/PullRequestReviewGuideService.ts";
 import * as PullRequestService from "../../../pullRequest/PullRequestService.ts";
@@ -903,7 +902,7 @@ const make = Effect.gen(function* () {
     pinacode_pr_workflow: McpToolAccess.reads((input) =>
       Effect.gen(function* () {
         const thread = yield* requireThread(PullRequestListFailedError, input.threadId);
-        const state = yield* watches
+        return yield* watches
           .readWorkflow(thread.id)
           .pipe(
             Effect.mapError((cause) =>
@@ -912,7 +911,6 @@ const make = Effect.gen(function* () {
                 : new PullRequestListFailedError({ cause }),
             ),
           );
-        return { skill: PULL_REQUEST_WORKFLOW_SKILL, ...state };
       }),
     ),
     pinacode_write_pull_request_guides: McpToolAccess.writesWithCapability((input) =>

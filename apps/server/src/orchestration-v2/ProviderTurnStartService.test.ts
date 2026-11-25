@@ -2424,7 +2424,7 @@ effectIt.effect("delivers the explicitly selected app skill before starting the 
   }),
 );
 
-effectIt.effect("delivers the workflow for appending an issue to ongoing follow-up", () =>
+effectIt.effect("keeps unmentioned workflow instructions out of active follow-up turns", () =>
   Effect.gen(function* () {
     const now = "2026-11-18T01:00:00.000Z";
     const watch = {
@@ -2454,10 +2454,10 @@ effectIt.effect("delivers the workflow for appending an issue to ongoing follow-
       stack: null,
     };
     const request = "首页这个 issue 也处理下。";
-    for (const [pullRequest, active] of [
-      [{ ...link, watch }, true],
-      [{ ...link, endedWatch: { ...watch, endReason: "stopped" as const } }, false],
-      [{ ...link, watch: { ...watch, followUp: undefined } }, false],
+    for (const pullRequest of [
+      { ...link, watch },
+      { ...link, endedWatch: { ...watch, endReason: "stopped" as const } },
+      { ...link, watch: { ...watch, followUp: undefined } },
     ] as const) {
       const harness = makeLocalCommandHarness({
         text: request,
@@ -2466,12 +2466,7 @@ effectIt.effect("delivers the workflow for appending an issue to ongoing follow-
       });
       yield* harness.start;
       const text = harness.startTurn.mock.calls[0]?.[0].message.text;
-      if (active) {
-        expect(text).toContain("# Following pull requests");
-        expect(text).toContain(request);
-      } else {
-        expect(text).toBe(request);
-      }
+      expect(text).toBe(request);
     }
   }),
 );

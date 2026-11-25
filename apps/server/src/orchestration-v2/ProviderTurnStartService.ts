@@ -1,8 +1,5 @@
 import { pinaInstructions } from "./pinaInstructions.ts";
-import {
-  expandPullRequestWorkflowPrompt,
-  hasOngoingPullRequestFollowUp,
-} from "../pullRequest/pullRequestWorkflow.ts";
+import { expandPullRequestWorkflowPrompt } from "../pullRequest/pullRequestWorkflow.ts";
 import { classifyCodexManagedError } from "../provider/CodexManagedErrors.ts";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
 import { projectComposerContextForProvider } from "@t3tools/shared/composerContextReferences";
@@ -1087,27 +1084,13 @@ export const layer: Layer.Layer<
       let effectiveHandoffs = handoffs;
       let resumeFellBack = false;
       const slashCommand = isSlashCommandMessage(providerMessage);
-      const pullRequests = projection.thread.pullRequests ?? [];
-      const continuingPullRequestWorkflow =
-        providerMessage.createdBy === "user" &&
-        !slashCommand &&
-        (hasOngoingPullRequestFollowUp(pullRequests) ||
-          projection.subagents.some(
-            (task) =>
-              task.issueUrl !== undefined &&
-              task.childThreadId !== null &&
-              !pullRequests.some(
-                (link) =>
-                  (link.watch ?? link.endedWatch)?.followUp?.childThreadId === task.childThreadId,
-              ),
-          ));
       const messageText = withMessageSenderNote(
         providerMessage,
         projectComposerContextForProvider({
-          text: expandPullRequestWorkflowPrompt(
-            providerMessage.text,
-            continuingPullRequestWorkflow,
-          ),
+          text:
+            providerMessage.createdBy === "user"
+              ? expandPullRequestWorkflowPrompt(providerMessage.text)
+              : providerMessage.text,
           records: providerMessage.context?.records ?? [],
         }),
       );

@@ -5,7 +5,7 @@ description: Coordinates independent issue sessions through PR review, CI and co
 
 # Following pull requests
 
-You are the coordinator. PinaCode owns durable watches and completion delivery; original independent sessions own fixes. Keep accepting new issues without restarting existing sessions or changing their provider/model/worktree. Use the persisted sessions and pullRequests returned with this skill, not conversation memory. A watch or endedWatch carries its issueUrl and childThreadId; the containing thread is its monitoring owner.
+You are the coordinator. PinaCode owns durable watches and completion delivery; original independent sessions own fixes. Keep accepting new issues without restarting existing sessions or changing their provider/model/worktree. First call pinacode_pr_workflow to read the persisted sessions and pullRequests. A watch or endedWatch carries its issueUrl and childThreadId; the containing thread is its monitoring owner.
 
 ## Intake and revisions
 
@@ -13,7 +13,7 @@ You are the coordinator. PinaCode owns durable watches and completion delivery; 
 
 - While coordinating ongoing follow-up, a request to also handle an issue, or to create an issue and then implement it, adds it to this workflow. The coordinator may research, design, and file the issue. Once the issue URL is known, call pinacode_pr_workflow before implementation. Reuse the existing independent session for that issue when present. Otherwise use pinacode_delegate_task with session:"independent", issueUrl, and a stable clientRequestId for the issue. Keep the user's existing provider/model choice; ask once when none was chosen. Delegate even if the coordinator already researched or drafted the design. Honor an explicit user request for a one-off task or for the coordinator to implement it directly. Requests only to research or file an issue do not authorize implementation. Keep existing watches active while taking new work.
 - Each child must report PR URL, latest head, tests and remaining work after implementation and every push. Read the actual diff and test evidence in its original worktree. Register its PR with pinacode_watch_pull_request and followUp:{issueUrl,childThreadId}. Handle existing review comments too: the watch baselines historical remarks.
-- On a watch wake or child completion, call pinacode_pr_workflow to recover this skill and persisted associations. Verify each review finding before assigning fixes. Send concrete valid findings to that same childThreadId with pinacode_thread_send; explain rejected findings. Do not create a replacement, change its execution choices, or fix the same files in the parent.
+- On a watch wake or child completion, call pinacode_pr_workflow to recover persisted associations. Verify each review finding before assigning fixes. Send concrete valid findings to that same childThreadId with pinacode_thread_send; explain rejected findings. Do not create a replacement, change its execution choices, or fix the same files in the parent.
 - Use queued delivery, not steering or restart, when the original session is busy. Give pinacode_thread_send a stable clientRequestId for this PR/head/finding set and reuse it on retries. Read the queued/active work before assigning overlapping findings; combine new related findings into the next revision. Do not resubmit a fix already queued, running or completed for that head. Completion delivery handles repeated revisions without a fixed round limit.
 
 ## Acceptance and waiting

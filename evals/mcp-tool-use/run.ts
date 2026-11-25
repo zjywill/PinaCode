@@ -39,11 +39,7 @@ import * as McpSchema from "effect/ai/McpSchema";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 
 import { taskPrompt } from "../../apps/server/src/mcp/delegatedTaskModes.ts";
-import {
-  PULL_REQUEST_WORKFLOW_SKILL,
-  expandPullRequestWorkflowPrompt,
-  hasOngoingPullRequestFollowUp,
-} from "../../apps/server/src/pullRequest/pullRequestWorkflow.ts";
+import { expandPullRequestWorkflowPrompt } from "../../apps/server/src/pullRequest/pullRequestWorkflow.ts";
 import * as McpInvocationContext from "../../apps/server/src/mcp/McpInvocationContext.ts";
 import { advertisedJsonSchema } from "../../apps/server/src/mcp/advertisedJsonSchema.ts";
 import * as Contracts from "@t3tools/contracts";
@@ -1231,10 +1227,7 @@ export const buildMessages = (sample: Sample) => {
     }
     if (turn.text) push(turn.role, text(turn.text));
   }
-  const workflowPrompt = expandPullRequestWorkflowPrompt(
-    testCase.prompt,
-    hasOngoingPullRequestFollowUp(testCase.setup.workflowState?.pullRequests ?? []),
-  );
+  const workflowPrompt = expandPullRequestWorkflowPrompt(testCase.prompt);
   const userText =
     testCase.promptContext === undefined
       ? workflowPrompt
@@ -1730,7 +1723,6 @@ export const t3Default = (
     }
     case "pinacode_pr_workflow":
       return {
-        skill: PULL_REQUEST_WORKFLOW_SKILL,
         sessions: [],
         pullRequests: [],
         ...sample.testCase.setup.workflowState,
