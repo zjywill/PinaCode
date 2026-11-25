@@ -24,6 +24,7 @@ import { hasPendingBackgroundSubagent } from "@t3tools/shared/orchestrationV2Pen
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 
+import type { DispatchModeRefusal } from "../orchestration-v2/DispatchModeLimit.ts";
 import type { OrchestratorV2Error } from "../orchestration-v2/Orchestrator.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import { resolveInteractionMode, resolveRuntimeMode } from "./delegatedTaskModes.ts";
@@ -172,6 +173,15 @@ export const loadCaller = Effect.fn("mcp.loadCaller")(function* () {
     limits: { runtimeMode: caller.runtimeMode, interactionMode: caller.interactionMode },
   } satisfies Caller;
 });
+
+export const escalationDenied = (refusal: DispatchModeRefusal) =>
+  new OrchestratorMcpFailure({
+    code:
+      refusal.mode === "runtime"
+        ? "runtime_mode_escalation_denied"
+        : "interaction_mode_escalation_denied",
+    message: `Thread ${refusal.threadId} now runs in ${refusal.runtimeMode}/${refusal.interactionMode} mode, above this caller's. Its user changed it while this call ran.`,
+  });
 
 export const assertTargetWithinLimits = (
   limits: CallerLimits,

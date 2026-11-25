@@ -122,7 +122,7 @@ export const OrchestratorMcpTarget = Schema.Struct({
   projectId: Schema.optional(
     ProjectId.annotate({
       description:
-        "With `environmentId`: its project to run in. Default: the one with this project's repository.",
+        "Project to run in. Locally this defaults to your project. With a linked environment it defaults to the project with the matching repository.",
     }),
   ),
 });
@@ -614,6 +614,8 @@ export const OrchestratorMcpThreadWaitInput = Schema.Struct({
   threadId: ThreadId,
   runId: Schema.optional(RunId),
   timeoutMs: Schema.optional(Schema.Finite),
+  /** Followers observe archive and, until the first notification, a run waiting for input. */
+  watchTask: Schema.optional(Schema.Literals(["waiting", "completion"])),
   untilDelegatedWorkSettled: Schema.optional(
     Schema.Boolean.annotate({
       description:
@@ -643,6 +645,7 @@ export const OrchestratorMcpThreadWaitResult = Schema.Struct({
 export type OrchestratorMcpThreadWaitResult = typeof OrchestratorMcpThreadWaitResult.Type;
 
 export const OrchestratorMcpThreadInterruptInput = Schema.Struct({
+  followRestarts: Schema.optional(Schema.Boolean),
   environmentId: OrchestratorMcpEnvironmentTarget,
   threadId: ThreadId,
   runId: Schema.optional(RunId),
@@ -1024,6 +1027,7 @@ export class OrchestratorMcpFailure extends Schema.TaggedError<OrchestratorMcpFa
       "task_not_found",
       "task_not_cancellable",
       "thread_not_found",
+      "thread_archived",
       "run_not_found",
       "thread_not_sendable",
       "thread_not_interruptible",

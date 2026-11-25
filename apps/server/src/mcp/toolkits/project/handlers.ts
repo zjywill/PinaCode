@@ -513,8 +513,10 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
             createdBy: "agent",
             creationSource: "mcp",
             ...(linkOrigin === undefined ? {} : { linkOrigin }),
-            // Kept only alongside linkOrigin: thread.create drops it otherwise.
-            ...(input.delegatedFrom === undefined ? {} : { delegatedFrom: input.delegatedFrom }),
+            // Only a linked launch can supply its own delegation provenance.
+            ...(linkOrigin === undefined || input.delegatedFrom === undefined
+              ? {}
+              : { delegatedFrom: input.delegatedFrom }),
             // A link's word for it, like `delegatedFrom`: nothing else may name a run.
             ...(linkOrigin === undefined || input.workflowRun === undefined
               ? {}

@@ -1711,6 +1711,7 @@ const make = Effect.gen(function* () {
     readonly providers: ReadonlyArray<ServerProvider>;
     /** Receipt replays bypass current settings because they start no work. Dispatch must reuse the checked command ID. */
     readonly skipProjectEnablementFilter?: boolean;
+    readonly projectId?: ProjectId;
   }): Effect.fn.Return<ResolvedTarget, OrchestratorMcpFailure> {
     const requestedInstanceId = input.target?.providerInstanceId;
     const requestedDriver = input.target?.driverKind;
@@ -1743,7 +1744,7 @@ const make = Effect.gen(function* () {
         const enabledForProject =
           input.skipProjectEnablementFilter === true ||
           (yield* threadManagement.isProviderInstanceEnabledForProject({
-            projectId: input.parent.thread.projectId,
+            projectId: input.projectId ?? input.parent.thread.projectId,
             instanceId: candidate.instanceId,
           }));
         if (enabledForProject) {
@@ -2951,13 +2952,12 @@ const make = Effect.gen(function* () {
           : readTask(scope, taskId, false, true);
       }
       const { scope, parent } = yield* loadThreadCaller(callerScope, "pinacode_delegate_task");
-      if (
-        input.target?.projectId !== undefined &&
-        input.target.projectId !== parent.thread.projectId
-      ) {
+      const otherProjectId =
+        input.target?.projectId !== parent.thread.projectId ? input.target?.projectId : undefined;
+      if (otherProjectId !== undefined && input.session === "independent") {
         return yield* failure(
           "invalid_request",
-          "A local task runs in this thread's project. Omit target.projectId, pass target.environmentId to run it in that environment's project, or use pinacode_thread_launch with that projectId and reportBack: true to be woken with its result.",
+          "Independent review sessions require the coordinator's project.",
         );
       }
       const parentRun =
@@ -2981,11 +2981,14 @@ const make = Effect.gen(function* () {
         operation: "delegate-task",
       });
       const isRetryOfAcceptedDelegation = yield* threadManagement.hasReceipt(commandId);
+      const otherProject =
+        otherProjectId === undefined ? undefined : yield* requireProject(otherProjectId);
       const target = yield* resolveTargetRechecking({
         parent,
         target: input.target,
         providers,
-        cwd: yield* parentWorkspaceCwd(parent),
+        ...(otherProjectId === undefined ? {} : { projectId: otherProjectId }),
+        cwd: otherProject?.workspaceRoot ?? (yield* parentWorkspaceCwd(parent)),
         skipProjectEnablementFilter: isRetryOfAcceptedDelegation,
       });
       const runtimeMode = yield* resolveRuntimeMode(
@@ -2997,6 +3000,62 @@ const make = Effect.gen(function* () {
         parent.thread.interactionMode,
         input.interactionMode,
       );
+      if (otherProjectId !== undefined) {
+        const prompt = taskPrompt(input);
+        const messageId = stableOperationMessageId({
+          scope,
+          requestKey: key,
+          operation: "delegate-task",
+        });
+        const launched = yield* threadLaunch
+          .launch({
+            commandId,
+            projectId: otherProjectId,
+            title: input.title ?? parent.thread.title,
+            modelSelection: target.modelSelection,
+            runtimeMode,
+            interactionMode,
+            workspaceStrategy:
+              input.isolation === "worktree"
+                ? { type: "worktree", baseRef: "HEAD", startFromOrigin: false }
+                : { type: "root" },
+            initialMessage: {
+              messageId,
+              senderThreadId: parent.thread.id,
+              text: prompt,
+              attachments: [],
+            },
+            ...(parent.thread.linkOrigin === undefined
+              ? {}
+              : { linkOrigin: parent.thread.linkOrigin }),
+            delegatedFrom: {
+              environmentId: scope.environmentId,
+              threadId: parent.thread.id,
+              title: parent.thread.title,
+            },
+            createdBy: "agent",
+            creationSource: "mcp",
+          })
+          .pipe(Effect.mapError(threadManagementFailure));
+        const run = launched.projection.runs.find(
+          (candidate) => candidate.userMessageId === messageId,
+        );
+        const taskId =
+          run &&
+          (yield* remoteDelegation.reportBack(scope, scope.environmentId, {
+            threadId: launched.threadId,
+            runId: run.id,
+            messageId,
+            message: prompt,
+            clientRequestId: input.clientRequestId,
+            delegationWake: input.mode === "wait" ? "settled_only" : "always",
+          }));
+        if (taskId === undefined)
+          return yield* failure("orchestration_error", "The delegated task was not recorded.");
+        return yield* input.mode === "wait"
+          ? awaitTask(scope, taskId, key, input.timeoutMs)
+          : readTask(scope, taskId, false, true);
+      }
       const needsWorktree = input.isolation === "worktree" || input.session === "independent";
       let workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy | undefined;
       if (
@@ -3844,10 +3903,17 @@ const make = Effect.gen(function* () {
             MAX_WAIT_TIMEOUT_MS,
             Math.max(1, input.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS),
           ),
+          ...(input.watchTask === undefined ? {} : { watchTask: input.watchTask }),
           ...(input.untilDelegatedWorkSettled === true ? { untilDelegatedWorkSettled: true } : {}),
           ...(input.untilOutput === true ? { untilOutput: true } : {}),
         })
-        .pipe(Effect.mapError(threadManagementFailure));
+        .pipe(
+          Effect.mapError((error) =>
+            error._tag === "ThreadManagementThreadArchivedError"
+              ? failure("thread_archived", error.message)
+              : threadManagementFailure(error),
+          ),
+        );
       const status = result.run === null ? "idle" : runOutcome(result.run);
       // A task's first run carries no task id; the child's untagged runs continue that task
       // until it has a result.
@@ -3954,6 +4020,7 @@ const make = Effect.gen(function* () {
           }),
           threadId: input.threadId,
           ...(input.runId === undefined ? {} : { runId: input.runId }),
+          ...(input.followRestarts ? { followRestarts: true } : {}),
           reason: agentStopReason(input.reason),
         })
         .pipe(

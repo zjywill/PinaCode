@@ -2486,6 +2486,13 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         .subagents[0];
     // An unknown task gives no evidence the question is obsolete.
     if (task === undefined) return false;
+    // A followed thread has no local child request. Its follower sends one notice per task.
+    if (
+      task.remoteChild !== undefined &&
+      messageId === `message:delegated-task-waiting:${task.id}`
+    ) {
+      return task.result !== null;
+    }
     const childThreadId = task.childThreadId;
     if (
       childThreadId === null ||
@@ -4157,9 +4164,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       pullRequests: [],
       ...(command.linkOrigin === undefined ? {} : { linkOrigin: command.linkOrigin }),
       // Only stamped work names a remote parent, so a client cannot claim one.
-      ...(command.linkOrigin === undefined || command.delegatedFrom === undefined
-        ? {}
-        : { delegatedFrom: command.delegatedFrom }),
+      ...(command.delegatedFrom === undefined ? {} : { delegatedFrom: command.delegatedFrom }),
       ...(command.workflowRun === undefined ? {} : { workflowRun: command.workflowRun }),
       lineage: {
         parentThreadId: null,

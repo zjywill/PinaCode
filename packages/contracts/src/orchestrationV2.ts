@@ -1008,6 +1008,8 @@ export const OrchestrationV2RemoteTaskChild = Schema.Struct({
   environmentId: EnvironmentId,
   threadId: ThreadId,
   label: Schema.String,
+  /** The caller owns only the reported run of this shared thread. */
+  runOnly: Schema.optional(Schema.Boolean),
   /** The title it launched with there; absent on tasks recorded before it was kept. */
   title: Schema.optional(Schema.String),
   /** The run there that carries the task; absent on tasks recorded before it was kept. */

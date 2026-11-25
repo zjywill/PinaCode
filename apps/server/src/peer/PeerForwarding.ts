@@ -189,6 +189,11 @@ const make = Effect.gen(function* () {
     if (typeof args.clientRequestId === "string") {
       args.clientRequestId = yield* scopedRequestId(scope.requestNamespace, args.clientRequestId);
     }
+    // Report ownership stays with the caller. Older peers also understand queue delivery.
+    if (toolName === "pinacode_thread_send" || toolName === "pinacode_thread_launch") {
+      if (args.reportBack === true && toolName === "pinacode_thread_send") args.mode = "queue";
+      delete args.reportBack;
+    }
     // So a message sent there names the thread that sent it, even to a client that cannot reach here.
     const sender =
       caller === undefined
@@ -198,14 +203,35 @@ const make = Effect.gen(function* () {
             threadId: caller.id,
             title: caller.title,
           };
-    return yield* peers.call({
-      environmentId,
-      tool: toolName,
-      arguments: args,
-      limits,
-      ...(sender === undefined ? {} : { sender }),
-      success: success as Schema.Decoder<A>,
-    });
+    const call = (parameters: Record<string, unknown>) =>
+      peers.call({
+        environmentId,
+        tool: toolName,
+        arguments: parameters,
+        limits,
+        ...(sender === undefined ? {} : { sender }),
+        success: success as Schema.Decoder<A>,
+      });
+    const option =
+      toolName === "pinacode_thread_wait"
+        ? "watchTask"
+        : toolName === "pinacode_thread_interrupt"
+          ? "followRestarts"
+          : undefined;
+    if (option === undefined || args[option] === undefined) return yield* call(args);
+    return yield* call(args).pipe(
+      Effect.catchIf(
+        (error) =>
+          error.code === "invalid_request" &&
+          error.message.startsWith(
+            `Invalid parameters for tool '${toolName}': Unknown argument "${option}". Accepted arguments:`,
+          ),
+        () => {
+          const { [option]: _unsupported, ...compatible } = args;
+          return call(compatible);
+        },
+      ),
+    );
   });
 
   const readThread: PeerForwarding["Service"]["readThread"] = (scope, environmentId, input) =>

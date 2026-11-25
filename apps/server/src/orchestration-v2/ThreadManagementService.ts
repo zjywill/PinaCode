@@ -195,6 +195,7 @@ export interface ThreadManagementWaitInput {
    * completion delivery will wake it again, as a delegated task's result does.
    */
   readonly untilDelegatedWorkSettled?: boolean;
+  readonly watchTask?: "waiting" | "completion";
   /**
    * Also wait until the run has the result it was asked for. A turn may end without one while
    * its agent waits to be woken, and submit it from a later turn.
@@ -211,6 +212,7 @@ export interface ThreadManagementWaitResult {
 }
 
 export interface ThreadManagementInterruptInput {
+  readonly followRestarts?: boolean;
   readonly projectId: ProjectId;
   readonly commandId: CommandId;
   readonly threadId: ThreadId;
@@ -1116,7 +1118,13 @@ const make = Effect.gen(function* () {
     const afterSequence = yield* orchestrator
       .getThreadEventSequence(input.threadId)
       .pipe(Effect.mapError(loadError));
-    const target = yield* getProjectThreadRecords(input, ["runs"]);
+    const readRuns = getProjectThreadRecords(input, ["runs"]).pipe(
+      Effect.filterOrFail(
+        (records) => input.watchTask === undefined || records.thread.archivedAt === null,
+        () => new ThreadManagementThreadArchivedError({ threadId: input.threadId }),
+      ),
+    );
+    const target = yield* readRuns;
     const selectedRun =
       input.runId === undefined
         ? latestRun(target)
@@ -1176,6 +1184,17 @@ const make = Effect.gen(function* () {
       runs: ReadonlyArray<OrchestrationV2Run>,
     ) {
       const current = yield* outcome(runs);
+      if (input.watchTask === "waiting") {
+        // A queued request cannot start while the turn ahead of it needs approval.
+        const waiting =
+          current.run.status === "waiting"
+            ? current.run
+            : current.run.status === "queued" || untilDelegatedWorkSettled
+              ? runs.find((run) => run.status === "waiting")
+              : undefined;
+        if (waiting !== undefined)
+          return { ...current, run: waiting, settled: true, resultRun: undefined };
+      }
       if (!current.settled || !untilDelegatedWorkSettled) {
         return { ...current, resultRun: undefined };
       }
@@ -1199,6 +1218,7 @@ const make = Effect.gen(function* () {
           [
             "run.updated",
             "thread.deleted",
+            ...(input.watchTask === undefined ? [] : (["thread.archived"] as const)),
             ...(input.untilOutput === true ? (["run.output-submitted"] as const) : []),
             // What delegated work reads besides runs: tasks and their
             // deliveries, and a provider thread's background tasks.
@@ -1219,6 +1239,7 @@ const make = Effect.gen(function* () {
         Stream.filter(
           (stored) =>
             untilDelegatedWorkSettled ||
+            input.watchTask === "waiting" ||
             stored.event.type !== "run.updated" ||
             stored.event.payload.id === selectedRun.id ||
             stored.event.payload.restartContinuationOfRunId !== undefined,
@@ -1228,11 +1249,7 @@ const make = Effect.gen(function* () {
         ? Stream.fromEffect(orchestrator.awaitRestartContinuation(initial.run))
         : Stream.empty,
     ).pipe(
-      Stream.mapEffect(() =>
-        getProjectThreadRecords(input, ["runs"]).pipe(
-          Effect.flatMap((current) => evaluate(current.runs)),
-        ),
-      ),
+      Stream.mapEffect(() => readRuns.pipe(Effect.flatMap((current) => evaluate(current.runs)))),
       Stream.filter((current) => current.settled),
       Stream.runHead,
       Effect.timeoutOption(Duration.millis(Math.max(1, input.timeoutMs))),
@@ -1242,7 +1259,7 @@ const make = Effect.gen(function* () {
     // The run may have reached a terminal status while the timeout was
     // winning the race; the final projection read decides what actually
     // happened, so only a still-active run counts as timed out.
-    return settledResult(yield* evaluate((yield* getProjectThreadRecords(input, ["runs"])).runs));
+    return settledResult(yield* evaluate((yield* readRuns).runs));
   });
 
   const settleAfterRun: ThreadManagementServiceShape["settleAfterRun"] = Effect.fn(
@@ -1391,10 +1408,14 @@ const make = Effect.gen(function* () {
     "ThreadManagementService.interruptThread",
   )(function* (input) {
     const target = yield* getProjectThreadRecords(input, ["runs", "providerTurns"]);
-    const explicitRun =
+    const requestedRun =
       input.runId === undefined
         ? undefined
         : target.runs.find((candidate) => candidate.id === input.runId);
+    const explicitRun =
+      input.followRestarts && requestedRun
+        ? latestRestartContinuation(target.runs, requestedRun)
+        : requestedRun;
     if (input.runId !== undefined && explicitRun === undefined) {
       return yield* new ThreadManagementRunNotFoundError({
         threadId: input.threadId,
@@ -1428,10 +1449,10 @@ const make = Effect.gen(function* () {
         runId: input.runId,
       });
     }
-    if (input.runId !== undefined && interruptibleRun.id !== input.runId) {
+    if (explicitRun !== undefined && interruptibleRun.id !== explicitRun.id) {
       return yield* new ThreadManagementThreadNotInterruptibleError({
         threadId: input.threadId,
-        runId: input.runId,
+        runId: explicitRun.id,
       });
     }
     const dispatch = yield* orchestrator.dispatch({
@@ -1831,7 +1852,8 @@ const make = Effect.gen(function* () {
       if (task.childThreadId === null) {
         // A task in a linked environment ends here; its follower then stops it there.
         // One with its result keeps it, but its thread there may run follow-up work.
-        if (task.remoteChild === undefined) continue;
+        if (task.remoteChild === undefined || (task.remoteChild.runOnly && task.result !== null))
+          continue;
         const commandId = CommandId.make(`${input.commandId}:stop:${task.id}`);
         yield* (input.remoteDispatch ?? dispatch)(
           task.result === null
@@ -1840,7 +1862,7 @@ const make = Effect.gen(function* () {
                 commandId,
                 parentThreadId: input.threadId,
                 taskId: task.id,
-                status: "interrupted",
+                status: task.remoteChild.runOnly !== undefined ? "cancelled" : "interrupted",
                 result:
                   input.reason === undefined
                     ? "Stopped with its parent."

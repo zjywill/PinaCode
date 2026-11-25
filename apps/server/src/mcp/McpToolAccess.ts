@@ -32,6 +32,7 @@ import {
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 import { resolveInteractionMode, resolveRuntimeMode } from "./delegatedTaskModes.ts";
 import {
+  escalationDenied,
   assertBroadestAccess,
   assertFullAccess,
   assertLiveCaller,
@@ -253,15 +254,6 @@ export const writesThreads = <P, A, E, R>(
       }),
     () => writingCaller,
   );
-
-const escalationDenied = (refusal: DispatchModeRefusal) =>
-  new OrchestratorMcpFailure({
-    code:
-      refusal.mode === "runtime"
-        ? "runtime_mode_escalation_denied"
-        : "interaction_mode_escalation_denied",
-    message: `Thread ${refusal.threadId} now runs in ${refusal.runtimeMode}/${refusal.interactionMode} mode, above this caller's. Its user changed it while this call ran.`,
-  });
 
 export interface StartedModes {
   readonly runtimeMode: RuntimeMode;
