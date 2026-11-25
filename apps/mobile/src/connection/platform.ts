@@ -192,9 +192,6 @@ const layerCapabilities = Layer.effectContext(
           bearerToken: Effect.succeedNone,
         }),
       ),
-      Context.add(ClientCapabilities.AnalyticsDevice, {
-        id: storage.loadOrCreateAnalyticsDeviceId.pipe(Effect.option),
-      }),
       Context.add(
         ClientCapabilities.RelayDeviceIdentity,
         ClientCapabilities.RelayDeviceIdentity.of({

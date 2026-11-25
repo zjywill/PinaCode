@@ -262,9 +262,7 @@ so restart T3 Code after that.
   `t3.json` declares, whether or not a user approved them. Such a project gets no new worktree
   threads; existing thread folders are restored as plain checkouts and removed without the
   project's `remove` command.
-- `telemetry: false`: the server and desktop app send no [product usage data](./telemetry.md) or
-  relay connection traces, and neither does a browser opened from the server. A policy cannot turn
-  them on. The hosted web app at app.t3.codes and the mobile app still send their own relay traces.
+- PinaCode accepts the legacy `telemetry` policy field. Product analytics and automatic relay tracing are disabled for all clients.
 
 ### Providers
 

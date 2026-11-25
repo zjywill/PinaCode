@@ -18,15 +18,11 @@ import type {
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 import {
   getModelSelectionBooleanOptionValue,
   getModelSelectionStringOptionValue,
 } from "@t3tools/shared/model";
-import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
-import * as AnalyticsService from "./AnalyticsService.ts";
-import { modelLabel } from "./ProviderDimensions.ts";
 
 // Bump when a field changes meaning, so reports can split old and new rows.
 const REPORT_VERSION = 2;
@@ -395,36 +391,3 @@ export class ProviderTurnAnalytics extends Context.Reference<{
     runSettled: () => Effect.void,
   }),
 }) {}
-
-export const layer = Layer.effect(
-  ProviderTurnAnalytics,
-  Effect.gen(function* () {
-    const analytics = yield* AnalyticsService.AnalyticsService;
-    const registry = yield* ProviderRegistry.ProviderRegistry;
-    const ledger = new RequestUsageLedger();
-    const labeler = Effect.map(
-      registry.getProviders,
-      (providers): ModelLabeler =>
-        (driver, model) =>
-          modelLabel(providers, driver, model),
-    );
-    return {
-      runStarted: Effect.fn("ProviderTurnAnalytics.runStarted")((input) =>
-        Effect.sync(() => ledger.start(input.runId, input.driver, input.context)),
-      ),
-      turnCompleted: Effect.fn("ProviderTurnAnalytics.turnCompleted")(function* (report) {
-        ledger.add(report);
-        yield* analytics.record(
-          "provider.turn.completed",
-          providerTurnProperties(report, yield* labeler),
-        );
-      }),
-      runSettled: Effect.fn("ProviderTurnAnalytics.runSettled")(function* (report) {
-        const properties = ledger.settle(report, yield* labeler);
-        if (properties !== undefined) {
-          yield* analytics.record("provider.request.completed", properties);
-        }
-      }),
-    };
-  }),
-);

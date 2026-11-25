@@ -61,7 +61,6 @@ const layerTest = Layer.mergeAll(
   Layer.succeed(
     MobileStorage.MobileStorage,
     MobileStorage.MobileStorage.of({
-      loadOrCreateAnalyticsDeviceId: Effect.succeed("analytics-device-1"),
       loadOrCreateAgentAwarenessDeviceId: Effect.succeed("device-1"),
       loadAgentAwarenessDeviceId: Effect.succeed("device-1"),
       loadAgentAwarenessRegistrationRecord: Effect.succeed(null),
