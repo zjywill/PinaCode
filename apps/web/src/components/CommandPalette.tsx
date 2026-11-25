@@ -82,7 +82,6 @@ import {
   PinIcon,
   PinOffIcon,
   PlugIcon,
-  MessagesSquareIcon,
   SquarePenIcon,
   TextSearchIcon,
   UserPlusIcon,
@@ -270,6 +269,7 @@ import {
   scrollCommandPaletteRowIntoView,
 } from "./CommandPaletteResults";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
+import pinaAvatarUrl from "../../../../assets/pinacode/pina-avatar.png";
 import { Checkbox } from "./ui/checkbox";
 import { ProjectFilePicker } from "./files/ProjectFilePicker";
 import { openLinkPullRequestDialog } from "./pullRequest/LinkPullRequestDialog";
@@ -1431,7 +1431,7 @@ function OpenCommandPaletteDialog(props: {
       value: "action:open-pina",
       title: PINA_ASSISTANT_NAME,
       searchTerms: ["pina", "assistant", "chat"],
-      icon: <MessagesSquareIcon className={ITEM_ICON_CLASS} />,
+      icon: <img src={pinaAvatarUrl} alt="" className={ITEM_ICON_CLASS} />,
       shortcutCommand: "pina.open",
       run: pina.open,
     });

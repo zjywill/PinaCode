@@ -76,7 +76,6 @@ import {
 
 import {
   AlarmClockIcon,
-  MessagesSquareIcon,
   CheckIcon,
   ChevronDownIcon,
   FolderIcon,
@@ -117,6 +116,7 @@ import { readLocalApi } from "../localApi";
 import { configuredHostedAppUrl } from "../hostedPairing";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
 import { SidebarFolderDrop } from "./sidebar/SidebarFolderDrop";
+import pinaAvatarUrl from "../../../../assets/pinacode/pina-avatar.png";
 import {
   pickableProjectGroups,
   selectProjectGroupingSettings,
@@ -3184,6 +3184,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             {pina && (
               <SidebarMenuButton
                 aria-label={PINA_ASSISTANT_NAME}
+                size="lg"
                 isActive={
                   routeRowRef !== null &&
                   routeRowRef.environmentId === pina.environmentId &&
@@ -3197,8 +3198,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                   void pina.open();
                 }}
               >
-                <MessagesSquareIcon aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate">{PINA_ASSISTANT_NAME}</span>
+                <img src={pinaAvatarUrl} alt="" className="size-8 shrink-0" />
+                <span className="min-w-0 flex-1 truncate text-base font-semibold text-sidebar-foreground">
+                  {PINA_ASSISTANT_NAME}
+                </span>
                 {pinaThread ? (
                   <>
                     {pinaWokeUnseen && (
