@@ -70,15 +70,21 @@ export type DimDriverEnv =
   | ProviderLatestVersions.ProviderLatestVersions;
 
 function dimMaintenance(
-  commandPath: string,
+  settings: DimSettings,
   env: NodeJS.ProcessEnv,
 ): ProviderMaintenanceCapabilitiesResolver {
   return {
     resolve: Effect.fn("Dim.resolveMaintenance")(function* (context) {
       const packageName = "dimcode-alpha";
+      if (settings.socketPath.trim() !== "") {
+        return {
+          ...makeManualOnlyProviderMaintenanceCapabilities({ provider: DRIVER_KIND, packageName }),
+          npmDistTag: "alpha",
+        };
+      }
       const prefix = context
         ? yield* resolveNpmGlobalPrefix(context, packageName)
-        : commandPath.trim() === "dima"
+        : settings.binaryPath.trim() === "dima"
           ? yield* resolveDefaultNpmGlobalPrefix(env)
           : null;
       const capabilities = prefix
@@ -178,7 +184,7 @@ export const DimDriver: ProviderDriver<DimSettings, DimDriverEnv> = {
     >();
     const resolveMaintenance = yield* makeCachedProviderMaintenanceResolution(
       resolveProviderMaintenanceCapabilitiesEffect(
-        dimMaintenance(effectiveConfig.binaryPath, processEnvironment),
+        dimMaintenance(effectiveConfig, processEnvironment),
         { binaryPath: effectiveConfig.binaryPath, env: processEnvironment },
       ).pipe(Effect.provideContext(services)),
     );

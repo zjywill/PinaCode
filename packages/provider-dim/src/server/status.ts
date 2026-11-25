@@ -284,6 +284,7 @@ export const checkDimProviderStatus = Effect.fn("DimProvider.checkStatus")(funct
     checkedAt,
     installed: true,
     version: hello.success.serverVersion,
+    ...(input.settings.socketPath.trim() === "" ? { installedVersion: version } : {}),
     status,
     auth,
     setup: { canInstall: false, canAuthenticate },

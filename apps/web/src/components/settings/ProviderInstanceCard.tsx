@@ -825,7 +825,9 @@ export function ProviderInstanceCard({
     enabled && liveProvider?.auth.status === "authenticated"
       ? (providerAuthLabel(liveProvider.auth, m) ?? null)
       : null;
-  const versionLabel = getProviderVersionLabel(liveProvider?.version);
+  const versionLabel = getProviderVersionLabel(
+    liveProvider?.installedVersion ?? liveProvider?.version,
+  );
   const versionAdvisory = getProviderVersionAdvisoryPresentation(
     liveProvider?.versionAdvisory,
     liveProvider?.compatibilityAdvisory,

@@ -73,6 +73,8 @@ it.live("lists selectable Dim models even when provider.list omits Dim OAuth", (
       },
     });
     assert.strictEqual(snapshot.status, "ready");
+    assert.strictEqual(snapshot.version, hello.serverVersion);
+    assert.strictEqual(snapshot.installedVersion, process.versions.node);
     assert.deepStrictEqual(
       snapshot.models.map(({ slug, subProvider }) => [slug, subProvider]),
       [

@@ -88,17 +88,23 @@ interface VerifiedProviderRefresh {
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
-const OPENCODE_SERVER_RESTART_MESSAGE =
-  "OpenCode CLI updated. Restart the configured local OpenCode server to use the new version.";
-
-const needsOpenCodeServerRestart = (providers: ReadonlyArray<ServerProvider>) =>
-  providers.some(
-    (provider) =>
-      provider.driver === ProviderDriverKind.make("opencode") &&
-      provider.installedVersion != null &&
-      provider.version != null &&
-      provider.installedVersion !== provider.version,
-  );
+function providerRestartMessage(providers: ReadonlyArray<ServerProvider>): string | null {
+  for (const provider of providers) {
+    if (
+      !provider.installedVersion ||
+      !provider.version ||
+      provider.installedVersion === provider.version
+    )
+      continue;
+    if (provider.driver === "opencode") {
+      return "OpenCode CLI updated. Restart the configured local OpenCode server to use the new version.";
+    }
+    if (provider.driver === "dim") {
+      return "Dim CLI updated. Restart the Dim daemon after active sessions finish to use the new version.";
+    }
+  }
+  return null;
+}
 
 const runProviderMaintenanceCommandWithSpawner = Effect.fn("ProviderMaintenanceRunner.runCommand")(
   function* (input: {
@@ -515,7 +521,7 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
                   message:
                     targetVersion !== undefined
                       ? "This version is no longer recommended or this installer cannot install a specific version. Refresh provider settings."
-                      : "The latest provider version is incompatible with this T3 Code release. Review provider settings.",
+                      : "The latest provider version is incompatible with this Pina Code release. Review provider settings.",
                 }),
               );
             }
@@ -548,9 +554,8 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
                     status: "succeeded",
                     startedAt,
                     finishedAt: yield* nowIso,
-                    message: needsOpenCodeServerRestart(precheck.verifiedProviders)
-                      ? OPENCODE_SERVER_RESTART_MESSAGE
-                      : "Already up to date.",
+                    message:
+                      providerRestartMessage(precheck.verifiedProviders) ?? "Already up to date.",
                   }),
                 );
               }
@@ -613,6 +618,8 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
                     : verifiedProvider.version;
                 return (
                   !isStillInstalled(verifiedProvider) ||
+                  (verifiedProvider.driver === "dim" &&
+                    verifiedProvider.installedVersion === null) ||
                   (verifiedProvider.status === "error" &&
                     (verifiedProvider.auth.status !== "unauthenticated" ||
                       !verifiedProvider.version)) ||
@@ -629,12 +636,10 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
                 startedAt,
                 finishedAt,
                 message: couldNotVerify
-                  ? "Update command completed, but T3 Code could not verify the provider version."
+                  ? "Update command completed, but Pina Code could not verify the provider version."
                   : stillOutdated
-                    ? "Update command completed, but T3 Code still detects an outdated provider version."
-                    : needsOpenCodeServerRestart(verifiedProviders)
-                      ? OPENCODE_SERVER_RESTART_MESSAGE
-                      : "Provider updated.",
+                    ? "Update command completed, but Pina Code still detects an outdated provider version."
+                    : (providerRestartMessage(verifiedProviders) ?? "Provider updated."),
                 output: commandOutput(result),
               }),
             );
