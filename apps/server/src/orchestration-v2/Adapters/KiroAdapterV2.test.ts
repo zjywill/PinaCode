@@ -299,6 +299,7 @@ const openSessionFrames = (input: {
 
 const runKiroScript = Effect.fn("runKiroScript")(function* (input: {
   readonly scenario: string;
+  readonly threadId?: ThreadId;
   readonly frames: ReadonlyArray<Frame>;
   readonly model?: string;
   /** Option selections (e.g. reasoningEffort) for the session and `startTurn`. */
@@ -376,7 +377,7 @@ const runKiroScript = Effect.fn("runKiroScript")(function* (input: {
   });
   // Held frames must not outlive a failed drive and wedge teardown.
   yield* Effect.addFinalizer(() => Effect.sync(() => input.replayGate?.releaseAll()));
-  const threadId = ThreadId.make(`thread-kiro-${input.scenario}`);
+  const threadId = input.threadId ?? ThreadId.make(`thread-kiro-${input.scenario}`);
   const modelSelection = {
     instanceId,
     model: input.model ?? "default",
@@ -867,6 +868,42 @@ describe("KiroAdapterV2 agents", () => {
     options: [...modeOption.options, option("reviewer", "reviewer")],
   });
   const agent = (value: string) => [{ id: "mode", value }];
+
+  it.effect("locks Pina to the coordination profile even when another agent is selected", () => {
+    const coordinator = "pinacode-coordinator";
+    const config = (currentValue: string, autopilot: "on" | "off") => [
+      {
+        ...modeOption,
+        currentValue,
+        options: [...modeOption.options, option(coordinator, coordinator)],
+      },
+      kiroModelOption("auto"),
+      autopilotOption(autopilot),
+    ];
+    return runKiroScript({
+      scenario: "pina-coordinator",
+      threadId: ThreadId.make("pina-assistant-scratch-0"),
+      options: agent("spec"),
+      frames: [
+        outbound("initialize"),
+        answer("initialize", KIRO_V3_INITIALIZE),
+        outbound("session/new", { cwd: "<workspace>", mcpServers: "<any>" }),
+        answer("session/new", sessionSetup(config("vibe", "on"))),
+        setConfig("mode", coordinator),
+        configResult(config(coordinator, "on")),
+        setConfig("autopilot", "off"),
+        configResult(config(coordinator, "off")),
+        turnPrompt,
+        answer("session/prompt", { stopReason: "end_turn" }),
+        ...closeSession,
+      ],
+      drive: ({ events, startTurn }) =>
+        Effect.gen(function* () {
+          yield* startTurn;
+          assert.equal(terminalStatus(yield* collectTurn(events)), "completed");
+        }),
+    }).pipe(Effect.provide(testLayer));
+  });
 
   it.effect("selects the thread's agent before its model, which the agent would replace", () =>
     runKiroScript({

@@ -1523,35 +1523,39 @@ const layerToolExposure = Layer.effect(
   }),
 );
 
-const PINA_DIRECT_TOOLS: ReadonlySet<string> = new Set([
+const PINA_COORDINATION_TOOLS: ReadonlySet<string> = new Set([
   "pinacode_thread_list",
   "pinacode_thread_read",
   "pinacode_thread_send",
+  "pinacode_thread_launch",
+  "pinacode_project_list",
+  "pinacode_environment_links",
+  "pinacode_task_status",
+  "pinacode_task_cancel",
+  "pinacode_list_scheduled_tasks",
 ]);
 
 /**
  * A provider session that sends `MCP_TOOL_EXPOSURE_HEADER: deferred` lists only
- * the direct tools and what its `pinacode_tool_search` calls loaded. Calls are never
- * gated, and every other client lists everything but `pinacode_tool_search`.
+ * the direct tools and what its `pinacode_tool_search` calls loaded. Pina can list and call only its coordination tools.
+ * Other clients keep the usual deferred listing or list all tools except search.
  */
 const layerDeferredListing = McpServer.visibility(
   Effect.gen(function* () {
     const exposure = yield* McpToolExposure.McpToolExposure;
     // Untraced: it runs once per tool on every list request.
     return Effect.fnUntraced(function* ({ method, target, headers }: McpServer.MiddlewareOptions) {
-      if (method !== "tools/list") return true;
+      if (method !== "tools/list" && method !== "tools/call") return true;
       const scope = yield* Effect.serviceOption(McpInvocationContext.McpInvocationContext);
       const threadScope = Option.getOrUndefined(scope)?.thread;
+      if (threadScope && isPinaThread(threadScope.threadId))
+        return PINA_COORDINATION_TOOLS.has(target);
+      if (method !== "tools/list") return true;
       const providerSessionId = threadScope?.providerSessionId;
       if (headers[MCP_TOOL_EXPOSURE_HEADER] !== "deferred" || providerSessionId === undefined) {
         return target !== McpToolExposure.TOOL_SEARCH;
       }
-      return (
-        (threadScope !== undefined &&
-          isPinaThread(threadScope.threadId) &&
-          PINA_DIRECT_TOOLS.has(target)) ||
-        exposure.isListed(providerSessionId, target)
-      );
+      return exposure.isListed(providerSessionId, target);
     });
   }),
   { global: true },

@@ -1,6 +1,7 @@
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveSelfInvocation, type SelfInvocation } from "@t3tools/shared/nodeRuntime";
 import {
+  isPinaThread,
   type ModelSelection,
   ProviderDriverKind,
   type OrchestrationV2ProviderCapabilities,
@@ -9,9 +10,9 @@ import { KiroSettings } from "../settings.ts";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
-import type * as FileSystem from "effect/FileSystem";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
-import type * as Path from "effect/Path";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -39,7 +40,7 @@ import type * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
 import type * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
-import type * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
+import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import {
   KIRO_AGENT_CONFIG_ID,
   KIRO_AUTOPILOT_CONFIG_ID,
@@ -53,6 +54,12 @@ import {
 
 export const KIRO_PROVIDER = ProviderDriverKind.make("kiro");
 /** T3's slug for "Kiro default", and Kiro's documented default model id. */
+const PINA_KIRO_AGENT = "pinacode-coordinator";
+const PINA_KIRO_PROFILE = Schema.encodeSync(Schema.fromJsonString(Schema.Json))({
+  name: PINA_KIRO_AGENT,
+  tools: ["@pinacode"],
+  includeMcpJson: false,
+});
 const KIRO_DEFAULT_MODEL = "default";
 const KIRO_COMPACT_METHOD = "_kiro/session/compact";
 const KIRO_STEER_METHOD = "_session/steer";
@@ -311,12 +318,23 @@ const applyKiroEffort = Effect.fn("KiroAdapterV2.applyKiroEffort")(function* (
 const applyKiroAgent = Effect.fn("KiroAdapterV2.applyKiroAgent")(function* (
   runtime: AcpSessionRuntime.AcpSessionRuntime["Service"],
   modelSelection: ModelSelection,
+  coordinator: boolean,
 ) {
-  const requested = getModelSelectionStringOptionValue(modelSelection, KIRO_AGENT_CONFIG_ID);
+  const requested = coordinator
+    ? PINA_KIRO_AGENT
+    : getModelSelectionStringOptionValue(modelSelection, KIRO_AGENT_CONFIG_ID);
   if (requested === undefined) return false;
   const agentOption = (yield* runtime.getConfigOptions).find(
     (option) => option.id === KIRO_AGENT_CONFIG_ID,
   );
+  if (
+    coordinator &&
+    (agentOption?.type !== "select" || !selectValues(agentOption).includes(requested))
+  ) {
+    return yield* EffectAcpErrors.AcpRequestError.internalError(
+      "Kiro could not load Pina's coordination tools.",
+    );
+  }
   if (agentOption?.type !== "select" || agentOption.currentValue === requested) return false;
   if (!selectValues(agentOption).includes(requested)) {
     yield* Effect.logWarning("Kiro does not list the thread's agent", {
@@ -330,8 +348,8 @@ const applyKiroAgent = Effect.fn("KiroAdapterV2.applyKiroAgent")(function* (
 
 const applyKiroModelSelection =
   (defaultModel: Effect.Effect<string>): NonNullable<AcpAdapterV2Flavor["applyModelSelection"]> =>
-  ({ runtime, modelSelection }) =>
-    applyKiroAgent(runtime, modelSelection).pipe(
+  ({ runtime, modelSelection, threadId }) =>
+    applyKiroAgent(runtime, modelSelection, isPinaThread(threadId)).pipe(
       Effect.flatMap((agentSwitched) =>
         applyKiroModel(runtime, modelSelection, defaultModel, agentSwitched),
       ),
@@ -535,13 +553,23 @@ function kiroPromptFailure(cause: unknown) {
   });
 }
 
-function makeKiroAcpAdapterFlavor(options: KiroAdapterV2Options): AcpAdapterV2Flavor {
+function makeKiroAcpAdapterFlavor(
+  options: KiroAdapterV2Options,
+  coordinatorWorkspace: Effect.Effect<string, EffectAcpErrors.AcpError>,
+): AcpAdapterV2Flavor {
   const makeRuntime =
     options.makeRuntime ??
-    ((input: AcpAdapterV2RuntimeInput) => {
-      const { runtimePolicy: _runtimePolicy, processEnvironment, ...runtimeInput } = input;
-      return makeKiroAcpRuntime({
+    Effect.fnUntraced(function* (input: AcpAdapterV2RuntimeInput) {
+      const {
+        runtimePolicy: _runtimePolicy,
+        threadId,
+        processEnvironment,
+        ...runtimeInput
+      } = input;
+      const cwd = threadId && isPinaThread(threadId) ? yield* coordinatorWorkspace : input.cwd;
+      return yield* makeKiroAcpRuntime({
         ...runtimeInput,
+        cwd,
         settings: options.settings,
         environment: { ...options.environment, ...processEnvironment },
       });
@@ -591,9 +619,23 @@ function makeKiroAcpAdapterFlavor(options: KiroAdapterV2Options): AcpAdapterV2Fl
 export const makeKiroAdapterV2 = Effect.fn("makeKiroAdapterV2")(function* (
   options: KiroAdapterV2Options,
 ) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const host = yield* ProviderHost.ProviderHost;
+  const workspace = path.join(host.paths.stateDir, "pina-kiro");
+  const agents = path.join(workspace, ".kiro", "agents");
+  const coordinatorWorkspace = fs.makeDirectory(agents, { recursive: true }).pipe(
+    Effect.andThen(
+      fs.writeFileString(path.join(agents, PINA_KIRO_AGENT + ".json"), PINA_KIRO_PROFILE),
+    ),
+    Effect.as(workspace),
+    Effect.mapError(() =>
+      EffectAcpErrors.AcpRequestError.internalError("Could not prepare Pina's Kiro workspace."),
+    ),
+  );
   return yield* makeAcpAdapterV2({
     instanceId: options.instanceId,
-    flavor: makeKiroAcpAdapterFlavor(options),
+    flavor: makeKiroAcpAdapterFlavor(options, coordinatorWorkspace),
     selfInvocation: options.selfInvocation,
     ...(options.nativeLogging === undefined ? {} : { nativeLogging: options.nativeLogging }),
     ...(options.testHooks === undefined ? {} : { testHooks: options.testHooks }),

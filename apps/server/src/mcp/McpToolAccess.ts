@@ -1,4 +1,5 @@
 import {
+  isPinaThread,
   type EnvironmentId,
   type OrchestrationV2LinkOrigin,
   OrchestratorMcpEnvironmentTarget,
@@ -466,9 +467,15 @@ const routed = Effect.fn("McpToolAccess.routed")(function* <Tools extends Record
     const here = handlers[name] as (
       params: object,
     ) => Effect.Effect<unknown, Tool.Failure<Tools[keyof Tools]>>;
-    handlers[name] = ({ environmentId, ...params }: { readonly environmentId?: EnvironmentId }) =>
+    handlers[name] = ({ environmentId, ...input }: { readonly environmentId?: EnvironmentId }) =>
       Effect.gen(function* () {
         const scope = yield* McpInvocationContext.McpInvocationContext;
+        const params =
+          scope.thread &&
+          isPinaThread(scope.thread.threadId) &&
+          (name === "pinacode_thread_launch" || name === "pinacode_thread_send")
+            ? { ...input, reportBack: true }
+            : input;
         const target = PeerForwarding.remoteTarget(scope, environmentId);
         if (target === undefined) return yield* here(params);
         if (scope.linkedEnvironments === false) return yield* PeerForwarding.linkedEnvironmentsOff;

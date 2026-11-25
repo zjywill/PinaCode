@@ -1996,7 +1996,7 @@ export const layer: Layer.Layer<
         !(manualResume && unsentResumeMessage === undefined) &&
         !acceptedAttempts.some(
           (prior) =>
-            prior.includesPinaInstructions === true &&
+            prior.pinaInstructionsVersion === 2 &&
             (prior.nativeThreadId === undefined
               ? sameNativeThread
               : prior.nativeThreadId === loadedProviderThread.nativeThreadRef?.nativeId),
@@ -2053,7 +2053,9 @@ export const layer: Layer.Layer<
       };
       const runningAttempt: OrchestrationV2RunAttempt = {
         ...attempt,
-        ...(needsPinaContext ? { includesPinaInstructions: true as const } : {}),
+        ...(needsPinaContext
+          ? { includesPinaInstructions: true as const, pinaInstructionsVersion: 2 }
+          : {}),
         ...(runningProviderThread.nativeThreadRef?.nativeId == null
           ? {}
           : { nativeThreadId: runningProviderThread.nativeThreadRef.nativeId }),

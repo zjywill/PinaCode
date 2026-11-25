@@ -44,6 +44,7 @@ import {
   type ServerProviderCompatibilityAdvisory,
   type ServerProviderModel,
   isDelegatedAppThread,
+  isPinaThread,
   ThreadId,
   type TurnItemId,
 } from "@t3tools/contracts";
@@ -1717,6 +1718,14 @@ function codexThreadRuntimeParams(input: {
     ...(input.modelSelection === undefined ? {} : { model: input.modelSelection.model }),
     config: {
       ...CODEX_THREAD_CONFIG,
+      ...(input.threadId && isPinaThread(input.threadId)
+        ? {
+            "features.multi_agent": false,
+            "features.multi_agent_v2": false,
+            "features.shell_tool": false,
+            web_search: "disabled",
+          }
+        : {}),
       // One app-server serves many threads, so the id goes in per-thread shell config, not its env.
       ...(input.threadId === null
         ? {}

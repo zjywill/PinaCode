@@ -852,6 +852,7 @@ const parentScope: McpInvocationContext.McpInvocationScope = {
 const seedParent = (
   laptopEnv: Effect.Success<ReturnType<typeof makeLaptop>>,
   parentModelSelection: ModelSelection = modelSelection,
+  threadId = parentThreadId,
 ) =>
   Effect.gen(function* () {
     const now = yield* DateTime.now;
@@ -861,7 +862,7 @@ const seedParent = (
       createdBy: "user",
       creationSource: "web",
       commandId: CommandId.make("command:create:laptop-parent"),
-      threadId: parentThreadId,
+      threadId,
       projectId: ProjectId.make("project:laptop"),
       title: "Laptop parent",
       modelSelection: parentModelSelection,
@@ -876,7 +877,7 @@ const seedParent = (
         {
           id: EventId.make("event:seed-provider-thread:laptop-parent"),
           type: "provider-thread.updated",
-          threadId: parentThreadId,
+          threadId,
           driver,
           providerInstanceId: instanceId,
           occurredAt: now,
@@ -885,7 +886,7 @@ const seedParent = (
             driver,
             providerInstanceId: instanceId,
             providerSessionId: null,
-            appThreadId: parentThreadId,
+            appThreadId: threadId,
             ownerNodeId: parentRootNode,
             nativeThreadRef: { driver, nativeId: "native:laptop-parent", strength: "strong" },
             nativeConversationHeadRef: null,
@@ -901,7 +902,7 @@ const seedParent = (
         {
           id: EventId.make("event:seed-node:laptop-parent"),
           type: "node.updated",
-          threadId: parentThreadId,
+          threadId,
           runId: parentRunId,
           nodeId: parentRootNode,
           driver,
@@ -909,7 +910,7 @@ const seedParent = (
           occurredAt: now,
           payload: {
             id: parentRootNode,
-            threadId: parentThreadId,
+            threadId,
             runId: parentRunId,
             parentNodeId: null,
             rootNodeId: parentRootNode,
@@ -928,14 +929,14 @@ const seedParent = (
         {
           id: EventId.make("event:seed-run:laptop-parent"),
           type: "run.updated",
-          threadId: parentThreadId,
+          threadId,
           runId: parentRunId,
           nodeId: parentRootNode,
           providerInstanceId: instanceId,
           occurredAt: now,
           payload: {
             id: parentRunId,
-            threadId: parentThreadId,
+            threadId,
             ordinal: 1,
             providerInstanceId: instanceId,
             modelSelection: parentModelSelection,
@@ -3000,6 +3001,61 @@ const finishOther = (
       ],
     });
   });
+
+it.effect.each(["pinacode_thread_launch", "pinacode_thread_send"] as const)(
+  "Pina receives the ordinary project's result automatically after %s",
+  (tool) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const offers = yield* SubscriptionRef.make<
+          ReadonlyArray<ProviderContinuationRequests.ProviderContinuationRequest>
+        >([]);
+        const database = yield* SqlitePersistence.layerMemory.pipe(Layer.build);
+        const follow = yield* Deferred.make<void>();
+        const a = yield* makeLaptop(database, offers, undefined, Deferred.await(follow));
+        const threadId = ThreadId.make("pina-assistant-scratch-0");
+        yield* seedParent(a, modelSelection, threadId);
+        yield* seedOtherProjectThread(a);
+        const destination =
+          tool === "pinacode_thread_launch"
+            ? { projectId: "project:elsewhere", title: "Review the issues" }
+            : { threadId: otherThreadId, reportBack: false };
+        const result = yield* a.call(
+          tool,
+          {
+            ...destination,
+            message: "Review the issues",
+            clientRequestId: "pina-dispatch",
+          },
+          { ...parentScope, thread: { ...parentScope.thread!, threadId } },
+        );
+        expect(result.isError, JSON.stringify(result.content)).toBe(false);
+        const { taskId } = result.structuredContent as { taskId: NodeId };
+        expect(taskId).toBeDefined();
+        const parent = yield* a.orchestrator.getThreadProjection(threadId);
+        expect(parent.subagents).toHaveLength(1);
+        const task = parent.subagents[0]!;
+        expect(task).toMatchObject({ id: taskId, childThreadId: null });
+        const child = task.remoteChild!;
+        yield* finishOther(a, parentRunId, "Dispatched.", threadId);
+        yield* finishOther(a, child.runId!, "Two issues remain open.", child.threadId);
+        yield* Deferred.succeed(follow, undefined);
+        yield* SubscriptionRef.changes(offers).pipe(
+          Stream.filter((seen) => seen.some((offer) => offer.threadId === threadId)),
+          Stream.runHead,
+        );
+        const updated = yield* a.orchestrator.getThreadProjection(threadId);
+        expect(updated.subagents[0]).toMatchObject({
+          status: "completed",
+          result: "Two issues remain open.",
+        });
+        expect(
+          updated.runs.find((run) => run.id === parentRunId)?.delegatedCompletion?.delivery
+            ?.taskIds,
+        ).toEqual([taskId]);
+      }),
+    ).pipe(Effect.provide(NodeHttpServer.layerTest)),
+);
 
 it.effect("a send with reportBack to another project here wakes the parent with its result", () =>
   Effect.scoped(

@@ -248,6 +248,7 @@ const ACP_PROMPT_ACTIVITY_UPDATES: ReadonlySet<string> = new Set([
 ]);
 
 export interface AcpAdapterV2RuntimeInput {
+  readonly threadId?: ThreadId;
   readonly cwd: string;
   readonly runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy;
   readonly extraRoots?: ReadonlyArray<string>;
@@ -523,6 +524,7 @@ export interface AcpAdapterV2Flavor {
     session: AcpSessionRuntime.AcpSessionRuntimeStartResult,
   ) => number | undefined;
   readonly applyModelSelection?: (input: {
+    readonly threadId: ThreadId;
     readonly runtime: AcpSessionRuntime.AcpSessionRuntime["Service"];
     readonly startResult: AcpSessionRuntime.AcpSessionRuntimeStartResult;
     readonly modelSelection: ModelSelection;
@@ -2965,6 +2967,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
             handleRuntimeTerminationAtGeneration(runtimeGeneration),
         ): AcpAdapterV2RuntimeInput => {
           return {
+            threadId: input.threadId,
             cwd: input.runtimePolicy.cwd ?? process.cwd(),
             runtimePolicy: input.runtimePolicy,
             ...(input.runtimePolicy.workspace === undefined
@@ -8359,6 +8362,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
           if (flavor.applyModelSelection !== undefined) {
             appliedModel = yield* flavor
               .applyModelSelection({
+                threadId: input.threadId,
                 runtime,
                 startResult,
                 modelSelection,

@@ -123,7 +123,10 @@ it("omits the project breadcrumb only for the dedicated Pina thread", async () =
   };
   await using screen = await render(header("Pina", pinaThreadId(project.id, 0), project));
   const breadcrumb = screen.getByRole("navigation", { name: "Thread breadcrumb" });
-  await expect.element(breadcrumb).toHaveTextContent(/^Pina$/);
+  await expect.element(breadcrumb.getByRole("heading", { name: "Pina" })).toBeVisible();
+  expect(breadcrumb.element().querySelectorAll("li")).toHaveLength(1);
   await screen.rerender(header("Pina", ThreadId.make("ordinary"), project));
-  await expect.element(breadcrumb).toHaveTextContent(/No project.*\/.*Pina/);
+  await expect
+    .element(breadcrumb.getByRole("button", { name: "New thread in No project" }))
+    .toBeVisible();
 });

@@ -2145,13 +2145,15 @@ it.effect(
         const pina = yield* session("pinaToken", true);
         const other = yield* session("otherToken", false);
         expect(yield* deferring.listed).toEqual(["pinacode_delegate_task", "pinacode_tool_search"]);
-        expect(yield* pina.listed).toEqual([
-          "pinacode_delegate_task",
-          "pinacode_thread_list",
-          "pinacode_thread_read",
-          "pinacode_thread_send",
-          "pinacode_tool_search",
-        ]);
+        for (const coordinator of [pina, yield* session("pinaToken", false)]) {
+          expect(yield* coordinator.listed).toEqual([
+            "pinacode_thread_list",
+            "pinacode_thread_read",
+            "pinacode_thread_send",
+          ]);
+          expect(yield* coordinator.call("pinacode_delegate_task", {})).toBeUndefined();
+          expect(yield* coordinator.call("pinacode_preview_open", {})).toBeUndefined();
+        }
         expect(yield* other.listed).toEqual([
           "pinacode_delegate_task",
           "pinacode_preview_open",

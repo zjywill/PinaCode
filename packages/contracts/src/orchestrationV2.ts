@@ -876,6 +876,7 @@ export const OrchestrationV2RunAttempt = Schema.Struct({
   // Provider-thread rows can be reused after recovery; retain the native input destination.
   nativeThreadId: Schema.optional(Schema.String),
   includesPinaInstructions: Schema.optional(Schema.Literal(true)),
+  pinaInstructionsVersion: Schema.optional(PositiveInt),
   runId: RunId,
   attemptOrdinal: PositiveInt,
   rootNodeId: NodeId,
