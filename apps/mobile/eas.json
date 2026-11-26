@@ -59,7 +59,7 @@
     "testflight": {
       "extends": "production",
       "env": {
-        "T3CODE_MOBILE_VERSION": "1.0.10"
+        "T3CODE_MOBILE_VERSION": "1.0.11"
       }
     },
     "production": {
