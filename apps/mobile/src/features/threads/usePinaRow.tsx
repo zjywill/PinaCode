@@ -20,6 +20,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { PinaAvatar } from "../../components/PinaAvatar";
 import { AppText as Text } from "../../components/ui/AppText";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import * as Dialog from "../../components/ui/Dialog";
@@ -133,14 +134,10 @@ export function usePinaRow(props: {
         disabled: pina.opening,
         selected,
       }}
-      className={`${props.horizontalMargin === false ? "" : "mx-2 "}min-h-12 flex-row items-center gap-3 rounded-xl px-3 ${selected ? "bg-thread-selected" : "active:bg-thread-hover"}`}
+      className={`${props.horizontalMargin === false ? "" : "mx-2 "}min-h-14 flex-row items-center gap-3 rounded-xl px-3 ${selected ? "bg-thread-selected" : "active:bg-thread-hover"}`}
       onPress={() => void pina.open()}
     >
-      <SymbolView
-        name="bubble.left.and.bubble.right"
-        size={20}
-        tintColorClassName={selected ? "accent-thread-selected-foreground" : "accent-icon-muted"}
-      />
+      <PinaAvatar size={32} />
       <Text
         className={`min-w-0 flex-1 text-base font-semibold ${selected ? "text-thread-selected-foreground" : "text-drawer-foreground"}`}
         numberOfLines={1}

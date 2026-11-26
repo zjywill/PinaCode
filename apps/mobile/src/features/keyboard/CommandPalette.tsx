@@ -39,6 +39,7 @@ import {
 
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
+import { PinaAvatar } from "../../components/PinaAvatar";
 import { ProjectFavicon } from "../../components/ProjectFavicon";
 import { GlassSurface } from "../../components/ui/GlassSurface";
 import { RowPressable } from "../../components/ui/RowPressable";
@@ -144,7 +145,9 @@ function PaletteRow(props: {
       style={{ height: ROW_HEIGHT }}
     >
       <View className="w-7 items-center">
-        {props.item.project ? (
+        {props.item.key === "pina" ? (
+          <PinaAvatar size={20} />
+        ) : props.item.project ? (
           <ProjectFavicon
             environmentId={props.item.project.environmentId}
             faviconPath={props.item.project.faviconPath}
