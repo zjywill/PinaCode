@@ -530,10 +530,12 @@ const connectLinkCommand = Command.make("link", {
         yield* Console.log("T3 Connect\n");
         const linked = yield* linkEnvironmentForConnect({});
         if (linked) {
-          const serveCommand = yield* resolveHostCliHint("serve", flags.baseDir);
-          yield* Console.log(
-            `✓ Authorized${connectedAs(linked.identity)}\n\nNext\n  Start the server with \`${serveCommand}\` to make this machine reachable.`,
-          );
+          const config = yield* ServerConfig.ServerConfig;
+          const running = yield* readLiveServerRuntimeState(config.serverRuntimeStatePath);
+          const next = Option.isSome(running)
+            ? `A Pina Code server is already running. Restart it to make this machine reachable: run \`${yield* resolveHostCliHint("service restart", flags.baseDir)}\` for the background service, or stop the server and start it again.`
+            : `Start the server with \`${yield* resolveHostCliHint("serve", flags.baseDir)}\` to make this machine reachable.`;
+          yield* Console.log(`✓ Authorized${connectedAs(linked.identity)}\n\nNext\n  ${next}`);
         }
       }),
     ),
