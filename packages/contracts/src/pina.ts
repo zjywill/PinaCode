@@ -1,4 +1,5 @@
 import { ThreadId, type ProjectId } from "./baseSchemas.ts";
+import type { OrchestrationV2AppThread } from "./orchestrationV2.ts";
 
 export const PINA_ASSISTANT_NAME = "Pina";
 const PINA_THREAD_PREFIX = "pina-assistant-";
@@ -6,3 +7,23 @@ const PINA_THREAD_ID = new RegExp(`^${PINA_THREAD_PREFIX}.+-(?:0|[1-9][0-9]*)$`,
 export const pinaThreadId = (projectId: ProjectId, generation: number) =>
   ThreadId.make(`${PINA_THREAD_PREFIX}${projectId}-${generation}`);
 export const isPinaThread = (threadId: ThreadId) => PINA_THREAD_ID.test(threadId);
+
+/** A user's ordinary project conversation, including a user-created fork. */
+export function reportsTurnsToPina(
+  thread: Pick<
+    OrchestrationV2AppThread,
+    "id" | "createdBy" | "lineage" | "delegatedFrom" | "linkOrigin" | "workflowRun"
+  >,
+) {
+  return (
+    thread.createdBy === "user" &&
+    !isPinaThread(thread.id) &&
+    !thread.lineage.sideChat &&
+    !thread.lineage.workflowStep &&
+    (thread.lineage.relationshipToParent === null ||
+      thread.lineage.relationshipToParent === "fork") &&
+    !thread.delegatedFrom &&
+    !thread.linkOrigin &&
+    !thread.workflowRun
+  );
+}

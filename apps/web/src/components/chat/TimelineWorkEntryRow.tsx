@@ -238,22 +238,30 @@ type WorkEntryRowProps = {
 export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: WorkEntryRowProps) {
   const ctx = use(TimelineRowCtx);
   const item = props.workEntry.projectedItem?.item;
-  const childThreadId =
-    item?.type === "notification" ? notificationChildThreadId(item.source) : undefined;
-  if (item?.type !== "notification" || childThreadId === undefined) {
-    return <WorkEntryLogRow {...props} />;
-  }
+  const fallback = <WorkEntryLogRow {...props} />;
+  if (item?.type !== "notification") return fallback;
+  const childThreadId = notificationChildThreadId(item.source);
+  const taskIds = item.source.kind === "delegated_task" ? item.source.taskIds : [];
+  if (!childThreadId && taskIds.length === 0) return fallback;
+  const combined = taskIds.length > 1;
   return (
-    <SubagentNotificationLink
-      parentRef={scopeThreadRef(ctx.activeThreadEnvironmentId, item.threadId)}
-      childThreadId={childThreadId}
-      taskIds={item.source.kind === "delegated_task" ? item.source.taskIds : undefined}
-      outcome={item.outcome}
-      createdAt={props.workEntry.createdAt}
-      timestampFormat={ctx.timestampFormat}
-      onOpenThread={ctx.onOpenThread}
-      fallback={<WorkEntryLogRow {...props} />}
-    />
+    <>
+      {combined ? fallback : null}
+      {(taskIds.length ? taskIds : [undefined]).map((taskId) => (
+        <SubagentNotificationLink
+          key={taskId ?? childThreadId}
+          parentRef={scopeThreadRef(ctx.activeThreadEnvironmentId, item.threadId)}
+          childThreadId={childThreadId}
+          taskId={taskId}
+          combined={combined}
+          outcome={item.outcome}
+          createdAt={props.workEntry.createdAt}
+          timestampFormat={ctx.timestampFormat}
+          onOpenThread={ctx.onOpenThread}
+          fallback={combined ? null : fallback}
+        />
+      ))}
+    </>
   );
 });
 
@@ -301,6 +309,12 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
     workEntry.projectedItem?.item.type === "thread_created"
       ? workEntry.projectedItem.item
       : undefined;
+  const notification = workEntry.projectedItem?.item;
+  const reportingThreadId =
+    notification?.type === "notification" && notification.source.kind === "system"
+      ? notification.source.reportingThreadId
+      : undefined;
+  const openChatThreadId = createdThread?.targetThreadId ?? reportingThreadId;
   const notifiedSubagentThreadId =
     workEntry.projectedItem?.item.type === "notification"
       ? notificationChildThreadId(workEntry.projectedItem.item.source)
@@ -652,18 +666,20 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
               timestampFormat={timestampFormat}
             />
           ) : null}
-          {createdThread ? (
+          {openChatThreadId ? (
             <button
               type="button"
               className="shrink-0 rounded-sm text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               aria-label={
-                createdThread.title != null
+                createdThread?.title != null
                   ? gt("Open {title}", { title: createdThread.title })
-                  : gt("Open created thread")
+                  : reportingThreadId
+                    ? gt("Open chat")
+                    : gt("Open created thread")
               }
               onClick={(event) => {
                 event.stopPropagation();
-                ctx.onOpenThread(createdThread.targetThreadId);
+                ctx.onOpenThread(openChatThreadId);
               }}
               onKeyDown={stopRowToggle}
             >

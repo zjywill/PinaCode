@@ -1507,7 +1507,7 @@ export const OrchestrationV2NotificationSource = kindUnionWithFallback(
       otherPullRequests: Schema.optional(Schema.Array(MonitorPullRequestStamp)),
     }),
     Schema.Struct({ kind: Schema.Literal("background_task") }),
-    Schema.Struct({ kind: Schema.Literal("system") }),
+    Schema.Struct({ kind: Schema.Literal("system"), reportingThreadId: Schema.optional(ThreadId) }),
   ],
   (kind) => Schema.Struct({ kind }),
   () => ({ kind: "background_task" }),

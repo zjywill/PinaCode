@@ -7,7 +7,11 @@ import type { ThreadPreviewState } from "../../previewStateStore";
 import { formatFilePathForClipboard } from "@t3tools/client-runtime/media-actions";
 import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
 import { useStableCallback } from "../../hooks/useStableCallback";
-import { type ScopedThreadRef, type PreviewSessionSnapshot } from "@t3tools/contracts";
+import {
+  isPinaThread,
+  type ScopedThreadRef,
+  type PreviewSessionSnapshot,
+} from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { sideThreadComposer, sideThreadKindOf } from "@t3tools/client-runtime/side-thread";
 import { readThreadShell } from "../../state/entities";
@@ -248,7 +252,7 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
   };
   const toggleRightPanelStable = useStableCallback(toggleRightPanel);
   const toggleThreadPanel = () => {
-    if (!activeThreadRef) return;
+    if (!activeThreadRef || isPinaThread(activeThreadRef.threadId)) return false;
     const store = useRightPanelStore.getState();
     if (threadPanelPresentation === "inline") {
       const open = selectThreadPanelOpen(
@@ -329,7 +333,7 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     "rightPanel.toggleMaximized": ({ event }) => {
       if (!event.repeat) toggleRightPanelMaximized();
     },
-    "threadPanel.toggle": () => toggleThreadPanel(),
+    "threadPanel.toggle": toggleThreadPanel,
     "rightPanel.close": ({ event }) => {
       if (!activeRightPanelSurface) return false;
       if (!event.repeat) closeRightPanelSurface(activeRightPanelSurface);

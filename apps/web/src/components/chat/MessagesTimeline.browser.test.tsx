@@ -407,7 +407,30 @@ describe("MessagesTimeline work rows", () => {
     await vi.waitFor(() => expect(distanceFromEnd()).toBeLessThan(2));
   });
 
-  it.each(["delegated", "legacy", "missing"] as const)(
+  it("opens the source chat of a manual session report", async () => {
+    setup();
+    const reportingThreadId = ThreadId.make("manual-source");
+    const onOpenThread = vi.fn();
+    await using screen = await renderTimeline(
+      [
+        work("session-report", {
+          label: "Session completed",
+          tone: "info",
+          itemType: "notification",
+          projectedItem: v2Item("notification", {
+            source: { kind: "system", reportingThreadId },
+            outcome: "completed",
+            summary: "Session completed",
+          }),
+        }),
+      ],
+      { onOpenThread },
+    );
+    await click(screen.buttons("Open chat")[0]!);
+    expect(onOpenThread).toHaveBeenCalledWith(reportingThreadId);
+  });
+
+  it.each(["delegated", "batch", "remote", "legacy", "missing"] as const)(
     "uses the reported task for %s completion notifications",
     async (source) => {
       setup();
@@ -442,6 +465,15 @@ describe("MessagesTimeline work rows", () => {
         task("original", "interrupted", "Old interrupted progress"),
         task("continued", "completed", "Final implementation report"),
         task("follow-up", "completed", "Follow-up explanation"),
+        {
+          ...task("remote", "completed", "Linked task report"),
+          childThreadId: null,
+          remoteChild: {
+            environmentId: EnvironmentId.make("peer"),
+            threadId: childThreadId,
+            label: "Peer",
+          },
+        },
       ];
       using _threadAtom = vi.spyOn(environmentThreadDetails, "threadAtom").mockReturnValue(
         Atom.make({
@@ -460,7 +492,14 @@ describe("MessagesTimeline work rows", () => {
               source:
                 source === "legacy"
                   ? { kind: "subagent", childThreadId }
-                  : { kind: "delegated_task", childThreadId, taskIds: [NodeId.make(id)] },
+                  : source === "batch"
+                    ? {
+                        kind: "delegated_task",
+                        taskIds: [NodeId.make("continued"), NodeId.make("follow-up")],
+                      }
+                    : source === "remote"
+                      ? { kind: "delegated_task", taskIds: [NodeId.make("remote")] }
+                      : { kind: "delegated_task", childThreadId, taskIds: [NodeId.make(id)] },
               outcome: "completed",
               summary: "Notification fallback",
             }),
@@ -468,7 +507,10 @@ describe("MessagesTimeline work rows", () => {
         ),
         { onOpenThread },
       );
-      if (source === "delegated") {
+      if (source === "remote") {
+        expect(screen.text()).toContain("Linked task report");
+        expect(screen.buttons("Open Simplify delivery")).toHaveLength(1);
+      } else if (source === "delegated" || source === "batch") {
         expect(screen.text()).toContain("Final implementation report");
         expect(screen.text()).toContain("Follow-up explanation");
         expect(screen.text()).not.toContain("Old interrupted progress");

@@ -3,6 +3,8 @@ import {
   type RunId,
   idleCompactionOf,
   isProviderAvailable,
+  isPinaThread,
+  reportsTurnsToPina,
   MessageId,
   type ModelSelection,
   NodeId,
@@ -3852,7 +3854,12 @@ const make = Effect.gen(function* () {
       yield* assertTargetWithinLimits(limits, target.thread);
 
       // A reported turn is its own run, so its result answers only this message.
-      const mode = input.reportBack === true ? "queue" : (input.mode ?? "auto");
+      const reportBack =
+        input.reportBack === true ||
+        (parent !== undefined &&
+          isPinaThread(parent.thread.id) &&
+          reportsTurnsToPina(target.thread));
+      const mode = reportBack ? "queue" : (input.mode ?? "auto");
       const key = yield* requestKey(input.clientRequestId);
       const messageId = stableOperationMessageId({
         scope,
@@ -3902,11 +3909,14 @@ const make = Effect.gen(function* () {
         delivery: result.delivery,
       } satisfies OrchestratorMcpThreadSendResult;
       // A thread in another project has no parent here; the caller's task follows it.
-      return input.reportBack !== true ||
-        parent === undefined ||
-        target.thread.id === parent.thread.id
+      return !reportBack || parent === undefined || target.thread.id === parent.thread.id
         ? sent
-        : yield* remoteDelegation.followUp(scope, scope.environmentId, input, sent);
+        : yield* remoteDelegation.followUp(
+            scope,
+            scope.environmentId,
+            { ...input, reportBack },
+            sent,
+          );
     }),
     waitForThread: Effect.fn("OrchestratorMcpService.waitForThread")(function* (scope, input) {
       const { parent, target } = yield* loadScopedThread(scope, input.threadId, []);

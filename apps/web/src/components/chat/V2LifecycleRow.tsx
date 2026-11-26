@@ -377,8 +377,9 @@ const NOTIFICATION_OUTCOME_LABEL: Record<OrchestrationV2Notification["outcome"],
 
 export function SubagentNotificationLink(props: {
   readonly parentRef: ScopedThreadRef;
-  readonly childThreadId: ThreadId;
-  readonly taskIds?: ReadonlyArray<NodeId> | undefined;
+  readonly childThreadId: ThreadId | undefined;
+  readonly taskId: NodeId | undefined;
+  readonly combined: boolean;
   readonly outcome: OrchestrationV2Notification["outcome"];
   readonly createdAt: string;
   readonly timestampFormat: TimestampFormat;
@@ -396,12 +397,12 @@ export function SubagentNotificationLink(props: {
     environmentThreadDetails.threadAtom(props.parentRef),
     (thread) =>
       thread?.projection.subagents.find((agent) =>
-        props.taskIds === undefined
+        props.taskId === undefined
           ? agent.childThreadId === props.childThreadId
-          : props.taskIds.includes(agent.id),
+          : agent.id === props.taskId,
       ) ?? null,
   );
-  if (agent === null) return props.fallback;
+  if (agent === null || (agent.childThreadId === null && !agent.remoteChild)) return props.fallback;
   const resumed =
     NOTIFICATION_OUTCOME_STATUS[props.outcome] !== null &&
     subagentResumedSince(agent, props.createdAt);
@@ -418,9 +419,10 @@ export function SubagentNotificationLink(props: {
       progress={agent.progress}
       startedAt={agent.startedAt}
       completedAt={agent.completedAt}
-      threadId={props.childThreadId}
+      threadId={agent.childThreadId}
+      remote={agent.remoteChild}
       onOpenThread={props.onOpenThread}
-      {...(resumed
+      {...(resumed || props.combined
         ? {}
         : {
             event: {

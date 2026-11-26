@@ -667,11 +667,15 @@ it("opens Pina without adding the previous thread to its composer", async () => 
   await router.load();
   await using _app = await render(<AppRoot router={router} />, { router: false });
   await expect.element(page.getByText(`Answer 0 for ${source.id}.`)).toBeVisible();
+  const panelToggle = page.getByRole("button", { name: "Toggle thread details panel" });
+  await expect.element(panelToggle).toBeVisible();
   await page.getByRole("button", { name: "Pina", exact: true }).click();
   await expect.element(page.getByText(`Answer 0 for ${pina.id}.`), { timeout: 3000 }).toBeVisible();
   expect(useUiStateStore.getState().sidebarProjectScopeKeys).toEqual([
     `${ENVIRONMENT_ID}:${PROJECT_ID}`,
   ]);
+  await expect.element(panelToggle).not.toBeInTheDocument();
+  expect(document.querySelector("[data-thread-details-card]")).toBeNull();
   const editor = page.getByRole("textbox", { name: "Message Pina", exact: true });
   await editor.click();
   const pinaRef = scopeThreadRef(ENVIRONMENT_ID, pina.id);
@@ -693,6 +697,62 @@ it("opens Pina without adding the previous thread to its composer", async () => 
   for (const name of ["Pin thread", "Regenerate title", "Turn into project"]) {
     await expect.element(page.getByRole("menuitem", { name })).not.toBeInTheDocument();
   }
+});
+
+it("opens Pina’s delegated tasks from the header and prioritizes a pending question", async () => {
+  await page.viewport(1400, 900);
+  const style = document.createElement("style");
+  style.textContent = stylesheet;
+  document.head.append(style);
+  using _style = { [Symbol.dispose]: () => style.remove() };
+  const pina = { ...threadWithHistory(pinaThreadId(PROJECT_ID, 0), 1), title: "Pina" };
+  const child = threadWithQuestion("review", "Which branch should I review?");
+  const running = {
+    ...child,
+    title: "Review changes",
+    delegatedBy: pina.id,
+    runtimeRequests: [],
+    runs: child.runs.map((run) => ({ ...run, status: "running" as const, completedAt: null })),
+  };
+  const ordinary = threadWithHistory("pina-manual-session", 1);
+  const manual = {
+    ...ordinary,
+    title: "Manual session",
+    runs: ordinary.runs.map((run) => ({ ...run, status: "running" as const, completedAt: null })),
+  };
+  using _environment = installFakeEnvironment([pina, running, manual]);
+  __setClientSettingsForTests({
+    ...DEFAULT_CLIENT_SETTINGS,
+    onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+  });
+  const router = getRouter(
+    createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${pina.id}`] }),
+  );
+  await router.load();
+  await using _app = await render(<AppRoot router={router} />, { router: false });
+  const header = page.getByRole("navigation", { name: "Thread breadcrumb" });
+  await expect.element(header.getByRole("button", { name: "2 tasks in progress" })).toBeVisible();
+  using _waiting = installFakeEnvironment([
+    pina,
+    { ...running, runtimeRequests: child.runtimeRequests ?? [] },
+    manual,
+  ]);
+  await header.getByRole("button", { name: "1 task needs input" }).click();
+  await expect
+    .element(page.getByText("Subagent needs input", { exact: true }))
+    .not.toBeInTheDocument();
+  const task = page.getByRole("menuitem", { name: /Review changes/ });
+  await expect.element(task).toBeVisible();
+  await expect.element(page.getByRole("menuitem", { name: /Manual session/ })).toBeVisible();
+  await task.click();
+  await expect.element(page.getByText(`Answer 0 for ${child.id}.`)).toBeVisible();
+  await router.navigate({
+    to: "/$environmentId/$threadId",
+    params: { environmentId: ENVIRONMENT_ID, threadId: pina.id },
+  });
+  await expect.element(header.getByRole("button", { name: "1 task needs input" })).toBeVisible();
+  using _done = installFakeEnvironment([pina, { ...child, delegatedBy: pina.id }]);
+  await expect.element(header.getByRole("button", { name: /1 task/ })).not.toBeInTheDocument();
 });
 
 it("retains each thread's diff selection when returning from another thread or Settings", async () => {

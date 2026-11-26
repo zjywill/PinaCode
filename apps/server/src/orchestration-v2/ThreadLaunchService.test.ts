@@ -22,6 +22,8 @@ import {
   CommandId,
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
+  EventId,
+  pinaThreadId,
   GitCommandError,
   MessageId,
   RunId,
@@ -55,6 +57,10 @@ import * as TestClock from "effect/testing/TestClock";
 import * as GitWorkflow from "../git/GitWorkflowService.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ProjectStore from "./ProjectStore.ts";
+import * as PinaTurnReports from "./PinaTurnReports.ts";
+import * as EventSink from "./EventSink.ts";
+import { layerEventSink } from "./runtimeStores.ts";
+import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ProjectSetupScriptRunner from "../project/ProjectSetupScriptRunner.ts";
 import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
@@ -1264,6 +1270,156 @@ it.effect("opens one Pina history across concurrent clients, archive and deletio
     assert.deepEqual(yield* launches.openPina(), replacement);
   }).pipe(Effect.provide(harness.layer));
 });
+
+it.effect(
+  "reports each manual turn to Pina once across restarts and skips previously finished work",
+  () => {
+    const harness = scratchHarness();
+    const layer = Layer.mergeAll(
+      harness.layer,
+      Layer.mergeAll(ProjectionStore.layer, CommandReceiptStore.layer, layerEventSink).pipe(
+        Layer.provide(SqlitePersistence.layerMemory),
+      ),
+    );
+    return Effect.gen(function* () {
+      const threads = yield* ThreadManagement.ThreadManagementService;
+      const sink = yield* EventSink.EventSinkV2;
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const sql = yield* SqlClient.SqlClient;
+      const reports = yield* PinaTurnReports.make;
+      const threadId = ThreadId.make("manual-report-test");
+      const pinaId = pinaThreadId(projectId, 0);
+      yield* threads.dispatch({
+        type: "thread.create",
+        threadId,
+        projectId,
+        title: "Manual session",
+        createdBy: "user",
+        creationSource: "mobile",
+        branch: null,
+        worktreePath: null,
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        commandId: CommandId.make("manual-report-create"),
+      });
+      const afterUpgrade = DateTime.makeUnsafe("2099-01-02T00:00:00Z");
+      const finish = Effect.fnUntraced(function* (
+        id: string,
+        ordinal: number,
+        status: "completed" | "failed",
+        old = false,
+        sender?: ThreadId,
+      ) {
+        const runId = RunId.make(id);
+        const now = old ? DateTime.makeUnsafe("2000-01-01T00:00:00Z") : afterUpgrade;
+        const messageId = MessageId.make("prompt-" + id);
+        const actor = sender ? ("agent" as const) : ("user" as const);
+        const events = yield* sink.write({
+          events: [
+            {
+              id: EventId.make("prompt-event-" + id),
+              type: "message.updated",
+              threadId,
+              runId,
+              occurredAt: now,
+              payload: {
+                id: messageId,
+                threadId,
+                runId,
+                nodeId: null,
+                role: "user",
+                text: "Check",
+                streaming: false,
+                attachments: [],
+                createdAt: now,
+                updatedAt: now,
+                createdBy: actor,
+                creationSource: sender ? "mcp" : "mobile",
+                ...(sender ? { senderThreadId: sender } : {}),
+              },
+            },
+            {
+              id: EventId.make("answer-event-" + id),
+              type: "message.updated",
+              threadId,
+              runId,
+              occurredAt: now,
+              payload: {
+                id: MessageId.make("answer-" + id),
+                threadId,
+                runId,
+                nodeId: null,
+                role: "assistant",
+                text: "Result for " + id,
+                streaming: false,
+                attachments: [],
+                createdAt: now,
+                updatedAt: now,
+                createdBy: "agent",
+                creationSource: "provider",
+              },
+            },
+            {
+              id: EventId.make("finish-" + id),
+              type: "run.updated",
+              threadId,
+              runId,
+              occurredAt: now,
+              payload: {
+                id: runId,
+                threadId,
+                ordinal,
+                providerInstanceId: modelSelection.instanceId,
+                modelSelection,
+                providerThreadId: null,
+                userMessageId: messageId,
+                rootNodeId: null,
+                activeAttemptId: null,
+                status,
+                requestedAt: now,
+                startedAt: now,
+                completedAt: now,
+                checkpointId: null,
+                contextHandoffId: null,
+              },
+            },
+          ],
+        });
+        return events[events.length - 1]!.sequence;
+      });
+      const catchUp = (sequence: number) =>
+        reports.pipe(
+          Stream.takeUntil((event) => event.sequence === sequence),
+          Stream.runDrain,
+        );
+      yield* finish("before-upgrade", 1, "completed", true);
+      yield* catchUp(yield* finish("mobile-first", 2, "completed"));
+      yield* finish("already-delegated", 3, "completed", false, pinaId);
+      const last = yield* finish("mobile-followup", 4, "failed");
+      yield* catchUp(last);
+      // A crash after dispatch but before saving the cursor replays the same reports.
+      yield* sql`UPDATE pina_turn_report_cursor SET last_sequence = 0 WHERE id = 1`;
+      yield* catchUp(last);
+      const { messages } = yield* projections.getThreadRecords(pinaId, ["messages"]);
+      const received = messages.filter((message) => message.senderThreadId === threadId);
+      assert.deepEqual(received.map((m) => m.notification?.outcome).sort(), [
+        "completed",
+        "failed",
+      ]);
+      assert.isTrue(
+        received.some(
+          (message) =>
+            message.text.includes("Result for mobile-first") &&
+            message.text.includes("Manual session"),
+        ),
+      );
+      assert.isTrue(
+        received.some((message) => message.text.includes("Result for mobile-followup")),
+      );
+    }).pipe(Effect.provide(layer));
+  },
+);
 
 const worktreeStrategy = { type: "worktree", baseRef: "main", startFromOrigin: true } as const;
 

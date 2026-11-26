@@ -106,6 +106,7 @@ interface ThreadLifecycleInput {
   readonly clientSettingsHydrated: boolean;
   readonly activeThread: EnvironmentThreadShell | undefined;
   readonly activeThreadId: ThreadId | null;
+  readonly embedded?: boolean;
   readonly activeThreadRef: ScopedThreadRef | null;
   /** Null until the thread's detail may load; see resolveThreadDetailRef. */
   readonly threadDetailRef: ScopedThreadRef | null;
@@ -534,7 +535,10 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
   const childThreadInputs = useChildThreadInputs(activeThreadRef);
   const childInputNow = childInputNowItem(
     {
-      childThreadInputs,
+      childThreadInputs:
+        !input.embedded && activeThreadId && isPinaThread(activeThreadId)
+          ? childThreadInputs.filter((child) => child.lineage.sideChat)
+          : childThreadInputs,
       parentAwaitingUser: Boolean(
         activePendingApproval || activePendingUserInput || activeThreadShell?.hasPendingUserInput,
       ),

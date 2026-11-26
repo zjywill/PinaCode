@@ -237,6 +237,7 @@ export interface FakeThread {
   readonly sideChatOf?: ThreadId;
   /** Makes this a subagent the provider started under that thread, which takes no messages. */
   readonly providerSubagentOf?: ThreadId;
+  readonly delegatedBy?: ThreadId;
   /** Makes this an older settled thread the shell leaves out; only its family read returns it. */
   readonly olderSettled?: true;
   readonly id: ThreadId;
@@ -320,7 +321,8 @@ export function threadWithQuestion(name: string, question: string): FakeThread {
   };
 }
 
-const parentOf = (thread: FakeThread) => thread.sideChatOf ?? thread.providerSubagentOf;
+const parentOf = (thread: FakeThread) =>
+  thread.sideChatOf ?? thread.providerSubagentOf ?? thread.delegatedBy;
 
 function shellOf(thread: FakeThread): OrchestrationV2ThreadShell {
   const latest = thread.runs.at(-1);
@@ -341,17 +343,18 @@ function shellOf(thread: FakeThread): OrchestrationV2ThreadShell {
     lineage: {
       rootThreadId: parentOf(thread) ?? thread.id,
       parentThreadId: parentOf(thread) ?? null,
-      relationshipToParent: thread.providerSubagentOf ? "subagent" : null,
+      relationshipToParent: thread.providerSubagentOf || thread.delegatedBy ? "subagent" : null,
       ...(thread.sideChatOf ? { sideChat: true } : {}),
     },
     forkedFrom: null,
-    createdBy: thread.providerSubagentOf ? "agent" : "user",
-    creationSource: thread.providerSubagentOf ? "provider" : "web",
+    createdBy: thread.providerSubagentOf || thread.delegatedBy ? "agent" : "user",
+    creationSource: thread.providerSubagentOf ? "provider" : thread.delegatedBy ? "mcp" : "web",
     latestRunId: latest?.id ?? null,
     activeRunId: null,
     // Idle reads as waiting on the user, which shows a per-second duration in the sidebar.
-    status: latest ? "completed" : "idle",
-    pendingRuntimeRequest: null,
+    status: latest?.status ?? "idle",
+    pendingRuntimeRequest:
+      thread.runtimeRequests?.find((request) => request.status === "pending") ?? null,
     latestVisibleMessage: null,
     latestUserMessageAt: AT,
     hasActionableProposedPlan: false,

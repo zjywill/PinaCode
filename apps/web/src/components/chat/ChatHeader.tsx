@@ -44,6 +44,7 @@ import { observeResize } from "~/lib/observeResize";
 import { cn } from "~/lib/utils";
 import { textDirection } from "~/textDirection";
 import { useClientSettings } from "../../hooks/useSettings";
+import { PinaTasksMenu } from "./PinaTasksMenu";
 import { GuestShareIndicator } from "./GuestShareControls";
 import { SharedTooltipTrigger } from "../ui/shared-tooltip";
 
@@ -55,7 +56,7 @@ interface ChatHeaderProps {
   isServerThread: boolean;
   activeProject: EnvironmentProject | null;
   parentThreadLink: { threadId: ThreadId; title: string } | null;
-  onOpenThread: (threadId: ThreadId) => void;
+  onOpenThread: (threadId: ThreadId, environmentId?: EnvironmentId) => void;
   rightPanelOpen: boolean;
   onNewThreadInProject: () => void;
   onOpenProjectSettings?: (() => void) | undefined;
@@ -392,6 +393,9 @@ export const ChatHeader = memo(function ChatHeader({
               <WorkspaceBreadcrumbText>{activeThreadTitle}</WorkspaceBreadcrumbText>
             </SharedTooltipTrigger>
           )}
+          {isPinaThread(activeThreadId) ? (
+            <PinaTasksMenu parentRef={activeThreadRef} onOpenThread={onOpenThread} />
+          ) : null}
           {renamingTitle === null && activeThreadLinkOrigin ? (
             <SharedTooltipTrigger
               render={<Badge variant="info" size="sm" />}
