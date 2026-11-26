@@ -312,7 +312,6 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer))
         yield* Command.runWith(makeCli({ cloudEnabled: true }), { version: "0.0.0" })([
           "connect",
           "link",
-          "--headless",
           "--base-dir",
           baseDir,
         ]).pipe(
