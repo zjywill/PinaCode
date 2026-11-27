@@ -534,7 +534,7 @@ function makeLocalCommandHarness(input: {
     readonly switchedProvider?: boolean;
     readonly threadRuntimeMode?: OrchestrationV2ThreadProjection["thread"]["runtimeMode"];
   };
-  readonly pina?: "first" | "delivered" | "v2" | "legacy" | "replacement";
+  readonly pina?: "first" | "delivered" | "v3" | "v2" | "legacy" | "replacement";
 }) {
   const settledRuns: Array<string> = [];
   const now = DateTime.makeUnsafe("2026-09-04T12:00:00Z");
@@ -1250,7 +1250,7 @@ function makeLocalCommandHarness(input: {
           includesPinaInstructions: true,
           ...(input.pina === "legacy"
             ? {}
-            : { pinaInstructionsVersion: input.pina === "v2" ? 2 : 3 }),
+            : { pinaInstructionsVersion: input.pina === "v2" ? 2 : input.pina === "v3" ? 3 : 4 }),
           status: "completed",
           startedAt: now,
           completedAt: now,
@@ -3848,7 +3848,7 @@ effectIt.effect("delivers Pina instructions once per native session with Pina's 
     );
     expect(firstPrompt).toContain("Which threads need my input?");
 
-    for (const pina of ["legacy", "v2", "replacement"] as const) {
+    for (const pina of ["legacy", "v2", "v3", "replacement"] as const) {
       const reopened = makeLocalCommandHarness({ text: "What needs my input?", pina });
       yield* reopened.start;
       expect(reopened.startTurn.mock.calls[0]?.[0].message.text).toContain("You are Pina");

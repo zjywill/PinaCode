@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   matchComposerEnvironmentItems,
+  matchPinaProjectItems,
   matchComposerThreadItems,
   type ComposerThreadCandidate,
 } from "./composerThreadItems.ts";
@@ -67,10 +68,17 @@ it("lists unsettled threads in Pina and resolves project searches to individual 
     pinaProjects: [
       { environmentId, id: ProjectId.make("alpha"), title: "Storefront" },
       { environmentId: remote, id: ProjectId.make("alpha"), title: "Inventory" },
+      {
+        environmentId,
+        id: ProjectId.make("retired"),
+        title: "Old",
+        archivedAt: "2026-10-20T00:00:00Z",
+      },
     ],
     shells: [
       shell("local", "Review", { latestUserMessageAt: "2026-10-22T00:00:00Z" }),
       shell("remote", "Review", { environmentId: remote }),
+      shell("old-project", "Review", { projectId: ProjectId.make("retired") }),
       shell("settled", "Review", { settledOverride: "settled" }),
       shell("archived", "Review", { archivedAt: "2026-10-21T00:00:00Z" }),
       shell("other", "Review", { environmentId: EnvironmentId.make("unlinked") }),
@@ -86,10 +94,40 @@ it("lists unsettled threads in Pina and resolves project searches to individual 
   expect(items("inventory").map((item) => item.thread)).toEqual([
     { environmentId: remote, threadId: "remote" },
   ]);
-  expect(items("review")).toHaveLength(2);
-  expect(matchComposerThreadItems({ ...input, pinaProjects: [], query: "" })).toHaveLength(2);
+  expect(items("review").map((item) => item.thread.threadId)).toEqual([
+    "local",
+    "remote",
+    "settled",
+  ]);
+  expect(matchComposerThreadItems({ ...input, pinaProjects: [], query: "" })).toHaveLength(3);
   const { pinaProjects: _projects, ...ordinary } = input;
   expect(matchComposerThreadItems({ ...ordinary, excludeThreadId: null, query: "" })).toEqual([]);
+});
+
+it("reserves space for project actions and finds a project by name, workspace or machine", () => {
+  const remote = EnvironmentId.make("remote");
+  const links = new Map([[remote, "buildbox"]]);
+  const projects = ["Shopper", "Shop", "Shop docs", "Admin", "Backend", "Client"].map((title) => ({
+    environmentId,
+    id: ProjectId.make(title),
+    title,
+    workspaceRoot: "/work/" + title,
+  }));
+  projects.unshift({
+    environmentId: remote,
+    id: ProjectId.make("peer"),
+    title: "Shop",
+    workspaceRoot: "/srv/warehouse",
+  });
+  const results = (query: string) => matchPinaProjectItems(projects, environmentId, links, query);
+  expect(results("")).toHaveLength(5);
+  expect(
+    results("shop")
+      .slice(0, 2)
+      .map((item) => item.project.projectId),
+  ).toEqual(["Shop", "peer"]);
+  expect(results("warehouse").map((item) => item.project.projectId)).toEqual(["peer"]);
+  expect(results("buildbox").map((item) => item.project.projectId)).toEqual(["peer"]);
 });
 
 it("offers the composer thread's own used side chats, but not other threads' side chats", () => {

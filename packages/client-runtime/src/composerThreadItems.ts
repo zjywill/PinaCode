@@ -7,7 +7,12 @@ import {
   type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
-import { foldSearchQuery, rankSearchItems, scoreThreadSearch } from "@t3tools/shared/paletteSearch";
+import {
+  foldSearchQuery,
+  rankSearchItems,
+  scoreSearchTerms,
+  scoreThreadSearch,
+} from "@t3tools/shared/paletteSearch";
 
 import { scopedProjectKey } from "./environment/scoped.ts";
 import { sortThreads } from "./state/threadSort.ts";
@@ -39,7 +44,9 @@ export function matchComposerThreadItems(
   input: {
     shells: ReadonlyArray<ComposerThreadCandidate>;
     /** Pina browses unsettled project threads even before a search term is entered. */
-    pinaProjects?: ReadonlyArray<Pick<EnvironmentProject, "environmentId" | "id" | "title">>;
+    pinaProjects?: ReadonlyArray<
+      Pick<EnvironmentProject, "environmentId" | "id" | "title" | "archivedAt">
+    >;
     environmentId: EnvironmentId;
     /** The machines the composer's environment links to, by name. */
     linkedEnvironments: ReadonlyMap<EnvironmentId, string>;
@@ -53,16 +60,16 @@ export function matchComposerThreadItems(
   const query = foldSearchQuery(input.query);
   const { pinaProjects } = input;
   if (query.length === 0 && !pinaProjects) return [];
-  const projectTitles =
+  const projectByKey =
     pinaProjects &&
     new Map(
       pinaProjects.map((project) => [
         scopedProjectKey({ environmentId: project.environmentId, projectId: project.id }),
-        project.title,
+        project,
       ]),
     );
   const projectTitle = (shell: ComposerThreadCandidate) =>
-    projectTitles?.get(scopedProjectKey(shell));
+    projectByKey?.get(scopedProjectKey(shell))?.title;
   // Closing an unused side chat deletes it, so only one with a message is offered.
   const isOwnSideChat = (shell: ComposerThreadCandidate) =>
     shell.lineage.sideChat === true &&
@@ -75,7 +82,10 @@ export function matchComposerThreadItems(
         input.linkedEnvironments.has(shell.environmentId)) &&
       shell.id !== input.excludeThreadId &&
       shell.archivedAt === null &&
-      (!pinaProjects || (shell.settledOverride !== "settled" && !isPinaThread(shell.id))) &&
+      (!pinaProjects ||
+        (!isPinaThread(shell.id) &&
+          projectByKey?.get(scopedProjectKey(shell))?.archivedAt == null &&
+          (query.length > 0 || shell.settledOverride !== "settled"))) &&
       (isListedThreadLineage(shell.lineage) || (!pinaProjects && isOwnSideChat(shell))),
   );
   const matches =
@@ -87,7 +97,14 @@ export function matchComposerThreadItems(
             picks: false,
           }),
         ).map(({ item }) => item);
-  const visible = pinaProjects ? matches : matches.slice(0, COMPOSER_THREAD_RESULT_LIMIT);
+  if (pinaProjects && query) {
+    matches.sort(
+      (a, b) =>
+        Number(foldSearchQuery(b.title) === query) - Number(foldSearchQuery(a.title) === query) ||
+        Number(a.settledOverride === "settled") - Number(b.settledOverride === "settled"),
+    );
+  }
+  const visible = matches.slice(0, COMPOSER_THREAD_RESULT_LIMIT);
   return visible.map((shell) => {
     const machine =
       shell.environmentId === input.environmentId
@@ -131,29 +148,47 @@ export function matchPinaProjectItems(
   resolve: MFunctionType = mFallback,
 ): ComposerProjectItem[] {
   const search = foldSearchQuery(query);
-  return projects
+  const candidates = projects
     .filter(
       (project) =>
         !project.isScratch &&
         project.archivedAt == null &&
-        (project.environmentId === environmentId ||
-          linkedEnvironments.has(project.environmentId)) &&
-        foldSearchQuery(project.title).includes(search),
+        (project.environmentId === environmentId || linkedEnvironments.has(project.environmentId)),
     )
-    .map((project) => {
-      const ref = { environmentId: project.environmentId, projectId: project.id };
-      const machine =
-        project.environmentId === environmentId
-          ? undefined
-          : linkedEnvironments.get(project.environmentId);
-      return {
-        id: `project:${scopedProjectKey(ref)}`,
-        type: "project",
-        project: ref,
-        label: resolve(msg("New thread in {project}", { project: project.title })),
-        description: [machine, project.workspaceRoot].filter(Boolean).join(" · "),
-      };
-    });
+    .sort(
+      (a, b) =>
+        Number(b.environmentId === environmentId) - Number(a.environmentId === environmentId) ||
+        a.title.localeCompare(b.title) ||
+        a.workspaceRoot.localeCompare(b.workspaceRoot) ||
+        a.environmentId.localeCompare(b.environmentId),
+    );
+  const matches = search
+    ? rankSearchItems(candidates, (project, options) =>
+        scoreSearchTerms(
+          search,
+          [
+            project.title,
+            project.workspaceRoot,
+            linkedEnvironments.get(project.environmentId) ?? "",
+          ],
+          options,
+        ),
+      ).map(({ item }) => item)
+    : candidates;
+  return matches.slice(0, COMPOSER_THREAD_RESULT_LIMIT).map((project) => {
+    const ref = { environmentId: project.environmentId, projectId: project.id };
+    const machine =
+      project.environmentId === environmentId
+        ? undefined
+        : linkedEnvironments.get(project.environmentId);
+    return {
+      id: `project:${scopedProjectKey(ref)}`,
+      type: "project",
+      project: ref,
+      label: resolve(msg("New thread in {project}", { project: project.title })),
+      description: [machine, project.workspaceRoot].filter(Boolean).join(" · "),
+    };
+  });
 }
 
 export function composerProjectPrompt(item: ComposerProjectItem) {

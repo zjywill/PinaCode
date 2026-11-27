@@ -113,9 +113,12 @@ it("selects a new thread in a project with no sessions from Pina's @ picker", as
   };
   const onChangeDraftMessage = vi.fn();
   let menu: ReturnType<typeof useComposerCommandMenu> | undefined;
-  function Probe() {
+  function Probe({ draft = "Please investigate @" }: { draft?: string }) {
     menu = useComposerCommandMenu({
-      draftMessage: "Please investigate @",
+      draftMessage: draft,
+      environments: [
+        { environmentId: EnvironmentId.make("unlinked"), label: "buildbox", machine: "server" },
+      ],
       ownerKey: "pina",
       environmentId,
       currentThreadId: ThreadId.make("pina-assistant-scratch-0"),
@@ -144,5 +147,7 @@ it("selects a new thread in a project with no sessions from Pina's @ picker", as
   expect(onChangeDraftMessage).toHaveBeenCalledWith(
     "Please investigate New thread in Storefront (projectId: shop-id, environmentId: local) ",
   );
+  await act(async () => root.render(<Probe key="machine" draft="@buildbox" />));
+  expect(menu?.items.map((item) => item.type)).toEqual(["environment"]);
   act(() => root.unmount());
 });

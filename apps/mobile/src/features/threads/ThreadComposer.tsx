@@ -10,6 +10,7 @@ import { clampFileAttachmentUploadBytes } from "@t3tools/client-runtime/state/at
 import { pastedTextDisposition, replaceTextSelection } from "@t3tools/client-runtime/text-paste";
 import {
   AuthOrchestrationOperateScope,
+  isPinaThread,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   type ChatAttachment,
@@ -450,7 +451,7 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
     ownerKey: composerDraftKey,
     environmentId: props.environmentId,
     threadShells: useVisibleThreadShells(),
-    projects: useProjects(),
+    projects: useProjects(isPinaThread(props.selectedThread.id)),
     environments: offersLinkedEnvironments(props.serverConfig)
       ? mentionableEnvironments
       : NO_MACHINES,

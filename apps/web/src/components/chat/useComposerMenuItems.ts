@@ -128,13 +128,13 @@ export function useComposerMenuItems({
     pullRequestTextQuery === debouncedPullRequestTextQuery ? pullRequestTextQuery : null;
   const isPathTrigger = composerTriggerKind === "path";
   const pinaThreadPicker = isPathTrigger && activeThreadId !== null && isPinaThread(activeThreadId);
-  const projects = useProjects();
+  const projects = useProjects(pinaThreadPicker);
   const searchWorkspace = isPathTrigger && !pinaThreadPicker;
   const environmentThreadShells = useVisibleThreadShells(isPathTrigger);
   // Mounts older settled threads matching the mention, here and on linked machines, which shells
   // may leave out.
   useThreadSearch(
-    searchWorkspace ? [environmentId, ...linkedEnvironments.keys()] : [],
+    isPathTrigger ? [environmentId, ...linkedEnvironments.keys()] : [],
     pathTriggerQuery,
     { titlesOnly: true },
   );
@@ -228,21 +228,22 @@ export function useComposerMenuItems({
         },
         messages,
       );
-      if (pinaThreadPicker) {
-        if (questionAttachmentTarget !== null) return threadItems;
-        const projectItems = matchPinaProjectItems(
-          projects,
-          environmentId,
-          linkedEnvironments,
-          composerTrigger.query,
-          messages,
-        );
-        return composerTrigger.query
-          ? [...projectItems, ...threadItems]
-          : [...threadItems, ...projectItems];
+      const projectItems =
+        pinaThreadPicker && questionAttachmentTarget === null
+          ? matchPinaProjectItems(
+              projects,
+              environmentId,
+              linkedEnvironments,
+              composerTrigger.query,
+              messages,
+            )
+          : [];
+      if (pinaThreadPicker && (!composerTrigger.query || questionAttachmentTarget !== null)) {
+        return [...threadItems, ...projectItems];
       }
       return [
         ...threadItems,
+        ...projectItems,
         // An answer to an agent's question carries thread links, not machines.
         ...(questionAttachmentTarget === null && offersMachines
           ? matchComposerEnvironmentItems(

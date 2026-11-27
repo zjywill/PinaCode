@@ -706,7 +706,9 @@ it("opens Pina without adding the previous thread to its composer", async () => 
   expect(readPrompt()).toBe("");
   await userEvent.keyboard("@");
   await expect.element(page.getByRole("option", { name: /Thread login/ })).toBeVisible();
-  await userEvent.keyboard("render");
+  await userEvent.keyboard("gpt");
+  await expect.element(page.getByRole("option", { name: /GPT-5\.4/i })).toBeVisible();
+  await userEvent.keyboard("{Backspace}{Backspace}{Backspace}render");
   await page.getByRole("option", { name: /New thread in render/ }).click();
   const draft = readPrompt();
   expect(draft).toContain("New thread in render");

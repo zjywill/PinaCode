@@ -170,7 +170,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
           <CommandList
             id={props.listId}
             aria-label={
-              props.items[0]?.type === "project" || props.items[0]?.type === "thread"
+              props.triggerKind === "path" && props.items.some((item) => item.type !== "path")
                 ? gt("Suggestions")
                 : props.triggerKind
                   ? m(LISTBOX_LABEL_BY_TRIGGER[props.triggerKind])

@@ -19,6 +19,7 @@ import type {
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/models";
 
+const EMPTY_PROJECTS: ReadonlyArray<EnvironmentProject> = [];
 const EMPTY_THREAD_SHELLS: ReadonlyArray<EnvironmentThreadShell> = [];
 const EMPTY_ENVIRONMENTS: ReadonlyArray<ComposerEnvironmentCandidate> = [];
 const NO_LINKED_ENVIRONMENTS: ReadonlyMap<EnvironmentId, string> = new Map();
@@ -260,7 +261,7 @@ export function useComposerCommandMenu({
   ownerKey,
   environmentId,
   threadShells = EMPTY_THREAD_SHELLS,
-  projects = [],
+  projects = EMPTY_PROJECTS,
   environments = EMPTY_ENVIRONMENTS,
   linkedEnvironments = NO_LINKED_ENVIRONMENTS,
   currentThreadId = null,
@@ -371,8 +372,8 @@ export function useComposerCommandMenu({
   // Mounts older settled threads matching the mention, here and on linked machines, which shells
   // may leave out.
   useThreadSearch(
-    workspaceTrigger && environmentId ? [environmentId, ...linkedEnvironments.keys()] : [],
-    workspaceTrigger?.query ?? "",
+    trigger?.kind === "path" && environmentId ? [environmentId, ...linkedEnvironments.keys()] : [],
+    trigger?.kind === "path" ? trigger.query : "",
     { titlesOnly: true },
   );
   const pullRequestSearch = useComposerPullRequestSearch({
@@ -548,18 +549,17 @@ export function useComposerCommandMenu({
             messages,
           )
         : [];
-      if (pinaThreadPicker && environmentId) {
-        const projectItems = matchPinaProjectItems(
-          projects,
-          environmentId,
-          linkedEnvironments,
-          trigger.query,
-          messages,
-        );
-        return trigger.query
-          ? [...projectItems, ...threadItems]
-          : [...threadItems, ...projectItems];
-      }
+      const projectItems =
+        pinaThreadPicker && environmentId
+          ? matchPinaProjectItems(
+              projects,
+              environmentId,
+              linkedEnvironments,
+              trigger.query,
+              messages,
+            )
+          : [];
+      if (pinaThreadPicker && !trigger.query) return [...threadItems, ...projectItems];
       const environmentItems = environmentId
         ? matchComposerEnvironmentItems(
             { environments, linkedEnvironments, environmentId, query: trigger.query },
@@ -572,6 +572,7 @@ export function useComposerCommandMenu({
           : [];
       return [
         ...threadItems,
+        ...projectItems,
         ...environmentItems,
         ...modelItems,
         ...pathSearch.entries.map((entry) => {
