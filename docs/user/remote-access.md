@@ -207,7 +207,7 @@ Sharing & access** on the host, or on a headless host with `t3 auth session list
 again on its next connect.
 
 For Antigravity's Google callback on a remote host, see
-[remote sign-in](./providers-antigravity.md#sign-in-from-a-remote-device).
+[remote sign-in](./providers-antigravity.md#set-up-antigravity).
 
 ## Browser on a remote environment
 
@@ -530,11 +530,11 @@ client: pushing, switching or creating branches, cloning, and removing
 worktrees. It does not restrict what a task does. Starting a task in a new
 worktree still creates that branch and worktree with `orchestration:operate`,
 and the agent it runs can use Git however the environment allows. A project
-that [lays out its worktrees with its own command](multi-repo-projects.md#lay-the-folder-out-yourself)
+that [lays out its worktrees with its own command](multi-repo-projects.md#custom-worktree-layout)
 runs that command on the host, so creating a worktree there from the client also
 needs `orchestration:operate` or `terminal:operate`; without one of them,
 removing a worktree skips the project's `remove` command. The command also has
-to be [approved](multi-repo-projects.md#approve-the-commands) first, from a
+to be [approved](multi-repo-projects.md#command-approval-and-security) first, from a
 client with `terminal:operate`.
 
 Settings changes, provider management, environment maintenance, access

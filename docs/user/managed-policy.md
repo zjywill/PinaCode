@@ -15,7 +15,7 @@ the desktop app, a browser, or the mobile app.
 5. Run `t3 policy show` on the machine to
    [check what the server loaded](#check-what-the-server-loaded).
 
-The desktop app includes the `t3` command; see [The `t3` command](./install.md#the-t3-command).
+The desktop app includes the `t3` command; see [The `t3` command](./install.md#the-pinacode-command).
 
 ## Write a policy
 
@@ -258,7 +258,7 @@ so restart T3 Code after that.
   unavailable. This wins over the user's
   [Preview tunnel setting](./remote-access.md#browser-on-a-remote-environment).
 - `worktreeLayoutCommands: false`: Pina Code does not run the
-  [worktree layout commands](./multi-repo-projects.md#lay-the-folder-out-yourself) a project's
+  [worktree layout commands](./multi-repo-projects.md#custom-worktree-layout) a project's
   `t3.json` declares, whether or not a user approved them. Such a project gets no new worktree
   threads; existing thread folders are restored as plain checkouts and removed without the
   project's `remove` command.
