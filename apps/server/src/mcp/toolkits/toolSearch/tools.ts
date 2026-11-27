@@ -7,10 +7,16 @@ import * as McpToolExposure from "../../McpToolExposure.ts";
 
 const ToolSearchTool = Tool.make(McpToolExposure.TOOL_SEARCH, {
   description:
-    "Load PinaCode tools you do not have yet, then call them by name. Search by name or purpose: threads (pinacode_thread_*), projects (pinacode_project_*), worktrees, pinacode_preview_* browser, pinacode_device_*, pinacode_html_preview/pinacode_html_render, pinacode_schedule_task, pull requests and guides, attachments, pinacode_request_secret, environment links. Exact names work too.",
+    "Find PinaCode tools you do not have yet. If pinacode_tool_call is available, pass it the returned tool's name and your arguments. Otherwise search loads the tools so you can call them by name. Search by name or purpose: threads (pinacode_thread_*), projects (pinacode_project_*), worktrees, pinacode_preview_* browser, pinacode_device_*, pinacode_html_preview/pinacode_html_render, pinacode_schedule_task, pull requests and guides, attachments, pinacode_request_secret, environment links. Exact names work too.",
   parameters: Schema.Struct({ query: Schema.String.check(Schema.isMaxLength(500)) }),
   success: Schema.Struct({
-    tools: Schema.Array(Schema.Struct({ name: Schema.String, description: Schema.String })),
+    tools: Schema.Array(
+      Schema.Struct({
+        name: Schema.String,
+        description: Schema.String,
+        inputSchema: Schema.optional(Schema.Unknown),
+      }),
+    ),
   }),
   failure: OrchestratorMcpFailure,
   failureMode: "return",

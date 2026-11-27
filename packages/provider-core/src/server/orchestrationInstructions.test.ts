@@ -102,5 +102,12 @@ describe("PinaCode device instructions", () => {
       "Again.",
     );
     assert.notInclude(t3AcpPromptWithInstructions({ prompt: "Hi.", state }), "## PinaCode devices");
+    const withProxy = t3AcpPromptWithInstructions({
+      prompt: "Render a chart.",
+      state: { ...state, toolExposure: "deferred-proxy" },
+    });
+    assert.include(withProxy, "including `pinacode_delegate_task`");
+    assert.include(withProxy, "pinacode_tool_call({ name, arguments })");
+    assert.notInclude(t3AcpPromptWithInstructions({ prompt: "Hi.", state }), "pinacode_tool_call(");
   });
 });

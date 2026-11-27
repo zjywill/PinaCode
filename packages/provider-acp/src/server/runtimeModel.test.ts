@@ -1760,6 +1760,62 @@ describe("extractMcpToolCallIdentity", () => {
     }
   });
 
+  it("unwraps PinaCode pinacode_tool_call proxy invocations to the target tool and arguments", () => {
+    const htmlArgs = { title: "Chart", html: "<p>hi</p>", height: 320 };
+    expect(
+      extractMcpToolCallIdentity(
+        toolCallFromUpdate({
+          sessionUpdate: "tool_call",
+          toolCallId: "proxy-1",
+          kind: "other",
+          title: "Run mcp_pinacode_pinacode_tool_call",
+          status: "pending",
+          rawInput: { name: "pinacode_html_render", arguments: htmlArgs },
+        }),
+      ),
+    ).toEqual({
+      server: "pinacode",
+      tool: "pinacode_html_render",
+      input: htmlArgs,
+    });
+
+    expect(
+      extractMcpToolCallIdentity(
+        toolCallFromUpdate({
+          sessionUpdate: "tool_call",
+          toolCallId: "proxy-2",
+          kind: "other",
+          title: "Running pinacode_tool_call",
+          status: "pending",
+          rawInput: {
+            server: "pinacode",
+            tool: "pinacode_tool_call",
+            arguments: { name: "pinacode_thread_read", arguments: { threadId: "thread-1" } },
+          },
+          _meta: { is_mcp_tool_call: true },
+        }),
+      ),
+    ).toEqual({
+      server: "pinacode",
+      tool: "pinacode_thread_read",
+      input: { threadId: "thread-1" },
+    });
+
+    // A bare non-T3 `pinacode_tool_call` title must not be misclassified as a T3 proxy call.
+    expect(
+      extractMcpToolCallIdentity(
+        toolCallFromUpdate({
+          sessionUpdate: "tool_call",
+          toolCallId: "proxy-3",
+          kind: "other",
+          title: "pinacode_tool_call",
+          status: "pending",
+          rawInput: { name: "pinacode_html_render", arguments: htmlArgs },
+        }),
+      ),
+    ).toBeUndefined();
+  });
+
   it("recovers T3 identity from Hermes editor-renamed MCP tool titles", () => {
     const identityFor = (title: string) =>
       extractMcpToolCallIdentity(
@@ -2010,6 +2066,30 @@ describe("extractMcpToolCallIdentity", () => {
     });
 
     expect(extractMcpToolCallIdentity(toolCall)).toBeUndefined();
+  });
+
+  it("unwraps PinaCode pinacode_tool_call when Antigravity routes it through call_mcp_tool", () => {
+    const toolCall = toolCallFromUpdate({
+      sessionUpdate: "tool_call",
+      toolCallId: "call-mcp-proxy-1",
+      kind: "execute",
+      title: "MCP Tool pinacode_tool_call",
+      status: "completed",
+      rawInput: {
+        ServerName: "pinacode",
+        ToolName: "pinacode_tool_call",
+        Arguments: {
+          name: "pinacode_html_render",
+          arguments: { title: "Chart", html: "<p>hi</p>", height: 240 },
+        },
+      },
+    });
+
+    expect(extractMcpToolCallIdentity(toolCall)).toEqual({
+      server: "pinacode",
+      tool: "pinacode_html_render",
+      input: { title: "Chart", html: "<p>hi</p>", height: 240 },
+    });
   });
 });
 

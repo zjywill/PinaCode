@@ -67,8 +67,10 @@ function isNonRetryableProviderTurnControlFailure(effectType: string, errorText:
 }
 
 // Keep an owner for starting runs when persistence or restart cleanup fails.
-const ownsStartingRun = (effectType: EffectOutbox.OrchestrationEffectV2["request"]["type"]) =>
-  effectType === "provider-turn.start" || effectType === "provider-turn.restart";
+const ownsStartingRun = (request: EffectOutbox.OrchestrationEffectV2["request"]) =>
+  request.type === "provider-turn.start" ||
+  request.type === "provider-turn.restart" ||
+  (request.type === "provider-session.detach" && request.handoffRunId !== undefined);
 
 const cannotSettleRun = (cause: Cause.Cause<unknown>) =>
   Cause.findErrorOption(cause).pipe(
@@ -224,17 +226,49 @@ export const layerExecutor: Layer.Layer<
               request.type === "provider-session.release-delegate" ||
               (request.detail === EffectOutbox.DELEGATED_TASK_RELEASE_DETAIL &&
                 effect.commandId.startsWith(EffectOutbox.DELEGATED_TASK_RELEASE_COMMAND_PREFIX));
-            const release = delegateRelease
-              ? releaseFinishedDelegate(effect.threadId, request.providerSessionId)
-              : providerSessions.detach({
-                  providerSessionId: request.providerSessionId,
-                  threadId: effect.threadId,
-                  ...(request.detail === undefined ? {} : { detail: request.detail }),
-                  ...(request.revokeMcpCredential === undefined
-                    ? {}
-                    : { revokeMcpCredential: request.revokeMcpCredential }),
-                });
-            return release.pipe(
+            return Effect.gen(function* () {
+              if (delegateRelease)
+                return yield* releaseFinishedDelegate(effect.threadId, request.providerSessionId);
+              const { handoffRunId } = request;
+              const detach = providerSessions.detach({
+                providerSessionId: request.providerSessionId,
+                threadId: effect.threadId,
+                ...(request.detail === undefined ? {} : { detail: request.detail }),
+                ...(request.revokeMcpCredential === undefined
+                  ? {}
+                  : { revokeMcpCredential: request.revokeMcpCredential }),
+                ...(request.handoffProviderThread === undefined
+                  ? {}
+                  : { handoffProviderThread: request.handoffProviderThread }),
+              });
+              if (handoffRunId === undefined) return yield* detach;
+              const run = yield* projectionStore.getRun(effect.threadId, handoffRunId);
+              const attemptId = run?.activeAttemptId;
+              const rootNodeId = run?.rootNodeId;
+              if (run?.status !== "starting" || attemptId == null || rootNodeId == null) return;
+              yield* detach.pipe(
+                Effect.catch((cause) =>
+                  Effect.logWarning(
+                    "Provider account handoff could not release the source thread",
+                    {
+                      runId: handoffRunId,
+                      cause,
+                    },
+                  ).pipe(
+                    Effect.andThen(
+                      providerTurnStart.failStartingRun({
+                        threadId: effect.threadId,
+                        runId: handoffRunId,
+                        attemptId,
+                        rootNodeId,
+                        message:
+                          "The previous provider did not release this conversation. Wait a moment and try again.",
+                      }),
+                    ),
+                  ),
+                ),
+              );
+            }).pipe(
               Effect.mapError(
                 (cause) =>
                   new OrchestrationEffectExecutionError({
@@ -1026,7 +1060,7 @@ export const layerWithOptions = (
                 .succeed({ effectId: effect.id, workerId })
                 .pipe(Effect.onError((cause) => terminalizeClaim(effect, cause)))
             : effect.attemptCount >= maxAttempts &&
-                (!ownsStartingRun(effect.request.type) || cannotSettleRun(exit.cause))
+                (!ownsStartingRun(effect.request) || cannotSettleRun(exit.cause))
               ? yield* outbox
                   .fail({ effectId: effect.id, workerId, error })
                   .pipe(Effect.onError((cause) => terminalizeClaim(effect, cause)))

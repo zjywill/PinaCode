@@ -149,9 +149,19 @@ describe("Antigravity Auto", () => {
       });
       for (const t3Call of [
         request("Run mcp_pinacode_pinacode_thread_list?"),
+        request("Run mcp_pinacode_pinacode_tool_search?"),
+        request("Run mcp_pinacode_pinacode_tool_call?", {
+          name: "pinacode_preview_status",
+          arguments: {},
+        }),
         request("MCP Tool pinacode_delegate_task", {
           ServerName: "pinacode",
           ToolName: "pinacode_delegate_task",
+        }),
+        request("MCP Tool pinacode_tool_call", {
+          ServerName: "pinacode",
+          ToolName: "pinacode_tool_call",
+          Arguments: { name: "pinacode_preview_status", arguments: {} },
         }),
       ]) {
         expect(antigravityPermissionDisposition(policy, t3Call)).toBe("allow");
@@ -168,10 +178,30 @@ describe("Antigravity Auto", () => {
       for (const otherCall of [
         // Names no server, so another MCP server's tool of the same name looks identical.
         request("Running pinacode_preview_status"),
+        request("Running pinacode_tool_call"),
+        request("Run mcp_pinacode_pinacode_tool_call?"),
+        request("Run mcp_pinacode_pinacode_tool_call?", {
+          name: "pinacode_tool_call",
+          arguments: {},
+        }),
+        request("Run mcp_pinacode_pinacode_tool_call?", {
+          name: "pinacode_tool_search",
+          arguments: {},
+        }),
+        request("Run mcp_pinacode_pinacode_tool_call?", { name: "unknown_tool", arguments: {} }),
+        request("MCP Tool pinacode_tool_call", {
+          ServerName: "pinacode",
+          ToolName: "pinacode_tool_call",
+          Arguments: { name: "unknown_tool", arguments: {} },
+        }),
         request("Run mcp_github_create_issue"),
         request("MCP Tool pinacode_preview_status", {
           ServerName: "other",
           ToolName: "pinacode_preview_status",
+        }),
+        request("MCP Tool pinacode_tool_call", {
+          ServerName: "other",
+          ToolName: "pinacode_tool_call",
         }),
         request("Run mcp_pinacode_pinacode_preview_status", {
           CommandLine: "Run mcp_pinacode_pinacode_preview_status",

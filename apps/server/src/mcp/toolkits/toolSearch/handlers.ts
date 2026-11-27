@@ -8,13 +8,17 @@ import { ToolSearchToolkit } from "./tools.ts";
 export const layer = McpToolAccess.toLayer(ToolSearchToolkit, {
   pinacode_tool_search: McpToolAccess.readsAsCaller(({ query }) =>
     Effect.gen(function* () {
-      const { thread } = yield* McpInvocationContext.McpInvocationContext.pipe(
-        Effect.flatMap((scope) =>
-          McpInvocationContext.requireThreadScope(scope, "pinacode_tool_search"),
+      const scope = yield* McpInvocationContext.McpInvocationContext.pipe(
+        Effect.flatMap((current) =>
+          McpInvocationContext.requireThreadScope(current, "pinacode_tool_search"),
         ),
       );
       const exposure = yield* McpToolExposure.McpToolExposure;
-      return { tools: yield* exposure.search(thread.providerSessionId, query) };
+      return {
+        tools: yield* exposure.search(scope.thread.providerSessionId, query, {
+          mode: scope.toolExposure,
+        }),
+      };
     }),
   ),
 });
