@@ -2165,7 +2165,7 @@ it.effect(
           thread: {
             threadId,
             providerSessionId: token,
-            providerInstanceId: ProviderInstanceId.make("copilot"),
+            providerInstanceId: ProviderInstanceId.make("codex"),
           },
           client: undefined,
           capabilities: new Set(["orchestration"]),
@@ -2176,7 +2176,7 @@ it.effect(
           ["pinaToken", scopeFor("pinaToken", ThreadId.make("pina-assistant-scratch-0"))],
           ["otherToken", scopeFor("otherToken")],
         ]);
-        const tool = (name: string, description: string) =>
+        const tool = <Name extends string>(name: Name, description: string) =>
           Tool.make(name, {
             description,
             success: Schema.Struct({}),
@@ -2188,6 +2188,7 @@ it.effect(
           tool("pinacode_preview_open", "Opens a browser preview."),
           tool("pinacode_schedule_task", "Schedules a task."),
           tool("pinacode_thread_list", "Lists threads."),
+          ThreadToolkit.tools.pinacode_thread_organize,
           tool("pinacode_thread_read", "Reads a thread."),
           tool("pinacode_thread_send", "Sends to a thread."),
         );
@@ -2201,6 +2202,10 @@ it.effect(
                 pinacode_preview_open: reads,
                 pinacode_schedule_task: reads,
                 pinacode_thread_list: reads,
+                pinacode_thread_organize: McpToolAccess.writesThreads(
+                  (input) => [input.threadId],
+                  () => Effect.succeed({ sequence: 1 }),
+                ),
                 pinacode_thread_read: reads,
                 pinacode_thread_send: reads,
               }),
@@ -2210,6 +2215,7 @@ it.effect(
         ).pipe(
           Layer.provide(ServerSettings.layerTest()),
           Layer.provide(McpToolAccessTestkit.liveThreadsLayer),
+          Layer.provide(NodeCrypto.layer),
           Layer.provide(
             Layer.mock(McpSessionRegistry.McpSessionRegistry)({
               resolve: (token) => Effect.succeed(scopes.get(token)),
@@ -2282,9 +2288,14 @@ it.effect(
         for (const coordinator of [pina, yield* session("pinaToken", false)]) {
           expect(yield* coordinator.listed).toEqual([
             "pinacode_thread_list",
+            "pinacode_thread_organize",
             "pinacode_thread_read",
             "pinacode_thread_send",
           ]);
+          expect(
+            (yield* coordinator.call("pinacode_thread_organize", { threadId, action: "settle" }))
+              .structuredContent,
+          ).toEqual({ sequence: 1 });
           expect(yield* coordinator.call("pinacode_delegate_task", {})).toBeUndefined();
           expect(yield* coordinator.call("pinacode_preview_open", {})).toBeUndefined();
         }
@@ -2293,6 +2304,7 @@ it.effect(
           "pinacode_preview_open",
           "pinacode_schedule_task",
           "pinacode_thread_list",
+          "pinacode_thread_organize",
           "pinacode_thread_read",
           "pinacode_thread_send",
         ]);
@@ -2314,6 +2326,7 @@ it.effect(
           "pinacode_preview_open",
           "pinacode_schedule_task",
           "pinacode_thread_list",
+          "pinacode_thread_organize",
           "pinacode_thread_read",
           "pinacode_thread_send",
         ]);

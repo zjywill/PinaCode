@@ -1563,6 +1563,7 @@ const layerToolExposure = Layer.effect(
 const PINA_COORDINATION_TOOLS: ReadonlySet<string> = new Set([
   "pinacode_thread_list",
   "pinacode_thread_read",
+  "pinacode_thread_organize",
   "pinacode_thread_send",
   "pinacode_thread_launch",
   "pinacode_project_list",
