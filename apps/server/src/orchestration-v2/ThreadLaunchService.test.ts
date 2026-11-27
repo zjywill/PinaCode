@@ -1293,9 +1293,9 @@ it.effect("opens one Pina history across concurrent clients, archive and deletio
   }).pipe(Effect.provide(harness.layer));
 });
 
-it.effect(
-  "reports each manual turn to Pina once across restarts and skips previously finished work",
-  () => {
+it.effect.each(["user", "agent"] as const)(
+  "reports each manual turn to Pina once across restarts (thread creator: %s)",
+  (createdBy) => {
     const harness = scratchHarness();
     const layer = Layer.mergeAll(
       harness.layer,
@@ -1316,8 +1316,8 @@ it.effect(
         threadId,
         projectId,
         title: "Manual session",
-        createdBy: "user",
-        creationSource: "mobile",
+        createdBy,
+        creationSource: createdBy === "agent" ? "mcp" : "mobile",
         branch: null,
         worktreePath: null,
         modelSelection,
@@ -1416,8 +1416,8 @@ it.effect(
           Stream.runDrain,
         );
       yield* finish("before-upgrade", 1, "completed", true);
-      yield* catchUp(yield* finish("mobile-first", 2, "completed"));
-      yield* finish("already-delegated", 3, "completed", false, pinaId);
+      yield* catchUp(yield* finish("already-delegated", 2, "completed", false, pinaId));
+      yield* finish("mobile-first", 3, "completed");
       const last = yield* finish("mobile-followup", 4, "failed");
       yield* catchUp(last);
       // A crash after dispatch but before saving the cursor replays the same reports.

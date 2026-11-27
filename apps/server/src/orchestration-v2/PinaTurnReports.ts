@@ -33,8 +33,9 @@ export const make = Effect.gen(function* () {
   const report = Effect.fn("PinaTurnReports.report")(function* (run: OrchestrationV2Run) {
     if (isPinaThread(run.threadId) || run.delegatedTaskId !== undefined) return;
     const thread = yield* projections.findThread(run.threadId);
-    if (!thread || thread.deletedAt !== null || !reportsTurnsToPina(thread)) return;
+    if (!thread || thread.deletedAt !== null) return;
     const trigger = yield* projections.getRunMessage(run.threadId, run.id);
+    if (!reportsTurnsToPina(thread, trigger?.createdBy)) return;
     // Pina's own dispatched tasks already send their result through reportBack.
     if (trigger?.senderThreadId && isPinaThread(trigger.senderThreadId)) return;
     const key = `pina-turn-report:${thread.id}:${run.id}`;
