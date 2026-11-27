@@ -704,7 +704,16 @@ it("opens Pina without adding the previous thread to its composer", async () => 
   const pinaRef = scopeThreadRef(ENVIRONMENT_ID, pina.id);
   const readPrompt = () => useComposerDraftStore.getState().getComposerDraft(pinaRef)?.prompt ?? "";
   expect(readPrompt()).toBe("");
-  await userEvent.keyboard("Keep this draft");
+  await userEvent.keyboard("@");
+  await expect.element(page.getByRole("option", { name: /Thread login/ })).toBeVisible();
+  await userEvent.keyboard("gpt");
+  await expect.element(page.getByRole("option", { name: /GPT-5\.4/i })).toBeVisible();
+  await userEvent.keyboard("{Backspace}{Backspace}{Backspace}render");
+  await page.getByRole("option", { name: /New thread in render/ }).click();
+  const draft = readPrompt();
+  expect(draft).toContain("New thread in render");
+  expect(draft).toContain(`projectId: ${PROJECT_ID}`);
+  expect(draft).toContain(`environmentId: ${ENVIRONMENT_ID}`);
   await router.navigate({
     to: "/$environmentId/$threadId",
     params: { environmentId: ENVIRONMENT_ID, threadId: other.id },
@@ -712,7 +721,7 @@ it("opens Pina without adding the previous thread to its composer", async () => 
   await expect.element(page.getByText(`Answer 0 for ${other.id}.`)).toBeVisible();
   await userEvent.keyboard("{ControlOrMeta>}{Alt>}p{/Alt}{/ControlOrMeta}");
   await expect.element(page.getByText(`Answer 0 for ${pina.id}.`), { timeout: 3000 }).toBeVisible();
-  expect(readPrompt()).toBe("Keep this draft");
+  expect(readPrompt()).toBe(draft);
   await page.getByRole("button", { name: "Thread actions for Pina" }).click({ timeout: 3000 });
   await expect
     .element(page.getByRole("menuitem", { name: "Rename thread" }), { timeout: 3000 })

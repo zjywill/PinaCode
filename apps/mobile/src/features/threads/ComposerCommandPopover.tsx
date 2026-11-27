@@ -1,3 +1,4 @@
+import type { ComposerProjectItem } from "@t3tools/client-runtime/composerThreadItems";
 import {
   resolveProviderSkillSourceKind,
   type ProviderSkillSourceKind,
@@ -27,6 +28,7 @@ import { cn } from "../../lib/cn";
 import type { ModelOption } from "../../lib/modelOptions";
 import { pullRequestStatus } from "../pull-requests/pullRequestStatus";
 export type ComposerCommandItem =
+  | ComposerProjectItem
   | {
       readonly id: string;
       readonly type: "pull-request";
@@ -86,9 +88,11 @@ export type ComposerCommandItem =
       readonly description: string;
     };
 
+type PopoverTriggerKind = ComposerTriggerKind | "pina" | null;
+
 interface ComposerCommandPopoverProps {
   readonly items: ReadonlyArray<ComposerCommandItem>;
-  readonly triggerKind: ComposerTriggerKind | null;
+  readonly triggerKind: PopoverTriggerKind;
   readonly isLoading: boolean;
   readonly error?: string | null;
   readonly onSelect: (item: ComposerCommandItem) => void;
@@ -133,6 +137,8 @@ function itemIcon(item: ComposerCommandItem): AppSymbolName | null {
     case "path":
     case "model":
       return null;
+    case "project":
+      return "folder";
     case "thread":
       return "text.bubble";
     case "environment":
@@ -141,11 +147,13 @@ function itemIcon(item: ComposerCommandItem): AppSymbolName | null {
 }
 
 function groupLabel(
-  triggerKind: ComposerTriggerKind | null,
+  triggerKind: PopoverTriggerKind,
   items: ReadonlyArray<ComposerCommandItem>,
   resolve: MessageResolver,
 ): string | null {
   switch (triggerKind) {
+    case "pina":
+      return resolve(msg("Mentions"));
     case "pull-request":
       return resolve(msg("Pull requests"));
     case "slash-command":
@@ -162,7 +170,7 @@ function groupLabel(
 }
 
 function emptyText(
-  triggerKind: ComposerTriggerKind | null,
+  triggerKind: PopoverTriggerKind,
   isLoading: boolean,
   resolve: MessageResolver,
 ): string {
@@ -170,6 +178,8 @@ function emptyText(
     return triggerKind === "path" ? resolve(msg("Searching files…")) : resolve(msg("Loading…"));
   }
   switch (triggerKind) {
+    case "pina":
+      return resolve(msg("No matching mentions."));
     case "pull-request":
       return resolve(msg("No matching pull requests."));
     case "path":
@@ -221,7 +231,7 @@ const CommandRow = memo(function CommandRow(props: {
       <Text
         className={cn(
           "shrink-0 text-base font-t3-medium text-foreground",
-          props.item.type === "thread" && "max-w-[45%]",
+          (props.item.type === "thread" || props.item.type === "project") && "max-w-[45%]",
         )}
         numberOfLines={1}
       >

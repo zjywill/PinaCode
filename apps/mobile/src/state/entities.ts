@@ -39,6 +39,7 @@ import { environmentProjects } from "./projects";
 import { environmentServerConfigsAtom, serverEnvironment } from "./server";
 import { environmentThreadDetails, environmentThreadShells } from "./threads";
 
+const EMPTY_PROJECTS_ATOM = Atom.make<ReadonlyArray<EnvironmentProject>>([]);
 const EMPTY_PROJECT_ATOM = Atom.make<EnvironmentProject | null>(null).pipe(
   Atom.withLabel("mobile-project:empty"),
 );
@@ -193,8 +194,8 @@ export function waitForProject(
   });
 }
 
-export function useProjects(): ReadonlyArray<EnvironmentProject> {
-  return useAtomValue(environmentProjects.projectsAtom);
+export function useProjects(enabled = true): ReadonlyArray<EnvironmentProject> {
+  return useAtomValue(enabled ? environmentProjects.projectsAtom : EMPTY_PROJECTS_ATOM);
 }
 
 export function useThreadShells(): ReadonlyArray<EnvironmentThreadShell> {
