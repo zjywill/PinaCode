@@ -1227,6 +1227,7 @@ export type OrchestrationV2PendingBackgroundTask = typeof OrchestrationV2Pending
 
 export const OrchestrationV2ProviderThreadNativeMetadata = Schema.Struct({
   cursorStoreCwd: Schema.optional(TrimmedNonEmptyString),
+  dimMcpBindingId: Schema.optional(Schema.String.check(Schema.isUUID(4))),
   modelSelection: Schema.optional(ModelSelection),
   title: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   updatedAt: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),

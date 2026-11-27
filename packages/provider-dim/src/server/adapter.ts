@@ -1850,33 +1850,33 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
       const attachMcp = Effect.fn("DimAdapter.attachMcp")(function* (
         threadId: ThreadId,
         sessionId: string,
+        bindingId: string,
       ) {
         if (mcpAttachedFor === sessionId) return;
         const config = yield* mcpSessions
           .read(threadId)
           .pipe(Effect.orElseSucceed(() => undefined));
         if (config === undefined) return;
-        mcpBindingId ??= yield* randomUuidV4;
         const attached = yield* connection
           .request(
             "session.mcp_temporary.attach",
             {
               sessionId,
-              bindingId: mcpBindingId,
+              bindingId,
               servers: { t3: mcpServerConfig(config) },
             },
             { timeout: DIM_MCP_ATTACH_TIMEOUT },
           )
           .pipe(Effect.result);
         if (attached._tag === "Failure") return;
+        mcpBindingId = bindingId;
         mcpAttachedFor = sessionId;
         if (mcpRenew !== null) yield* Fiber.interrupt(mcpRenew);
         mcpRenew = yield* Effect.forever(
           Effect.gen(function* () {
             yield* Effect.sleep(DIM_MCP_LEASE_RENEW);
-            if (mcpBindingId === null) return;
             yield* connection
-              .request("session.mcp_temporary.renew", { sessionId, bindingId: mcpBindingId })
+              .request("session.mcp_temporary.renew", { sessionId, bindingId })
               .pipe(Effect.ignore);
           }),
         ).pipe(Effect.forkIn(scope));
@@ -1977,6 +1977,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
           appliedModel = modelFromAttach(attached);
           appliedEffort = null;
           appliedPreset = null;
+          const bindingId = existing?.nativeMetadata?.dimMcpBindingId ?? (yield* randomUuidV4);
           const cwd = sessionEntity.cwd;
           const createdAt = yield* DateTime.now;
           const providerThread: OrchestrationV2ProviderThread = {
@@ -2002,6 +2003,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
               createdAt,
               updatedAt: createdAt,
             }),
+            nativeMetadata: { ...existing?.nativeMetadata, dimMcpBindingId: bindingId },
             providerSessionId: input.providerSessionId,
             nativeThreadRef: {
               driver: DIM_PROVIDER,
@@ -2022,7 +2024,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
             providerThread,
           });
           yield* updateSession("ready");
-          yield* attachMcp(threadInput.threadId, wantedSessionId).pipe(Effect.ignore);
+          yield* attachMcp(threadInput.threadId, wantedSessionId, bindingId).pipe(Effect.ignore);
           yield* restorePendingQuestions(wantedSessionId);
           return providerThread;
         }
@@ -2046,10 +2048,12 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         );
         yield* connection.request("session.attach", { sessionId: created.sessionId });
         const createdAt = yield* DateTime.now;
+        const bindingId = yield* randomUuidV4;
         const providerThread: OrchestrationV2ProviderThread =
           existing !== undefined
             ? {
                 ...existing,
+                nativeMetadata: { ...existing.nativeMetadata, dimMcpBindingId: bindingId },
                 providerSessionId: input.providerSessionId,
                 nativeThreadRef: {
                   driver: DIM_PROVIDER,
@@ -2065,6 +2069,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
                   providerInstanceId: options.instanceId,
                   nativeThreadId: created.sessionId,
                 }),
+                nativeMetadata: { dimMcpBindingId: bindingId },
                 driver: DIM_PROVIDER,
                 providerInstanceId: options.instanceId,
                 providerSessionId: input.providerSessionId,
@@ -2093,7 +2098,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
         appliedPreset = dimPreset(threadInput.runtimePolicy, threadInput.modelSelection);
         yield* emit({ type: "provider_thread.updated", driver: DIM_PROVIDER, providerThread });
         yield* updateSession("ready");
-        yield* attachMcp(threadInput.threadId, created.sessionId).pipe(Effect.ignore);
+        yield* attachMcp(threadInput.threadId, created.sessionId, bindingId).pipe(Effect.ignore);
         return providerThread;
       });
 
@@ -2707,6 +2712,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
             if (forkedSessionId === undefined) {
               return yield* protocolError("Dim session.fork returned no sessionId");
             }
+            const bindingId = source.nativeMetadata?.dimMcpBindingId ?? (yield* randomUuidV4);
             const forkedAttach = yield* connection.request("session.attach", {
               sessionId: forkedSessionId,
             });
@@ -2721,6 +2727,7 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
               providerInstanceId: options.instanceId,
               providerSessionId: input.providerSessionId,
               appThreadId: forkInput.targetThreadId,
+              nativeMetadata: { dimMcpBindingId: bindingId },
               ownerNodeId: forkInput.ownerNodeId ?? null,
               nativeThreadRef: {
                 driver: DIM_PROVIDER,
@@ -2752,7 +2759,9 @@ export const makeDimAdapterV2 = Effect.fn("DimAdapter.make")(function* (
               providerThread,
             });
             yield* updateSession("ready");
-            yield* attachMcp(forkInput.targetThreadId, forkedSessionId).pipe(Effect.ignore);
+            yield* attachMcp(forkInput.targetThreadId, forkedSessionId, bindingId).pipe(
+              Effect.ignore,
+            );
             // The fork borrowed the source session only to read and cut its history.
             if (attachedSource) {
               yield* connection

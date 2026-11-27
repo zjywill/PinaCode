@@ -1501,6 +1501,43 @@ describe("DimAdapter import", () => {
   );
 });
 
+describe("DimAdapter MCP bindings", () => {
+  it.effect("offers the same tool names after reopening a native thread", () =>
+    Effect.gen(function* () {
+      const mcp = yield* McpProviderSessions.McpProviderSessions;
+      yield* mcp.set({
+        environmentId: EnvironmentId.make("env-test"),
+        threadId: THREAD_ID,
+        providerSessionId: PROVIDER_SESSION_ID,
+        providerInstanceId: INSTANCE_ID,
+        endpoint: "http://127.0.0.1:1234/mcp",
+        authorizationHeader: "Bearer test",
+        browserToolsAvailable: false,
+      });
+      const original = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const { runtime, fake } = yield* openHarness();
+          const thread = yield* ensureThread(runtime);
+          const bindingId = fake.requestsOf("session.mcp_temporary.attach")[0]?.["bindingId"];
+          assert.isString(bindingId);
+          return { thread, bindingId };
+        }),
+      );
+      const { runtime, fake } = yield* openHarness();
+      yield* runtime.ensureThread({
+        threadId: THREAD_ID,
+        existingProviderThread: original.thread,
+        modelSelection: modelSelection(),
+        runtimePolicy: runtimePolicy("full-access"),
+      });
+      assert.strictEqual(
+        fake.requestsOf("session.mcp_temporary.attach")[0]?.["bindingId"],
+        original.bindingId,
+      );
+    }).pipe(Effect.scoped, Effect.provide(layers)),
+  );
+});
+
 describe("DimAdapter fork", () => {
   it.effect("forks at the selected turn's turn/end sequence", () =>
     Effect.gen(function* () {
