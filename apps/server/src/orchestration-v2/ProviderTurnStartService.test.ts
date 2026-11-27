@@ -534,7 +534,7 @@ function makeLocalCommandHarness(input: {
     readonly switchedProvider?: boolean;
     readonly threadRuntimeMode?: OrchestrationV2ThreadProjection["thread"]["runtimeMode"];
   };
-  readonly pina?: "first" | "delivered" | "legacy" | "replacement";
+  readonly pina?: "first" | "delivered" | "v2" | "legacy" | "replacement";
 }) {
   const settledRuns: Array<string> = [];
   const now = DateTime.makeUnsafe("2026-09-04T12:00:00Z");
@@ -1248,7 +1248,9 @@ function makeLocalCommandHarness(input: {
           runId: firstRunId,
           nativeThreadId: input.pina === "replacement" ? "retired-native" : "side-chat-native",
           includesPinaInstructions: true,
-          ...(input.pina === "legacy" ? {} : { pinaInstructionsVersion: 2 }),
+          ...(input.pina === "legacy"
+            ? {}
+            : { pinaInstructionsVersion: input.pina === "v2" ? 2 : 3 }),
           status: "completed",
           startedAt: now,
           completedAt: now,
@@ -3840,13 +3842,13 @@ effectIt.effect("delivers Pina instructions once per native session with Pina's 
     });
     yield* first.start;
     const firstPrompt = first.startTurn.mock.calls[0]?.[0].message.text;
-    expect(firstPrompt).toContain("You are Pina, the user's personal assistant");
+    expect(firstPrompt).toContain("You are Pina");
     expect(firstPrompt).toContain(
       `Exclude your own conversation (${first.projection().thread.id}).`,
     );
     expect(firstPrompt).toContain("Which threads need my input?");
 
-    for (const pina of ["legacy", "replacement"] as const) {
+    for (const pina of ["legacy", "v2", "replacement"] as const) {
       const reopened = makeLocalCommandHarness({ text: "What needs my input?", pina });
       yield* reopened.start;
       expect(reopened.startTurn.mock.calls[0]?.[0].message.text).toContain("You are Pina");

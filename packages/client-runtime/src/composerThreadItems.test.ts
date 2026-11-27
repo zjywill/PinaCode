@@ -1,4 +1,4 @@
-import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -16,6 +16,8 @@ function shell(
 ): ComposerThreadCandidate {
   return {
     environmentId,
+    projectId: ProjectId.make("alpha"),
+    settledOverride: null,
     id: ThreadId.make(id),
     title,
     branch: null,
@@ -52,6 +54,42 @@ it("ranks thread mentions like the palette and leaves out subagent threads", () 
     now: Date.parse("2026-10-23T00:00:00.000Z"),
   });
   expect(items.map((item) => item.thread.threadId)).toEqual(["word", "newer-mid-word"]);
+});
+
+it("lists unsettled threads in Pina and resolves project searches to individual thread refs", () => {
+  const remote = EnvironmentId.make("linked");
+  const pina = ThreadId.make("pina-assistant-scratch-0");
+  const input = {
+    environmentId,
+    linkedEnvironments: new Map([[remote, "Laptop"]]),
+    excludeThreadId: pina,
+    now: Date.parse("2026-10-23T00:00:00Z"),
+    pinaProjects: [
+      { environmentId, id: ProjectId.make("alpha"), title: "Storefront" },
+      { environmentId: remote, id: ProjectId.make("alpha"), title: "Inventory" },
+    ],
+    shells: [
+      shell("local", "Review", { latestUserMessageAt: "2026-10-22T00:00:00Z" }),
+      shell("remote", "Review", { environmentId: remote }),
+      shell("settled", "Review", { settledOverride: "settled" }),
+      shell("archived", "Review", { archivedAt: "2026-10-21T00:00:00Z" }),
+      shell("other", "Review", { environmentId: EnvironmentId.make("unlinked") }),
+      shell(pina, "Pina"),
+      shell("pina-assistant-scratch-1", "Pina", { environmentId: remote }),
+    ],
+  };
+  const items = (query: string) => matchComposerThreadItems({ ...input, query });
+  expect(items("").map(({ label, description }) => [label, description])).toEqual([
+    ["Review", "Storefront"],
+    ["Review", "Inventory · Laptop"],
+  ]);
+  expect(items("inventory").map((item) => item.thread)).toEqual([
+    { environmentId: remote, threadId: "remote" },
+  ]);
+  expect(items("review")).toHaveLength(2);
+  expect(matchComposerThreadItems({ ...input, pinaProjects: [], query: "" })).toHaveLength(2);
+  const { pinaProjects: _projects, ...ordinary } = input;
+  expect(matchComposerThreadItems({ ...ordinary, excludeThreadId: null, query: "" })).toEqual([]);
 });
 
 it("offers the composer thread's own used side chats, but not other threads' side chats", () => {

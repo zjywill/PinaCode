@@ -1,13 +1,17 @@
 import {
   isListedThreadLineage,
+  isPinaThread,
   type EnvironmentId,
   type EnvironmentMachineKind,
+  type ScopedProjectRef,
   type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
 import { foldSearchQuery, rankSearchItems, scoreThreadSearch } from "@t3tools/shared/paletteSearch";
 
-import type { EnvironmentThreadShell } from "./state/models.ts";
+import { scopedProjectKey } from "./environment/scoped.ts";
+import { sortThreads } from "./state/threadSort.ts";
+import type { EnvironmentProject, EnvironmentThreadShell } from "./state/models.ts";
 import { threadSearchSubject, type ThreadSearchShell } from "./state/threadSearch.ts";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
@@ -15,7 +19,7 @@ import type { MFunctionType } from "gt-i18n/types";
 const COMPOSER_THREAD_RESULT_LIMIT = 5;
 
 export type ComposerThreadCandidate = ThreadSearchShell &
-  Pick<EnvironmentThreadShell, "archivedAt" | "lineage">;
+  Pick<EnvironmentThreadShell, "archivedAt" | "lineage" | "projectId" | "settledOverride">;
 
 export interface ComposerThreadItem {
   readonly id: string;
@@ -34,6 +38,8 @@ export interface ComposerThreadItem {
 export function matchComposerThreadItems(
   input: {
     shells: ReadonlyArray<ComposerThreadCandidate>;
+    /** Pina browses unsettled project threads even before a search term is entered. */
+    pinaProjects?: ReadonlyArray<Pick<EnvironmentProject, "environmentId" | "id" | "title">>;
     environmentId: EnvironmentId;
     /** The machines the composer's environment links to, by name. */
     linkedEnvironments: ReadonlyMap<EnvironmentId, string>;
@@ -45,7 +51,18 @@ export function matchComposerThreadItems(
   resolve: MFunctionType = mFallback,
 ): ComposerThreadItem[] {
   const query = foldSearchQuery(input.query);
-  if (query.length === 0) return [];
+  const { pinaProjects } = input;
+  if (query.length === 0 && !pinaProjects) return [];
+  const projectTitles =
+    pinaProjects &&
+    new Map(
+      pinaProjects.map((project) => [
+        scopedProjectKey({ environmentId: project.environmentId, projectId: project.id }),
+        project.title,
+      ]),
+    );
+  const projectTitle = (shell: ComposerThreadCandidate) =>
+    projectTitles?.get(scopedProjectKey(shell));
   // Closing an unused side chat deletes it, so only one with a message is offered.
   const isOwnSideChat = (shell: ComposerThreadCandidate) =>
     shell.lineage.sideChat === true &&
@@ -58,32 +75,89 @@ export function matchComposerThreadItems(
         input.linkedEnvironments.has(shell.environmentId)) &&
       shell.id !== input.excludeThreadId &&
       shell.archivedAt === null &&
-      (isListedThreadLineage(shell.lineage) || isOwnSideChat(shell)),
+      (!pinaProjects || (shell.settledOverride !== "settled" && !isPinaThread(shell.id))) &&
+      (isListedThreadLineage(shell.lineage) || (!pinaProjects && isOwnSideChat(shell))),
   );
-  return rankSearchItems(candidates, (shell, options) =>
-    scoreThreadSearch(query, threadSearchSubject(shell, null), input.now, {
-      ...options,
-      picks: false,
-    }),
-  )
-    .slice(0, COMPOSER_THREAD_RESULT_LIMIT)
-    .map(({ item: shell }) => {
-      const machine =
-        shell.environmentId === input.environmentId
-          ? undefined
-          : input.linkedEnvironments.get(shell.environmentId);
-      return {
-        id: `thread:${shell.environmentId}:${shell.id}`,
-        type: "thread",
-        thread: { environmentId: shell.environmentId, threadId: shell.id },
-        label: shell.title,
-        description: isOwnSideChat(shell)
+  const matches =
+    query.length === 0
+      ? sortThreads(candidates, "updated_at")
+      : rankSearchItems(candidates, (shell, options) =>
+          scoreThreadSearch(query, threadSearchSubject(shell, projectTitle(shell)), input.now, {
+            ...options,
+            picks: false,
+          }),
+        ).map(({ item }) => item);
+  const visible = pinaProjects ? matches : matches.slice(0, COMPOSER_THREAD_RESULT_LIMIT);
+  return visible.map((shell) => {
+    const machine =
+      shell.environmentId === input.environmentId
+        ? undefined
+        : input.linkedEnvironments.get(shell.environmentId);
+    const title = projectTitle(shell);
+    return {
+      id: `thread:${shell.environmentId}:${shell.id}`,
+      type: "thread",
+      thread: { environmentId: shell.environmentId, threadId: shell.id },
+      label: shell.title,
+      description: title
+        ? [title, machine].filter(Boolean).join(" · ")
+        : isOwnSideChat(shell)
           ? resolve(msg("Side chat"))
           : machine === undefined
             ? resolve(msg("Thread", { $context: "noun, search result type" }))
             : resolve(msg("Thread on {machine}", { machine })),
+    };
+  });
+}
+
+export interface ComposerProjectItem {
+  readonly id: string;
+  readonly type: "project";
+  readonly project: ScopedProjectRef;
+  readonly label: string;
+  readonly description: string;
+}
+
+export function matchPinaProjectItems(
+  projects: ReadonlyArray<
+    Pick<
+      EnvironmentProject,
+      "environmentId" | "id" | "title" | "workspaceRoot" | "archivedAt" | "isScratch"
+    >
+  >,
+  environmentId: EnvironmentId,
+  linkedEnvironments: ReadonlyMap<EnvironmentId, string>,
+  query: string,
+  resolve: MFunctionType = mFallback,
+): ComposerProjectItem[] {
+  const search = foldSearchQuery(query);
+  return projects
+    .filter(
+      (project) =>
+        !project.isScratch &&
+        project.archivedAt == null &&
+        (project.environmentId === environmentId ||
+          linkedEnvironments.has(project.environmentId)) &&
+        foldSearchQuery(project.title).includes(search),
+    )
+    .map((project) => {
+      const ref = { environmentId: project.environmentId, projectId: project.id };
+      const machine =
+        project.environmentId === environmentId
+          ? undefined
+          : linkedEnvironments.get(project.environmentId);
+      return {
+        id: `project:${scopedProjectKey(ref)}`,
+        type: "project",
+        project: ref,
+        label: resolve(msg("New thread in {project}", { project: project.title })),
+        description: [machine, project.workspaceRoot].filter(Boolean).join(" · "),
       };
     });
+}
+
+export function composerProjectPrompt(item: ComposerProjectItem) {
+  return `${item.label} (projectId: ${item.project.projectId}, environmentId: ${item.project.environmentId}) `;
 }
 
 export interface ComposerEnvironmentCandidate {

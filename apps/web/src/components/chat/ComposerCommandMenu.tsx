@@ -1,3 +1,4 @@
+import type { ComposerProjectItem } from "@t3tools/client-runtime/composerThreadItems";
 import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
 import type { ComposerPathSearchTarget } from "@t3tools/client-runtime/state/threads";
 import {
@@ -39,6 +40,7 @@ import { ComposerBanner } from "./ComposerBanner";
 import { resolvePullRequestState } from "../pullRequest/pullRequestPresentation";
 
 export type ComposerCommandItem =
+  | ComposerProjectItem
   | {
       id: string;
       type: "path";
@@ -168,7 +170,11 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
           <CommandList
             id={props.listId}
             aria-label={
-              props.triggerKind ? m(LISTBOX_LABEL_BY_TRIGGER[props.triggerKind]) : undefined
+              props.items[0]?.type === "project" || props.items[0]?.type === "thread"
+                ? gt("Suggestions")
+                : props.triggerKind
+                  ? m(LISTBOX_LABEL_BY_TRIGGER[props.triggerKind])
+                  : undefined
             }
             className="min-h-0 scroll-pb-6"
             scrollAreaClassName="max-h-72"
@@ -262,6 +268,9 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
           kind={props.item.pathKind}
           theme={props.resolvedTheme}
         />
+      ) : null}
+      {props.item.type === "project" ? (
+        <FolderIcon aria-hidden="true" className="size-4 shrink-0 text-secondary-label" />
       ) : null}
       {props.item.type === "thread" ? (
         <MessagesSquareIcon aria-hidden="true" className="size-4 shrink-0 text-secondary-label" />

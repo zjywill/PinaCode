@@ -1,4 +1,4 @@
-import { pinaInstructions } from "./pinaInstructions.ts";
+import { PINA_INSTRUCTIONS_VERSION, pinaInstructions } from "./pinaInstructions.ts";
 import { expandPullRequestWorkflowPrompt } from "../pullRequest/pullRequestWorkflow.ts";
 import { classifyCodexManagedError } from "../provider/CodexManagedErrors.ts";
 import { modelSelectionsEqual } from "@t3tools/shared/model";
@@ -2154,7 +2154,7 @@ export const layer: Layer.Layer<
         !(manualResume && unsentResumeMessage === undefined) &&
         !acceptedAttempts.some(
           (prior) =>
-            prior.pinaInstructionsVersion === 2 &&
+            prior.pinaInstructionsVersion === PINA_INSTRUCTIONS_VERSION &&
             (prior.nativeThreadId === undefined
               ? sameNativeThread
               : prior.nativeThreadId === loadedProviderThread.nativeThreadRef?.nativeId),
@@ -2212,7 +2212,10 @@ export const layer: Layer.Layer<
       const runningAttempt: OrchestrationV2RunAttempt = {
         ...attempt,
         ...(needsPinaContext
-          ? { includesPinaInstructions: true as const, pinaInstructionsVersion: 2 }
+          ? {
+              includesPinaInstructions: true as const,
+              pinaInstructionsVersion: PINA_INSTRUCTIONS_VERSION,
+            }
           : {}),
         ...(runningProviderThread.nativeThreadRef?.nativeId == null
           ? {}

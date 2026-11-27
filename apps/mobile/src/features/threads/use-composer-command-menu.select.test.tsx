@@ -1,3 +1,4 @@
+import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vite-plus/test";
@@ -94,5 +95,54 @@ it("/ ranks a skill whose name matches exactly above skills that only mention it
   await act(async () => root.render(<Probe />));
 
   expect(menu?.items[0]?.id).toBe("skill:review");
+  act(() => root.unmount());
+});
+
+it("selects a new thread in a project with no sessions from Pina's @ picker", async () => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  const environmentId = EnvironmentId.make("local");
+  const project = {
+    environmentId,
+    id: ProjectId.make("shop-id"),
+    title: "Storefront",
+    workspaceRoot: "/src/shop",
+    scripts: [],
+    defaultModelSelection: null,
+    createdAt: "2026-10-01T00:00:00Z",
+    updatedAt: "2026-10-01T00:00:00Z",
+  };
+  const onChangeDraftMessage = vi.fn();
+  let menu: ReturnType<typeof useComposerCommandMenu> | undefined;
+  function Probe() {
+    menu = useComposerCommandMenu({
+      draftMessage: "Please investigate @",
+      ownerKey: "pina",
+      environmentId,
+      currentThreadId: ThreadId.make("pina-assistant-scratch-0"),
+      projects: [
+        project,
+        { ...project, id: ProjectId.make("archived"), archivedAt: project.updatedAt },
+        { ...project, environmentId: EnvironmentId.make("unlinked") },
+      ],
+      projectCwd: null,
+      selectedProviderStatus: null,
+      hasThread: true,
+      hasCompactableConversation: false,
+      onChangeDraftMessage,
+      onOpenModelPicker: vi.fn(),
+    });
+    return null;
+  }
+
+  const root = createRoot(document.createElement("div"));
+  await act(async () => root.render(<Probe />));
+  expect(menu?.items).toHaveLength(1);
+  const item = menu?.items[0];
+  if (!item || item.type !== "project") throw new Error("Expected a project target");
+  expect(item.label).toBe("New thread in Storefront");
+  await act(async () => menu?.onSelect(item));
+  expect(onChangeDraftMessage).toHaveBeenCalledWith(
+    "Please investigate New thread in Storefront (projectId: shop-id, environmentId: local) ",
+  );
   act(() => root.unmount());
 });

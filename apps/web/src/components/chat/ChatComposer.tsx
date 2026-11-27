@@ -1,3 +1,4 @@
+import { composerProjectPrompt } from "@t3tools/client-runtime/composerThreadItems";
 import { copySnapshot } from "./copySnapshot";
 import { VoiceInputSetup } from "./VoiceInputSetup";
 import { useComposerTypingGuard } from "./useComposerTypingGuard";
@@ -2092,9 +2093,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     });
     const { snapshot, trigger } = resolveActiveComposerTrigger();
     if (!trigger) return;
-    if (item.type === "path") {
-      if (!isPathSuggestionCurrent(item.searchTarget, trigger, environmentId, gitCwd)) return;
-      const replacement = `${serializeComposerFileLink(item.path)} `;
+    if (item.type === "path" || item.type === "project") {
+      if (trigger.kind !== "path") return;
+      if (
+        item.type === "path" &&
+        !isPathSuggestionCurrent(item.searchTarget, trigger, environmentId, gitCwd)
+      )
+        return;
+      const replacement =
+        item.type === "project"
+          ? composerProjectPrompt(item)
+          : `${serializeComposerFileLink(item.path)} `;
       const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
         snapshot.value,
         trigger.rangeEnd,

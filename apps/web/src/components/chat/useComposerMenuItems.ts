@@ -6,9 +6,11 @@ import {
 import {
   matchComposerEnvironmentItems,
   matchComposerThreadItems,
+  matchPinaProjectItems,
 } from "@t3tools/client-runtime/composerThreadItems";
 import { useAtomValue } from "@effect/atom-react";
 import { useState } from "react";
+import { isPinaThread } from "@t3tools/contracts";
 import type {
   EnvironmentId,
   ProjectId,
@@ -34,7 +36,7 @@ import {
   getProviderSlashCommandsForSlashMenu,
 } from "@t3tools/client-runtime/providerSkills";
 import { searchProviderSkills } from "../../providerSkillSearch";
-import { useVisibleThreadShells } from "~/state/entities";
+import { useProjects, useVisibleThreadShells } from "~/state/entities";
 import { useEnvironmentIdentities, useEnvironmentMachines } from "~/state/environments";
 import { offersLinkedEnvironmentsAtom } from "~/state/peerLinks";
 import {
@@ -125,11 +127,14 @@ export function useComposerMenuItems({
   const settledPullRequestTextQuery =
     pullRequestTextQuery === debouncedPullRequestTextQuery ? pullRequestTextQuery : null;
   const isPathTrigger = composerTriggerKind === "path";
+  const pinaThreadPicker = isPathTrigger && activeThreadId !== null && isPinaThread(activeThreadId);
+  const projects = useProjects();
+  const searchWorkspace = isPathTrigger && !pinaThreadPicker;
   const environmentThreadShells = useVisibleThreadShells(isPathTrigger);
   // Mounts older settled threads matching the mention, here and on linked machines, which shells
   // may leave out.
   useThreadSearch(
-    isPathTrigger ? [environmentId, ...linkedEnvironments.keys()] : [],
+    searchWorkspace ? [environmentId, ...linkedEnvironments.keys()] : [],
     pathTriggerQuery,
     { titlesOnly: true },
   );
@@ -144,8 +149,8 @@ export function useComposerMenuItems({
   const workspaceEntries = useComposerPathSearch(
     {
       environmentId,
-      cwd: isPathTrigger ? gitCwd : null,
-      query: isPathTrigger ? pathTriggerQuery : null,
+      cwd: searchWorkspace ? gitCwd : null,
+      query: searchWorkspace ? pathTriggerQuery : null,
     },
     messages,
   );
@@ -211,18 +216,33 @@ export function useComposerMenuItems({
   const items = ((): ComposerCommandItem[] => {
     if (!composerTrigger) return [];
     if (composerTrigger.kind === "path") {
-      return [
-        ...matchComposerThreadItems(
-          {
-            shells: environmentThreadShells,
-            environmentId,
-            linkedEnvironments,
-            excludeThreadId: activeThreadId,
-            query: composerTrigger.query,
-            now,
-          },
+      const threadItems = matchComposerThreadItems(
+        {
+          shells: environmentThreadShells,
+          ...(pinaThreadPicker ? { pinaProjects: projects } : {}),
+          environmentId,
+          linkedEnvironments,
+          excludeThreadId: activeThreadId,
+          query: composerTrigger.query,
+          now,
+        },
+        messages,
+      );
+      if (pinaThreadPicker) {
+        if (questionAttachmentTarget !== null) return threadItems;
+        const projectItems = matchPinaProjectItems(
+          projects,
+          environmentId,
+          linkedEnvironments,
+          composerTrigger.query,
           messages,
-        ),
+        );
+        return composerTrigger.query
+          ? [...projectItems, ...threadItems]
+          : [...threadItems, ...projectItems];
+      }
+      return [
+        ...threadItems,
         // An answer to an agent's question carries thread links, not machines.
         ...(questionAttachmentTarget === null && offersMachines
           ? matchComposerEnvironmentItems(
@@ -416,7 +436,7 @@ export function useComposerMenuItems({
     return [];
   })();
   const isLoading =
-    (composerTriggerKind === "path" && workspaceEntries.isPending) ||
+    (searchWorkspace && workspaceEntries.isPending) ||
     ((composerTriggerKind === "skill" || composerTriggerKind === "slash-command") &&
       workspaceSkillsScanning) ||
     (composerTriggerKind === "pull-request" &&
@@ -444,6 +464,7 @@ export function useComposerMenuItems({
         ? gt("No pull request matches {query}.", { query: composerTrigger.query })
         : gt("No pull requests found in this repository.");
     }
+    if (pinaThreadPicker) return gt("No results found.");
     return composerTriggerKind === "path"
       ? gt("No matching files or folders.")
       : gt("No matching command.");
