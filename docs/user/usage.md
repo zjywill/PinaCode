@@ -15,10 +15,10 @@ cost, split by token type and by speed. These estimates are not your subscriptio
 split, such as a provider-reported cost for a model without public rates, shows as **Other**.
 Select a model under **Breakdown** to see its trend, cache hit rate, and cost per million tokens.
 
-Totals depend on the history available on each server. Grok turns without a saved completed-turn
-record are missing from the totals.
-Text generation (thread titles, commit messages, PR text, branch names and review guides) is not in
-the totals for Codex or Claude Code 2.0.63 and newer, because those runs save no session history.
+- **Usage access**: PinaCode reads an agent's local history only for agents you have turned on and allowed. The first time you open Usage, it asks which agents to include; change your answer per agent in **Settings → Providers → Usage access** (web/desktop). Grok and OpenCode Go limits, Claude reset credits, and matching Claude limits to your account read the agent's sign-in, so they also wait for this permission.
+- **Retention**: Servers keep scanned usage history for **92 days** by default (preserving Claude history after Claude's 30-day cleanup). Change `usageHistoryRetentionDays` in `<pinacode-home>/userdata/settings.json` (e.g. `365` or `"unlimited"`; views show up to 90 days).
+- **Custom data directories**: Honors `CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `GROK_HOME`, `PI_CODING_AGENT_DIR` / `PI_CODING_AGENT_SESSION_DIR`, `OPENCODE_DATA_DIR`, `ANTIGRAVITY_DATA_DIR`, and `XDG_DATA_HOME` (Muse). Use absolute or `~/` paths. Set `T3CODE_HOST_ID` to pin a container's host identity.
+- **Exclusions**: Codex and Claude Code 2.0.63+ text-generation runs (titles, commits, PR text, review guides) and Grok turns without a saved completed-turn record are not included.
 
 The server keeps scanned usage history for 92 days by default. Claude Code deletes its own
 transcripts after 30 days, so for older Claude usage this history is the only record left. To keep

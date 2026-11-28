@@ -80,7 +80,7 @@ export function matchComposerThreadItems(
     (shell) =>
       (shell.environmentId === input.environmentId ||
         input.linkedEnvironments.has(shell.environmentId)) &&
-      shell.id !== input.excludeThreadId &&
+      !(shell.environmentId === input.environmentId && shell.id === input.excludeThreadId) &&
       shell.archivedAt === null &&
       (!pinaProjects ||
         (!isPinaThread(shell.id) &&

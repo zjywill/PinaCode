@@ -627,6 +627,10 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
                     installedVersion?.replace(/^v/, "") !== targetVersion)
                 );
               });
+            const startupFailure = verifiedProviders.find(
+              (verifiedProvider) =>
+                verifiedProvider.status === "error" && verifiedProvider.message?.trim(),
+            )?.message;
             const stillOutdated =
               targetVersion === undefined &&
               verifiedProviders.some((verifiedProvider) => isOutdatedProvider(verifiedProvider));
@@ -636,7 +640,9 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
                 startedAt,
                 finishedAt,
                 message: couldNotVerify
-                  ? "Update command completed, but Pina Code could not verify the provider version."
+                  ? startupFailure
+                    ? `Update command completed, but the provider cannot start: ${startupFailure.trim()}`
+                    : "Update command completed, but Pina Code could not verify the provider version."
                   : stillOutdated
                     ? "Update command completed, but Pina Code still detects an outdated provider version."
                     : (providerRestartMessage(verifiedProviders) ?? "Provider updated."),

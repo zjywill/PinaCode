@@ -135,7 +135,11 @@ import {
 } from "./ConnectionsSettings.logic";
 import { AuthorizedClientsHeaderAction, PairingClientsList } from "./AuthorizedClientsSettings";
 import { ITEM_ROW_CLASSNAME } from "./itemRows";
-import { EmptyRemoteEnvironments, SavedBackendListRow } from "./SavedEnvironmentRows";
+import {
+  EmptyRemoteEnvironments,
+  LocalEnvironmentMcpUrlRow,
+  SavedBackendListRow,
+} from "./SavedEnvironmentRows";
 import { AddEnvironmentDialog } from "./AddEnvironmentDialog";
 import {
   type ConnectDeviceRevokeRequest,
@@ -1280,6 +1284,9 @@ function ConnectionsSettingsContent({
               />
             ) : null}
             {canManageLocalBackend && desktopBridge ? renderWslRow() : null}
+            {isPrimaryAccess && accessEnvironment ? (
+              <LocalEnvironmentMcpUrlRow entry={accessEnvironment.entry} />
+            ) : null}
             {accessServerConfig?.environment.capabilities.previewTunnelSetting ? (
               <SettingsRow
                 title={searchableSetting("preview-tunnel").title}

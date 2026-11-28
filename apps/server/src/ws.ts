@@ -2590,6 +2590,16 @@ export const layerWsRpc = (
               yield* providerRegistry.refreshModelCatalog(input.instanceId);
               return { providers: [] };
             }
+            if (input.limitsOnly === true) {
+              yield* Effect.all(
+                [
+                  input.instanceId === undefined ? usageLimitSources.refresh : Effect.void,
+                  providerRegistry.refreshUsageLimits(input.instanceId),
+                ],
+                { concurrency: "unbounded", discard: true },
+              );
+              return { providers: [] };
+            }
             if (input.refreshModels) {
               yield* providerRegistry.invalidateModelCaches({
                 instanceId: input.instanceId,
@@ -3655,6 +3665,16 @@ export const layerWsRpc = (
                       })),
                     )
                   : Stream.empty;
+              const hostPressureUpdates =
+                input.hostPressure === true
+                  ? hostResources.pressure.pipe(
+                      Stream.map((payload) => ({
+                        version: 1 as const,
+                        type: "hostPressureUpdated" as const,
+                        payload,
+                      })),
+                    )
+                  : Stream.empty;
               const settingsUpdates = settingsChanges.pipe(
                 Stream.map((settings) =>
                   ServerSettings.redactServerSettingsForClient(settings, settingsClient),
@@ -3672,7 +3692,10 @@ export const layerWsRpc = (
                   providerStatuses,
                   Stream.merge(
                     settingsUpdates,
-                    Stream.merge(environmentThemeUpdates, usageLimitSourceUpdates),
+                    Stream.merge(
+                      environmentThemeUpdates,
+                      Stream.merge(usageLimitSourceUpdates, hostPressureUpdates),
+                    ),
                   ),
                 ),
               );

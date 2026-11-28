@@ -77,6 +77,9 @@ function makeFakeBrowserWindow() {
     id: 1,
     session: {
       setPermissionRequestHandler: vi.fn(),
+      availableSpellCheckerLanguages: ["en-GB", "en-US"],
+      getSpellCheckerLanguages: vi.fn(() => ["en-US"]),
+      setSpellCheckerLanguages: vi.fn(),
       webRequest: {
         onBeforeSendHeaders: vi.fn(),
       },
@@ -1563,6 +1566,7 @@ describe("DesktopWindow", () => {
 
           assert.deepEqual(webPreferences.additionalArguments, expected);
           assert.isTrue(webPreferences.contextIsolation);
+          assert.equal(webPreferences.zoomMode, "isolated");
           assert.equal(
             webPreferences.preload,
             "/repo/apps/desktop/dist-electron/preview-pick-preload.cjs",

@@ -61,6 +61,11 @@ cancel in the destination picker or edit the draft once it opens.
 On Android, you can also drag images from another app into the message input
 in split screen.
 
+In the desktop app, when the thread's environment runs on this computer, drag a
+folder onto the composer or choose **Folder…** from the attach button to add its
+path. Nothing is uploaded, so there is no size limit; the agent reads the folder
+in place.
+
 See [images and videos](#images-and-videos-in-messages) for previewing and saving media.
 
 ## Send while the agent is working
@@ -438,6 +443,8 @@ other document formats such as Word or Pages open in the device's own viewer whe
 If nothing on the device can show a format, save or share it to open it elsewhere. A ZIP up to
 50 MB opens as a folder list on every surface; on mobile, select a file inside it to preview,
 save, or add it to chat.
+
+When a preview asks for a file password, enter it and select **Unlock**. PinaCode uses the password on your device. Web and desktop can unlock supported PDF, ZIP, Office, and OpenDocument files. The mobile app can unlock ZIP attachments, and Android can unlock PDFs. Ebooks protected by DRM need a compatible reader.
 
 ## Images and videos in messages
 

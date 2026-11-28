@@ -1,8 +1,12 @@
 import { SessionPermissions } from "./SessionPermissions";
+import { SettingsRow } from "./settingsLayout";
+import { useSearchableSetting } from "./settingsSearch";
+import { isLoopbackHostname } from "~/environments/primary/target";
 import {
   ChevronRightIcon,
   ChevronsLeftRightEllipsisIcon,
   EllipsisIcon,
+  PencilIcon,
   RouteIcon,
 } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
@@ -14,6 +18,8 @@ import {
   connectionErrorText,
   connectionStatusText,
   environmentMcpUrl,
+  localEnvironmentMcpUrl,
+  type ConnectionCatalogEntry,
 } from "@t3tools/client-runtime/connection";
 import * as Option from "effect/Option";
 import { msg, T, useGT, useMessages } from "gt-react";
@@ -23,6 +29,7 @@ import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { cn } from "../../lib/utils";
 import { EnvironmentIconMenu } from "./EnvironmentIconPicker";
 import { EnvironmentRoutesList } from "./EnvironmentRoutesList";
+import { RenameEnvironmentDialog } from "./RenameEnvironmentDialog";
 import {
   ConnectionDiagnosisPanel,
   ConnectionDiagnosisSummary,
@@ -105,6 +112,35 @@ export function savedBackendStatus(
   }
 }
 
+function useCopyMcpUrl() {
+  const gt = useGT();
+  return useCopyToClipboard<{ url: string }>({
+    target: {
+      target: "MCP URL",
+      unavailableMessage: msg("Clipboard API is unavailable while copying MCP URL."),
+      failureMessage: msg("Failed to copy MCP URL to the clipboard."),
+    },
+    onCopy: ({ url }) => {
+      toastManager.add({
+        type: "success",
+        title: gt("MCP URL copied"),
+        description: gt("Add it to an agent, e.g. claude mcp add --transport http t3 {url}", {
+          url,
+        }),
+      });
+    },
+    onError: (error) => {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: gt("Could not copy MCP URL"),
+          description: error.message,
+        }),
+      );
+    },
+  });
+}
+
 export function SavedBackendListRow({
   environment,
   removingEnvironmentId,
@@ -118,6 +154,7 @@ export function SavedBackendListRow({
   const [routesOpen, setRoutesOpen] = useState(initialRoutesOpen);
   const [permissionsOpen, setPermissionsOpen] = useState(false);
   const [diagnosisOpen, setDiagnosisOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
   const environmentId = environment.environmentId;
   const unsupported = environment.connection.phase === "unsupported";
   const blocked = unsupported && !hasSavedBearerRoute(environment.entry);
@@ -144,31 +181,7 @@ export function SavedBackendListRow({
   const copyTraceId = (traceId: string) => {
     copyTraceIdToClipboard(traceId, { traceId });
   };
-  const { copyToClipboard: copyMcpUrl } = useCopyToClipboard<{ url: string }>({
-    target: {
-      target: "MCP URL",
-      unavailableMessage: msg("Clipboard API is unavailable while copying MCP URL."),
-      failureMessage: msg("Failed to copy MCP URL to the clipboard."),
-    },
-    onCopy: ({ url }) => {
-      toastManager.add({
-        type: "success",
-        title: gt("MCP URL copied"),
-        description: gt("Add it to an agent, e.g. claude mcp add --transport http t3 {url}", {
-          url,
-        }),
-      });
-    },
-    onError: (error) => {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: gt("Could not copy MCP URL"),
-          description: error.message,
-        }),
-      );
-    },
-  });
+  const { copyToClipboard: copyMcpUrl } = useCopyMcpUrl();
   const versionMismatch = resolveServerConfigVersionMismatch(environment.serverConfig, messages);
   const serverUpdateState = useAtomValue(serverEnvironment.updateStateAtom(environmentId));
   const resumingServerUpdate =
@@ -431,6 +444,12 @@ export function SavedBackendListRow({
             environmentId={environmentId}
             serverConfig={environment.serverConfig}
           />
+          {environment.relayManaged ? null : (
+            <MenuItem onClick={() => setRenameOpen(true)}>
+              <PencilIcon />
+              <T>Rename…</T>
+            </MenuItem>
+          )}
           <MenuItem onClick={() => setRoutesOpen((open) => !open)}>
             <RouteIcon />
             {routesOpen ? gt("Hide routes") : gt("Routes")}
@@ -451,7 +470,37 @@ export function SavedBackendListRow({
           </MenuItem>
         </MenuPopup>
       </Menu>
+      <RenameEnvironmentDialog
+        open={renameOpen}
+        onOpenChange={setRenameOpen}
+        environmentId={environmentId}
+        label={environment.label}
+      />
     </EnvironmentRow>
+  );
+}
+
+export function LocalEnvironmentMcpUrlRow({ entry }: { readonly entry: ConnectionCatalogEntry }) {
+  const setting = useSearchableSetting();
+  const gt = useGT();
+  const { copyToClipboard: copyMcpUrl } = useCopyMcpUrl();
+  const mcpUrl = localEnvironmentMcpUrl({ entry });
+  if (mcpUrl === null) return null;
+  const loopback = isLoopbackHostname(new URL(mcpUrl).hostname);
+  return (
+    <SettingsRow
+      {...setting("mcp-url")}
+      description={
+        loopback
+          ? gt("Give this URL to an agent running on this machine: {url}", { url: mcpUrl })
+          : gt("Give this URL to an agent that can reach this environment: {url}", { url: mcpUrl })
+      }
+      control={
+        <Button size="sm" variant="outline" onClick={() => copyMcpUrl(mcpUrl, { url: mcpUrl })}>
+          <T>Copy</T>
+        </Button>
+      }
+    />
   );
 }
 

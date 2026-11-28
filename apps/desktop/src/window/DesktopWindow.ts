@@ -50,6 +50,7 @@ import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts"
 import { makeQuitShortcutHandler } from "./QuitHold.ts";
 import { copyContextMenuImage } from "./ContextMenuImage.ts";
 import { installMainWindowRemoteRequestHeaderPolicy } from "./RemoteRequestHeaders.ts";
+import { resolveSpellCheckerLanguages } from "./SpellCheckerLanguages.ts";
 
 const TITLEBAR_HEIGHT = 40;
 
@@ -647,6 +648,9 @@ export const make = Effect.gen(function* () {
       webPreferences.nodeIntegrationInSubFrames = false;
       webPreferences.contextIsolation = true;
       webPreferences.disableHtmlFullscreenWindowResize = true;
+      // Default mode keys zoom by host across the partition and resets it to app zoom on every
+      // cross-document commit; isolated keeps each tab's zoom on its own frame across navigations.
+      webPreferences.zoomMode = "isolated";
       if (previewPasskeys.bridgeEnabled) {
         webPreferences.additionalArguments = [
           ...(webPreferences.additionalArguments ?? []),
@@ -798,6 +802,16 @@ export const make = Effect.gen(function* () {
     window.webContents.session.setPermissionRequestHandler((_contents, permission, callback) =>
       callback(permission !== "openExternal"),
     );
+    // macOS's native checker follows the system languages; elsewhere Chromium keeps en-US.
+    if (environment.platform !== "darwin") {
+      const session = window.webContents.session;
+      const spellCheckerLanguages = resolveSpellCheckerLanguages(
+        session.getSpellCheckerLanguages(),
+        yield* electronApp.preferredSystemLanguages,
+        session.availableSpellCheckerLanguages,
+      );
+      if (spellCheckerLanguages) session.setSpellCheckerLanguages(spellCheckerLanguages);
+    }
     window.webContents.on("will-navigate", (event, url) => {
       if (
         isSameOriginRendererNavigation({

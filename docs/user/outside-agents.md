@@ -16,6 +16,9 @@ For an app that is not listed, choose **Something else…**, add a remote MCP
 server with OAuth in that app, and paste the URL. Apps that require their own
 client ID cannot connect.
 
+On the host, **Settings → Sharing & access → MCP URL** shows the direct endpoint.
+The outside agent needs network access to that address.
+
 ## Get the MCP URL
 
 In **Settings → Environments**, open a saved environment's menu and choose
