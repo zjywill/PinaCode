@@ -56,8 +56,7 @@ export function Notice(props: {
           accessibilityRole="button"
           accessibilityLabel={props.dismissLabel ?? gt("Dismiss message")}
           onPress={props.onDismiss}
-          hitSlop={10}
-          className="min-h-6 min-w-6 items-center justify-center active:opacity-60"
+          className="-my-2 -me-2 size-[44px] shrink-0 items-center justify-center active:opacity-60 android:size-[48px]"
         >
           <SymbolView
             name="xmark"

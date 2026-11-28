@@ -158,4 +158,6 @@ it("never submits a late transcription after disconnect and saves it as text", a
   expect(send).not.toHaveBeenCalled();
   expect(preserveTranscript).toHaveBeenCalledExactlyOnceWith("Keep these words");
   expect(conversation.getSnapshot()).toEqual({ phase: "idle", reason: "connection" });
+  conversation.end();
+  expect(conversation.getSnapshot()).toEqual({ phase: "idle" });
 });

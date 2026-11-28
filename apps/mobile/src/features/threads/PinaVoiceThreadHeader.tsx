@@ -10,7 +10,10 @@ import {
   useSyncExternalStore,
   type ComponentProps,
 } from "react";
+import { View } from "react-native";
 import type { AppBarAction } from "../../components/ui/AppBar.types";
+import { Notice } from "../../components/ui/Notice";
+import { useBarInset } from "../../components/ui/useBarInset";
 import { useAppForeground } from "../../lib/appState";
 import { mergeComposerDraftContent } from "../../state/use-composer-drafts";
 import { useGlobalVoiceInput } from "../voice-input/VoiceInputProvider";
@@ -43,6 +46,7 @@ export function PinaVoiceThreadHeader({
   readonly onInterruptVoice: () => Promise<unknown> | void;
 }) {
   const gt = useGT();
+  const noticeTop = useBarInset() + 8;
   const [conversation] = useState(() => new PinaVoiceConversation());
   const state = useSyncExternalStore(conversation.subscribe, conversation.getSnapshot);
   const {
@@ -141,7 +145,7 @@ export function PinaVoiceThreadHeader({
           },
         ]
       : [];
-  const subtitle = (() => {
+  const status = (() => {
     switch (state.phase) {
       case "listening":
         return gt("Listening to you…");
@@ -167,11 +171,32 @@ export function PinaVoiceThreadHeader({
           case "playback":
             return gt("Continue in chat to see Pina’s response.");
           default:
-            return header.subtitle;
+            return undefined;
         }
     }
   })();
   return (
-    <ThreadHeader {...header} subtitle={subtitle} actions={voiceActions} hideThreadTools={active} />
+    <>
+      <ThreadHeader
+        {...header}
+        subtitle={(active ? status : undefined) ?? header.subtitle}
+        actions={voiceActions}
+        hideThreadTools={active}
+      />
+      {!active && status !== undefined ? (
+        <View
+          className="absolute inset-x-3 z-20"
+          style={{ top: noticeTop }}
+          pointerEvents="box-none"
+        >
+          <Notice
+            message={status}
+            icon="exclamationmark.circle"
+            floating
+            onDismiss={() => conversation.end()}
+          />
+        </View>
+      ) : null}
+    </>
   );
 }

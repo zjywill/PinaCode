@@ -151,7 +151,7 @@ export class PinaVoiceConversation {
   }
 
   end(reason?: PinaVoiceEndReason) {
-    if (!this.operation && reason === undefined && this.state.phase === "idle") return;
+    if (!this.operation && this.state.phase === "idle" && this.state.reason === reason) return;
     this.operation?.abort();
     this.operation = null;
     this.playback?.abort();
