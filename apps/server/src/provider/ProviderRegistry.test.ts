@@ -1305,6 +1305,30 @@ it.layer(
       );
     });
 
+    it("discards saved models when Dim confirms its selectable catalog is empty", () => {
+      const readyProvider = {
+        instanceId: ProviderInstanceId.make("dim"),
+        driver: ProviderDriverKind.make("dim"),
+        status: "ready",
+        enabled: true,
+        installed: true,
+        auth: { status: "authenticated" },
+        checkedAt: "2026-10-30T00:00:00.000Z",
+        version: "1.0.0",
+        models: [{ slug: "oauth/example", name: "Example", isCustom: false, capabilities: null }],
+        slashCommands: [],
+        skills: [],
+      } as const satisfies ServerProvider;
+      const warning = { ...readyProvider, status: "warning", models: [] } as const;
+      const merge = ProviderRegistry.mergeProviderSnapshot;
+      const unreadable = merge(readyProvider, { ...warning, modelsIncomplete: true });
+      assert.deepStrictEqual(unreadable.models, readyProvider.models);
+      assert.strictEqual(unreadable.modelsRetained, true);
+      const empty = merge(unreadable, { ...warning, modelsIncomplete: false });
+      assert.deepStrictEqual(empty.models, []);
+      assert.strictEqual(empty.modelsRetained, undefined);
+    });
+
     it("does not bring back models the installed CLI is too old to run", () => {
       const pendingProvider = {
         instanceId: ProviderInstanceId.make("claudeAgent"),

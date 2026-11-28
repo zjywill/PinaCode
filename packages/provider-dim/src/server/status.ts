@@ -119,6 +119,7 @@ const querySelectableModels = Effect.fn("DimProvider.querySelectableModels")(fun
   request: DimConnection["request"],
 ) {
   const models: DimCatalogModel[] = [];
+  let modelsIncomplete = false;
   let after: { providerId: string; modelId: string } | undefined;
   do {
     const page = yield* request("provider.models.query", {
@@ -126,7 +127,12 @@ const querySelectableModels = Effect.fn("DimProvider.querySelectableModels")(fun
       limit: 100,
       ...(after === undefined ? {} : { after }),
     });
-    for (const entry of recordArray(page, "models") ?? []) {
+    const entries = recordArray(page, "models");
+    if (!entries) return { models, modelsIncomplete: true };
+    modelsIncomplete ||= (recordArray(page, "empty") ?? []).some(
+      (entry) => recordString(recordField(entry, "reason"), "kind") === "unreadable",
+    );
+    for (const entry of entries) {
       const providerId = recordString(entry, "providerId");
       if (providerId === undefined) continue;
       const entryModel = dimModelFromCatalog({
@@ -137,13 +143,19 @@ const querySelectableModels = Effect.fn("DimProvider.querySelectableModels")(fun
       if (entryModel !== undefined) models.push(entryModel);
     }
     const next = recordField(page, "next");
+    if (next == null) break;
     const providerId = recordString(next, "providerId");
     const modelId = recordString(next, "modelId");
-    if (providerId === undefined || modelId === undefined) break;
-    if (after?.providerId === providerId && after.modelId === modelId) break;
+    if (
+      providerId === undefined ||
+      modelId === undefined ||
+      (after?.providerId === providerId && after.modelId === modelId)
+    ) {
+      return { models, modelsIncomplete: true };
+    }
     after = { providerId, modelId };
   } while (true);
-  return models;
+  return { models, modelsIncomplete };
 });
 
 export const readDimWorkspaceSkills = Effect.fn("DimProvider.readWorkspaceSkills")(function* (
@@ -186,8 +198,10 @@ const modelsFromProductCatalog = Effect.fn("DimProvider.modelsFromProductCatalog
   );
   const auth: ServerProviderAuth = authenticated ? { status: "authenticated" } : UNKNOWN_AUTH;
   if (hello.features?.includes("provider.models.query")) {
-    const models = yield* querySelectableModels(request).pipe(Effect.orElseSucceed(() => []));
-    return { models, auth };
+    const catalog = yield* querySelectableModels(request).pipe(
+      Effect.orElseSucceed(() => ({ models: [], modelsIncomplete: true })),
+    );
+    return { ...catalog, auth };
   }
   const models: DimCatalogModel[] = [];
   for (const provider of enabled) {
@@ -203,7 +217,7 @@ const modelsFromProductCatalog = Effect.fn("DimProvider.modelsFromProductCatalog
       if (converted !== undefined) models.push(converted);
     }
   }
-  return { models, auth };
+  return { models, auth, modelsIncomplete: undefined };
 });
 
 const readConfiguredModels = Effect.fn("DimProvider.readConfiguredModels")(function* (
@@ -251,6 +265,7 @@ export const checkDimProviderStatus = Effect.fn("DimProvider.checkStatus")(funct
   let models: ReadonlyArray<ServerProviderModel> = [];
   let auth: ServerProviderAuth = UNKNOWN_AUTH;
   const profile = hello.success.daemonProfile.kind;
+  let modelsIncomplete: boolean | undefined = profile === "product" ? true : undefined;
   let canAuthenticate = false;
   let usageLimits = dimUsageLimitsForProfile(profile, checkedAt);
 
@@ -269,6 +284,7 @@ export const checkDimProviderStatus = Effect.fn("DimProvider.checkStatus")(funct
     ).pipe(Effect.orElseSucceed(() => undefined));
     if (result !== undefined) {
       models = collectModels(result.catalog.models, contextWindows);
+      modelsIncomplete = result.catalog.modelsIncomplete;
       auth = result.account ?? result.catalog.auth;
       canAuthenticate = result.account !== undefined;
       usageLimits = result.usage;
@@ -287,18 +303,21 @@ export const checkDimProviderStatus = Effect.fn("DimProvider.checkStatus")(funct
     ...(input.settings.socketPath.trim() === "" ? { installedVersion: version } : {}),
     status,
     auth,
+    ...(modelsIncomplete === undefined ? {} : { modelsIncomplete }),
     setup: { canInstall: false, canAuthenticate },
     ...(usageLimits === undefined ? {} : { usageLimits }),
     ...(status === "warning"
       ? {
           message:
-            auth.status === "authenticated"
-              ? "No models are available. Refresh the model list or configure a provider in Dim."
-              : "No model configured in Dim. Sign in or configure a provider in Dim.",
+            modelsIncomplete === true
+              ? "Could not verify the Dim model list. Refresh the model list to check again."
+              : auth.status === "authenticated"
+                ? "No models are available. Refresh the model list or configure a provider in Dim."
+                : "No model configured in Dim. Sign in or configure a provider in Dim.",
         }
       : {}),
     models: providerModelsFromSettings(
-      [dimDefaultModel(), ...models],
+      models.length > 0 || modelsIncomplete === undefined ? [dimDefaultModel(), ...models] : [],
       input.settings.customModels,
       null,
     ),

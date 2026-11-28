@@ -236,6 +236,8 @@ export function upsertProviderWorkspaceSnapshot(
 }
 
 const shouldRetainMissingProviderModels = (provider: ServerProvider): boolean => {
+  if (provider.modelsIncomplete !== undefined) return provider.modelsIncomplete;
+
   if (provider.driver === ProviderDriverKind.make("pi")) {
     // Pi auth becomes known only after inventory discovery: empty means unauthenticated; failed/interactive discovery preserves unknown auth and cached models.
     return !(
@@ -264,7 +266,7 @@ const shouldRetainMissingProviderModels = (provider: ServerProvider): boolean =>
     // Claude Code keeps one gateway model cache per Claude home, for one base URL at a time, so a
     // ready probe can omit this instance's gateway models after another instance or a terminal
     // `claude` on a different gateway rewrote that cache.
-    return provider.status !== "ready" || provider.modelsIncomplete === true;
+    return provider.status !== "ready";
   }
 
   const isAntigravity = provider.driver === ProviderDriverKind.make("antigravity");
@@ -387,6 +389,7 @@ const retainsReadyCatalog = (
 ): boolean =>
   nextProvider.enabled &&
   nextProvider.installed &&
+  nextProvider.modelsIncomplete !== false &&
   (status === "error" || status === "warning") &&
   nextProvider.auth.status !== "unauthenticated" &&
   models.length > 0 &&

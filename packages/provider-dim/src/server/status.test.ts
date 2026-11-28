@@ -7,7 +7,7 @@ import * as Stream from "effect/Stream";
 
 import { DimSettings } from "../settings.ts";
 import { checkDimProviderStatus, readDimWorkspaceSkills } from "./status.ts";
-import type { DimConnection } from "./transport.ts";
+import { DimTransportError, type DimConnection } from "./transport.ts";
 
 const hello = {
   instanceId: "fixture",
@@ -29,11 +29,28 @@ const connection = (request: DimConnection["request"]): DimConnection => ({
   closed: Effect.never,
 });
 
+const checkProductStatus = (
+  request: DimConnection["request"],
+  modelContextWindows: Ref.Ref<ReadonlyMap<string, number>>,
+) =>
+  checkDimProviderStatus({
+    settings,
+    environment: process.env,
+    modelContextWindows,
+    daemon: {
+      endpoint: "/fixture/dim.sock",
+      nativeHome: "/fixture/rust",
+      productHome: "/fixture",
+      ensure: () => Effect.succeed(hello),
+      connect: () => Effect.succeed(connection(request)),
+    },
+  });
+
 it.live("lists selectable Dim models even when provider.list omits Dim OAuth", () =>
   Effect.gen(function* () {
     const modelContextWindows = yield* Ref.make<ReadonlyMap<string, number>>(new Map());
     const next = { providerId: "dimcode-api-oauth", modelId: "unavailable-model" };
-    const probeConnection = connection((method, params) => {
+    const snapshot = yield* checkProductStatus((method, params) => {
       switch (method) {
         case "provider.list":
           return Effect.succeed({ providers: [] });
@@ -59,20 +76,9 @@ it.live("lists selectable Dim models even when provider.list omits Dim OAuth", (
         default:
           return Effect.succeed({});
       }
-    });
-    const snapshot = yield* checkDimProviderStatus({
-      settings,
-      environment: process.env,
-      modelContextWindows,
-      daemon: {
-        endpoint: "/fixture/dim.sock",
-        nativeHome: "/fixture/rust",
-        productHome: "/fixture",
-        ensure: () => Effect.succeed(hello),
-        connect: () => Effect.succeed(probeConnection),
-      },
-    });
+    }, modelContextWindows);
     assert.strictEqual(snapshot.status, "ready");
+    assert.strictEqual(snapshot.modelsIncomplete, false);
     assert.strictEqual(snapshot.version, hello.serverVersion);
     assert.strictEqual(snapshot.installedVersion, process.versions.node);
     assert.deepStrictEqual(
@@ -87,6 +93,45 @@ it.live("lists selectable Dim models even when provider.list omits Dim OAuth", (
       128000,
     );
   }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+it.live.each([
+  ["no_models", false],
+  ["unreadable", true],
+  ["request_failed", true],
+] as const)(
+  "distinguishes a Dim catalog response of %s from a confirmed inventory",
+  ([result, incomplete]) =>
+    Effect.gen(function* () {
+      const modelContextWindows = yield* Ref.make<ReadonlyMap<string, number>>(new Map());
+      const providerId = "dimcode-api-oauth";
+      const snapshot = yield* checkProductStatus((method) => {
+        switch (method) {
+          case "provider.list":
+            return Effect.succeed({
+              providers: [{ providerId, enabled: true, credentialConfigured: true }],
+            });
+          case "provider.models.query":
+            return result === "request_failed"
+              ? Effect.fail(new DimTransportError({ detail: "Fixture timeout" }))
+              : Effect.succeed({
+                  models: [],
+                  next: null,
+                  empty: [{ providerId, reason: { kind: result } }],
+                });
+          default:
+            return Effect.succeed({});
+        }
+      }, modelContextWindows);
+      assert.strictEqual(snapshot.auth.status, "authenticated");
+      assert.strictEqual(snapshot.status, "warning");
+      assert.strictEqual(snapshot.modelsIncomplete, incomplete);
+      assert.deepStrictEqual(snapshot.models, []);
+      assert.match(
+        snapshot.message ?? "",
+        incomplete ? /^Could not verify/ : /^No models are available/,
+      );
+    }).pipe(Effect.provide(NodeServices.layer)),
 );
 
 it.effect("reads workspace Skills with Dim's enablement and invocation metadata", () =>
