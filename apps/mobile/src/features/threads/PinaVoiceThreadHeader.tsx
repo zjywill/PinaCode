@@ -181,7 +181,7 @@ export function PinaVoiceThreadHeader({
         {...header}
         subtitle={(active ? status : undefined) ?? header.subtitle}
         actions={voiceActions}
-        hideThreadTools={active}
+        threadTools={active ? "hidden" : "menu"}
       />
       {!active && status !== undefined ? (
         <View
