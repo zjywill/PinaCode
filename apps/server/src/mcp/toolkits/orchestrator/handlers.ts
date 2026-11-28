@@ -202,6 +202,15 @@ const handlers = {
       return yield* service.waitForThread(scope, input);
     }),
   ),
+  pinacode_pina_send: McpToolAccess.writesThreads(
+    () => [],
+    (input) =>
+      Effect.gen(function* () {
+        const scope = yield* McpInvocationContext.McpInvocationContext;
+        const service = yield* OrchestratorMcpService.OrchestratorMcpService;
+        return yield* service.sendToPina(scope, input);
+      }),
+  ),
   pinacode_environment_links: McpToolAccess.reads(() =>
     Effect.gen(function* () {
       const scope = yield* McpInvocationContext.McpInvocationContext;

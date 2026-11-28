@@ -24,6 +24,7 @@ import {
   type VoiceInputSessionDependencies,
   type VoiceRecordingSample,
 } from "./voiceInputSession";
+import { listenForPina } from "./pinaVoiceConversation";
 
 function createSession(
   overrides?: Partial<
@@ -63,6 +64,45 @@ function createSession(
 
 describe("global voice input", () => {
   beforeEach(() => resetVoiceInputGlobalsForTests());
+
+  it("hands repeated transcripts to the same voice conversation after the speaker pauses", async () => {
+    vi.useFakeTimers();
+    try {
+      let sample: VoiceRecordingSample = { durationMillis: 0, metering: -22 };
+      const { session, recorder } = createSession({ sampleRecording: () => sample });
+      try {
+        for (const previousStops of [0, 1]) {
+          sample = { durationMillis: 0, metering: -22 };
+          const transcribing = vi.fn();
+          const recording = Promise.withResolvers<void>();
+          const unsubscribe = session.subscribe(() => {
+            if (session.getSnapshot().state.phase === "recording") recording.resolve();
+          });
+          const transcript = listenForPina(
+            session,
+            "pina",
+            new AbortController().signal,
+            transcribing,
+          );
+          await recording.promise;
+          unsubscribe();
+          sample = { durationMillis: 200, metering: -25 };
+          await vi.advanceTimersByTimeAsync(80);
+          expect(recorder.stop).toHaveBeenCalledTimes(previousStops);
+          sample = { durationMillis: 1_400, metering: -65 };
+          await vi.advanceTimersByTimeAsync(80);
+          await expect(transcript).resolves.toBe("spoken text");
+          expect(transcribing).toHaveBeenCalledOnce();
+          expect(recorder.stop).toHaveBeenCalledTimes(previousStops + 1);
+          expect(session.getSnapshot().focusedOwners.has("pina")).toBe(false);
+        }
+      } finally {
+        session.dispose();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it.each(["retry", "takeover"])(
     "handles failed deactivation with %s without notifying a released owner",

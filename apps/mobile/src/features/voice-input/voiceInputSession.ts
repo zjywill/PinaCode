@@ -9,6 +9,7 @@ import {
 } from "@t3tools/client-runtime/voice-input";
 
 import { m } from "../../i18n/messages";
+import { createVoiceActivityDetector } from "./voiceActivity";
 import { normalizeVoiceInputDecibels, VOICE_WAVEFORM_SAMPLE_COUNT } from "./voiceInputMetering";
 
 const VOICE_METERING_INTERVAL_MS = 80;
@@ -18,6 +19,7 @@ const SILENT_LEVELS: ReadonlyArray<number> = Array<number>(VOICE_WAVEFORM_SAMPLE
 export type VoiceInputTarget = {
   readonly ownerKey: string;
   readonly label?: string;
+  readonly finishAfterSilence?: boolean;
   readonly readDraft: () => VoiceDraftSnapshot | null;
   readonly commitDraft: VoiceInputControllerDependencies["commitDraft"];
 };
@@ -83,6 +85,7 @@ export class VoiceInputSession {
   private audioLevels = SILENT_LEVELS;
   private releaseKeepAwake: (() => void) | null = null;
   private meteringInterval: ReturnType<typeof setInterval> | null = null;
+  private detectVoiceActivity: ReturnType<typeof createVoiceActivityDetector> | null = null;
 
   constructor(dependencies: VoiceInputSessionDependencies) {
     this.dependencies = dependencies;
@@ -167,6 +170,9 @@ export class VoiceInputSession {
 
   private startRecordingActivity(): void {
     this.releaseKeepAwake = this.dependencies.keepAwake();
+    this.detectVoiceActivity = this.target?.finishAfterSilence
+      ? createVoiceActivityDetector()
+      : null;
     this.sampleRecording();
     this.meteringInterval = setInterval(() => this.sampleRecording(), VOICE_METERING_INTERVAL_MS);
   }
@@ -174,6 +180,7 @@ export class VoiceInputSession {
   private stopRecordingActivity(): void {
     if (this.meteringInterval !== null) clearInterval(this.meteringInterval);
     this.meteringInterval = null;
+    this.detectVoiceActivity = null;
     this.releaseKeepAwake?.();
     this.releaseKeepAwake = null;
   }
@@ -195,6 +202,9 @@ export class VoiceInputSession {
     if (elapsedSeconds !== this.snapshot.elapsedSeconds) {
       this.publish({ ...this.snapshot, elapsedSeconds });
     }
+    const activity = this.detectVoiceActivity?.(sample.durationMillis, sample.metering);
+    if (activity === "finish") void this.controller.stop();
+    if (activity === "cancel") this.controller.cancel();
   }
 
   private setAudioLevels(levels: ReadonlyArray<number>): void {

@@ -1,4 +1,5 @@
 import type { WorkspaceTab } from "./workspace/workspace-tabs-state";
+import type { ScopedThreadRef } from "@t3tools/contracts";
 import { createContext, use } from "react";
 import type { InspectorContent } from "./inspector-panes";
 import type { WorkspaceDetail, WorkspaceDetailSheet } from "./workspace/workspace-detail-selection";
@@ -96,6 +97,7 @@ export const WorkspacePaneStateContext = createContext<WorkspacePaneStateValue>(
   sidebarToggleable: false,
   sidebarByOrientation: null,
 });
+export const ActiveWorkspaceThreadContext = createContext<ScopedThreadRef | null>(null);
 
 /** The window's layout and the workspace's actions. Toggling a pane doesn't re-render readers. */
 export function useAdaptiveWorkspaceLayout(): AdaptiveWorkspaceLayoutValue {

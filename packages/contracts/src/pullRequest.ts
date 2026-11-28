@@ -710,6 +710,18 @@ export const PullRequestChecks = Schema.Struct({
 });
 export type PullRequestChecks = typeof PullRequestChecks.Type;
 
+export const PullRequestChecksReport = Schema.Struct({
+  repository: TrimmedNonEmptyString,
+  repositoryUrl: TrimmedNonEmptyString,
+  number: PositiveInt,
+  url: TrimmedNonEmptyString,
+  checksUrl: TrimmedNonEmptyString,
+  headSha: Schema.NullOr(Schema.String),
+  headBranch: TrimmedNonEmptyString,
+  checks: Schema.Array(PullRequestCheck),
+});
+export type PullRequestChecksReport = typeof PullRequestChecksReport.Type;
+
 export const PullRequestActivity = Schema.Struct({
   author: Schema.optional(Schema.NullOr(PullRequestActor)),
   reviewers: Schema.optional(Schema.Array(PullRequestActor)),

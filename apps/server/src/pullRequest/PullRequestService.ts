@@ -29,6 +29,7 @@ import {
   type PullRequestDetail,
   type PullRequestPreview,
   type PullRequestChecks,
+  type PullRequestChecksReport,
   type PullRequestDiffFileContentsInput,
   type PullRequestDiffFileContentsResult,
   type PullRequestDiffStat,
@@ -79,6 +80,7 @@ import {
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { sourceControlDefinitions } from "../sourceControl/sourceControlDefinitions.ts";
 
+import * as ServerConfig from "../config.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as PullRequestFilesViewed from "../persistence/PullRequestFilesViewed.ts";
@@ -248,6 +250,7 @@ export class PullRequestService extends Context.Service<
     readonly checks: (
       input: PullRequestRef,
     ) => Effect.Effect<PullRequestChecks | null, PullRequestError>;
+    readonly checksByUrl: (url: string) => Effect.Effect<PullRequestChecksReport, PullRequestError>;
     readonly watchFingerprint: (
       input: PullRequestRef,
     ) => Effect.Effect<ProviderChangeRequestWatchFingerprint | null, PullRequestError>;
@@ -782,6 +785,7 @@ export const make = Effect.gen(function* () {
     registry.get(kind)?.unavailableRequirement;
   const toPullRequestError = toPullRequestErrorWith(requirementOf);
   const serverSettings = yield* ServerSettings.ServerSettingsService;
+  const { baseDir } = yield* ServerConfig.ServerConfig;
   const projects = yield* ProjectService.ProjectService;
   const repositoryIdentities = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
   const sourceControlProviders = yield* SourceControlProviderRegistry.SourceControlProviderRegistry;
@@ -789,6 +793,41 @@ export const make = Effect.gen(function* () {
   const filesViewedStore = yield* PullRequestFilesViewed.PullRequestFilesViewedRepository;
   const readCache = yield* PullRequestReadCache.PullRequestReadCache;
   const clock = yield* Clock.Clock;
+
+  const checksByUrl = Effect.fn("PullRequestService.checksByUrl")(function* (input: string) {
+    const host = "github.com";
+    const definition = sourceControlDefinitions.findByPublicHost(host);
+    const inputUrl = URL.parse(input);
+    const target =
+      inputUrl?.origin === `https://${host}` && inputUrl.username === "" && inputUrl.password === ""
+        ? definition?.parseChangeRequestUrl(inputUrl)
+        : null;
+    const url = target == null ? null : definition?.changeRequestUrl(target);
+    if (target == null || !url) {
+      return yield* new PullRequestOperationError({
+        operation: "checks",
+        detail: "Pass a GitHub pull request link such as https://github.com/owner/repo/pull/123.",
+      });
+    }
+    const api = registry.get(SourceControlProviderKind.make("github"));
+    if (!api?.readsPublicHostWithoutCheckout) {
+      return yield* new PullRequestUnavailableError({ reason: "provider-unsupported" });
+    }
+    const { repository, number } = target;
+    const detail = yield* withRateLimitBackoff(api, host, rateLimits)
+      .getChangeRequest({ cwd: baseDir, host, repository, number })
+      .pipe(Effect.mapError(toPullRequestError("checks")));
+    return {
+      repository,
+      repositoryUrl: `https://${host}/${repository}`,
+      number,
+      url,
+      checksUrl: `${url}/checks`,
+      headSha: detail.headSha ?? null,
+      headBranch: detail.headBranch,
+      checks: detail.checks,
+    };
+  });
 
   /**
    * Where each project's remote is served from, by the remote's recognised base URL: a remote no
@@ -4238,6 +4277,7 @@ export const make = Effect.gen(function* () {
     refreshAfterTurn,
     detail: credentialCached(detail),
     checks: credentialCached((input) => Cache.get(checksCache, refCacheKey(input))),
+    checksByUrl,
     watchFingerprint: credentialCached((input) =>
       Cache.get(watchFingerprintCache, refCacheKey(input)),
     ),

@@ -6,6 +6,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
 import { useArchivedThreadListActions } from "../home/useThreadListActions";
+import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import {
   ArchivedThreadsScreen,
   type ArchivedThreadsHeaderEnvironment,
@@ -17,6 +18,7 @@ import {
 } from "./useArchivedThreadSnapshots";
 
 export function ArchivedThreadsRouteScreen() {
+  const selectDetail = useSelectWorkspaceDetail();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<EnvironmentId | null>(null);
@@ -78,6 +80,13 @@ export function ArchivedThreadsRouteScreen() {
       onDeleteThread={confirmDeleteThread}
       onEnvironmentChange={setSelectedEnvironmentId}
       onRefresh={refresh}
+      onOpenThread={async (thread) => {
+        if (!(await unarchiveThread(thread))) return;
+        selectDetail({
+          name: "Thread",
+          params: { environmentId: thread.environmentId, threadId: thread.id },
+        });
+      }}
       onSearchQueryChange={setSearchQuery}
       onSortOrderChange={setSortOrder}
       onUnarchiveThread={unarchiveThread}

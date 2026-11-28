@@ -4,6 +4,7 @@ import {
   MessageId,
   type ModelSelection,
   ThreadId,
+  type OrchestratorMcpLaunchReportBack,
   OrchestratorMcpFailure,
   type OrchestrationV2ThreadLaunchWorkspaceStrategy,
   ProjectId,
@@ -26,6 +27,7 @@ import * as ThreadMessageIntake from "../../../orchestration-v2/ThreadMessageInt
 import * as Claims from "../../../orchestration-v2/AttachmentClaims.ts";
 import * as Project from "../../../project/ProjectService.ts";
 import * as ProjectCloneTracker from "../../../project/ProjectCloneTracker.ts";
+import * as RepositoryProjectSetup from "../../../project/RepositoryProjectSetup.ts";
 import { mutateProjectWithClone } from "../../../project/ProjectMutation.ts";
 import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.ts";
 import * as Repositories from "../../../sourceControl/SourceControlRepositoryService.ts";
@@ -224,19 +226,19 @@ const withSavedProjectSettingsAfterCreate = withSavedProjectSettings.pipe(
   Effect.orElseSucceed(() => (project: ProjectRecord) => project),
 );
 
-/** A launch with `reportBack` records its first run as the caller's task. */
+/** A launch with `reportBack` records a task in the calling thread. */
 const reportLaunch = Effect.fn("mcp.reportLaunch")(function* <
   A extends { readonly threadId: ThreadId; readonly runId: RunId | null },
 >(
   environmentId: EnvironmentId,
   input: {
-    readonly reportBack?: boolean | undefined;
+    readonly reportBack?: OrchestratorMcpLaunchReportBack | undefined;
     readonly message?: string | undefined;
     readonly clientRequestId?: string | undefined;
   },
   launched: A,
 ) {
-  if (input.reportBack !== true || launched.runId === null) return launched;
+  if (!input.reportBack || launched.runId === null) return launched;
   const scope = yield* McpInvocationContext.McpInvocationContext;
   // Optional so the project toolkit builds without it, as linked routing does.
   const delegation = yield* Effect.serviceOption(RemoteDelegation.RemoteDelegation);
@@ -247,6 +249,7 @@ const reportLaunch = Effect.fn("mcp.reportLaunch")(function* <
     messageId: `launch:${launched.threadId}`,
     message: input.message ?? "",
     clientRequestId: input.clientRequestId,
+    untilDelegatedWorkSettled: input.reportBack === "settled",
   });
   return taskId === undefined ? launched : { ...launched, taskId };
 });
@@ -696,6 +699,28 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
         );
       }),
     // An existing destination is never adopted.
+    { linkedCallers: "allowed" },
+  ),
+  pinacode_project_ensure_repository: McpToolAccess.writesEnvironment(
+    ({ remoteUrl }) =>
+      Effect.gen(function* () {
+        const setup = yield* RepositoryProjectSetup.RepositoryProjectSetup;
+        return yield* setup.ensure(remoteUrl).pipe(
+          Effect.mapError(
+            (error) =>
+              new OrchestratorMcpFailure({
+                code:
+                  error._tag === "RepositoryProjectInputError"
+                    ? "invalid_request"
+                    : "orchestration_error",
+                message:
+                  error._tag === "SourceControlRepositoryError"
+                    ? `Clone failed before a project was registered. ${error.detail}`
+                    : error.message,
+              }),
+          ),
+        );
+      }),
     { linkedCallers: "allowed" },
   ),
 });

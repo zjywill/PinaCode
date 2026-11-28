@@ -171,7 +171,10 @@ describe("IncomingShareInbox", () => {
         projectId: "project-2",
       }),
     ).rejects.toThrow("already reserved");
-    expect(persisted.get("share-stable")?.destination?.projectId).toBe("project-1");
+    expect(persisted.get("share-stable")?.destination).toEqual({
+      environmentId: "environment-1",
+      projectId: "project-1",
+    });
   });
 
   it("conditionally releases a reservation when its project is unavailable", async () => {
@@ -210,7 +213,10 @@ describe("IncomingShareInbox", () => {
         projectId: "project-1",
       }),
     ).rejects.toThrow("reservation changed");
-    expect(persisted.get("share-stable")?.destination?.projectId).toBe("project-2");
+    expect(persisted.get("share-stable")?.destination).toEqual({
+      environmentId: "environment-2",
+      projectId: "project-2",
+    });
   });
 
   it("treats an already-removed share as an already-released reservation", async () => {

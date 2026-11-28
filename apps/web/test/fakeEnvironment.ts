@@ -71,6 +71,7 @@ const descriptor = {
   capabilities: {
     repositoryIdentity: true,
     pinaAssistant: true,
+    pinaConversations: true,
     sideChats: true,
     freshContext: true,
     fileAttachments: { maxUploadBytes: 10_000_000 },
@@ -240,6 +241,7 @@ export interface FakeThread {
   readonly delegatedBy?: ThreadId;
   /** Makes this an older settled thread the shell leaves out; only its family read returns it. */
   readonly olderSettled?: true;
+  readonly archived?: true;
   readonly id: ThreadId;
   readonly title: string;
   /** Defaults to GPT-5.4 on Codex. */
@@ -362,7 +364,7 @@ function shellOf(thread: FakeThread): OrchestrationV2ThreadShell {
     visibleItemCount: thread.items.length,
     createdAt: AT,
     updatedAt: AT,
-    archivedAt: null,
+    archivedAt: thread.archived ? AT : null,
     settledOverride: thread.olderSettled ? "settled" : null,
     settledAt: thread.olderSettled ? AT : null,
     lastVisitedAt: AT,
@@ -399,7 +401,7 @@ function projectionOf(thread: FakeThread): OrchestrationV2ThreadProjection {
       creationSource: shell.creationSource,
       createdAt: AT,
       updatedAt: AT,
-      archivedAt: null,
+      archivedAt: shell.archivedAt,
       settledOverride: shell.settledOverride,
       settledAt: shell.settledAt,
       lastVisitedAt: AT,
@@ -464,7 +466,7 @@ const shellSnapshot = (): OrchestrationV2ShellStreamItem => ({
     schemaVersion: 1,
     snapshotSequence: sequence,
     projects,
-    threads: threads.filter((thread) => !thread.olderSettled).map(shellOf),
+    threads: threads.filter((thread) => !thread.olderSettled && !thread.archived).map(shellOf),
     archivedThreads: [],
   },
 });
@@ -490,6 +492,22 @@ const handlers: Record<string, (input: never) => unknown> = {
     Effect.suspend(() => {
       dispatched.push(command);
       if (acceptCommands && !holdCommand(command)) {
+        if (command.type === "thread.unarchive" && shellSubscriber !== null) {
+          const archived = threads.find(
+            (thread) => thread.id === command.threadId && thread.archived,
+          );
+          if (archived) {
+            const { archived: _archived, ...restored } = archived;
+            threads = threads.map((thread) => (thread.id === restored.id ? restored : thread));
+            sequence += 1;
+            return Queue.offer(shellSubscriber, {
+              kind: "thread.updated",
+              sequence,
+              location: "active",
+              thread: shellOf(restored),
+            }).pipe(Effect.as({ sequence }));
+          }
+        }
         if (command.type !== "thread.fork" || !command.sideChat || shellSubscriber === null)
           return Effect.succeed({ sequence: sequence + 1 });
         const fork: FakeThread = {
@@ -564,6 +582,13 @@ const handlers: Record<string, (input: never) => unknown> = {
         : [],
     });
   },
+  [ORCHESTRATION_V2_WS_METHODS.getArchivedShellSnapshot]: () =>
+    Effect.succeed({
+      schemaVersion: 1,
+      snapshotSequence: sequence,
+      projects,
+      threads: threads.filter((thread) => thread.archived).map(shellOf),
+    }),
   [WS_METHODS.subscribeVcsStatus]: () =>
     subscribe<VcsStatusStreamEvent>([], (queue) => {
       vcsStatusSubscriber = queue;

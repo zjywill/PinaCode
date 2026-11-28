@@ -634,6 +634,7 @@ function OpenCommandPaletteDialog(props: {
           resolvedKeys.includes(group.projectKey),
         ),
       ),
+    routeThreadRef,
   );
   const contextualProjectRef = resolveThreadActionProjectRef({
     activeDraftThread,

@@ -20,6 +20,16 @@ async function loadConfig(variant: string | undefined) {
   return (await import("./app.config.ts")).default;
 }
 
+it("accepts a supported Expo runtime policy override", async () => {
+  vi.stubEnv("MOBILE_VERSION_POLICY", "fingerprint");
+  expect((await loadConfig("development")).runtimeVersion).toEqual({ policy: "fingerprint" });
+});
+
+it("rejects an unsupported runtime policy before making a native build", async () => {
+  vi.stubEnv("MOBILE_VERSION_POLICY", "invalid");
+  await expect(loadConfig("production")).rejects.toThrow("MOBILE_VERSION_POLICY");
+});
+
 it.each(["prod", ""])("rejects APP_VARIANT=%j before selecting production IDs", async (value) => {
   await expect(loadConfig(value)).rejects.toThrow(
     "APP_VARIANT must be development, preview, or production.",
@@ -42,3 +52,26 @@ it.each([
     expect(config.android?.googleServicesFile).toBeUndefined();
   },
 );
+
+it("receives URLs and images from the iOS and Android share menus in production", async () => {
+  const config = await loadConfig("production");
+  expect(config.plugins).toContain("./plugins/withShareExtensionDisplayName.cjs");
+  expect(config.plugins).toContainEqual([
+    "expo-sharing",
+    expect.objectContaining({
+      ios: expect.objectContaining({
+        enabled: true,
+        activationRule: expect.objectContaining({
+          supportsText: true,
+          supportsWebUrlWithMaxCount: 1,
+          supportsImageWithMaxCount: 8,
+        }),
+      }),
+      android: expect.objectContaining({
+        enabled: true,
+        singleShareMimeTypes: ["*/*"],
+        multipleShareMimeTypes: ["*/*"],
+      }),
+    }),
+  ]);
+});

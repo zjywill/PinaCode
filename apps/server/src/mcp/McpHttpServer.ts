@@ -1598,6 +1598,8 @@ const PINA_COORDINATION_TOOLS: ReadonlySet<string> = new Set([
   "pinacode_thread_send",
   "pinacode_thread_launch",
   "pinacode_project_list",
+  "pinacode_project_ensure_repository",
+  "pinacode_pull_request_checks",
   "pinacode_environment_links",
   "pinacode_task_status",
   "pinacode_task_cancel",

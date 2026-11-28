@@ -75,15 +75,41 @@ and worktree while you stay in the new thread composer. This requires a Git proj
 
 Open **Pina** at the top of the thread list and ask “Which threads need my input?”
 Pina can look across projects on the connected environment, read a conversation,
-and send it a follow-up. To ask about a specific thread, copy its reference and paste it into Pina’s composer. With a hardware keyboard,
+and send it a follow-up. Open Pina from a thread and its reference appears in
+the composer. You can remove it before sending and pick a different thread with `@`.
+Opening Pina with no thread selected clears the automatic reference.
+With a hardware keyboard,
 press `Cmd+Option+P` on macOS or iOS, or `Ctrl+Alt+P` on Windows, Linux or Android.
 
 Try “Tell this thread to add a regression test.” Pina links to the destination
 and reports whether the message started a turn, reached the running agent, or
 was queued. Pina starts with the environment’s default access mode. If a thread
 requires higher access, follow its link to send the message there, or change
-Pina’s access mode in the composer before asking it to send again. Connect your phone and desktop to the same environment to continue
-the same Pina conversation. Each environment keeps its own history in **No project**.
+Pina’s access mode in the composer before asking it to send again.
+
+Open the menu beside **Pina** to name a new conversation or switch between topics.
+You can archive a conversation and restore it to reopen its history. Tasks
+report back to the conversation that sent them. Connect your phone and desktop
+to the same environment to open the same conversations on both devices.
+
+To start a batch, give Pina the issues in one project and say what each must pass.
+Pina links the project coordinator. Ask Pina how the batch is doing to see each
+issue's progress, decisions you need to make, and links to its work. Give Pina any
+additional requirements for the same batch and it sends them to the original coordinator.
+
+To start from a repository link, give Pina the URL, the environment to use, and
+the task. Pina opens a thread in a matching project or clones and registers the
+repository first. If setup fails, retry with the same link to continue.
+
+Paste a GitHub PR link into Pina to see the current commit, failed or pending CI
+checks, and their source links. You can ask Pina to send a failure to a project
+thread for repair after reviewing the results.
+
+An external assistant connected through environment MCP can send a message with
+`pinacode_pina_send` when its sign-in has permission to operate threads. Its replies
+and follow-ups use the same Pina conversation. Open the returned link or find the
+conversation by the assistant's name in Pina's menu. If the response is still running,
+the assistant can wait for the returned run and then read the conversation.
 
 ## Coordinate independent agents
 

@@ -12,7 +12,12 @@ import {
   pickedQuery,
   rankMessageMatches,
 } from "@t3tools/shared/paletteSearch";
-import { isPinaThread, type EnvironmentId, type ThreadId } from "@t3tools/contracts";
+import {
+  isNamedPinaConversation,
+  isPinaThread,
+  type EnvironmentId,
+  type ThreadId,
+} from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate } from "@tanstack/react-router";
 import { MessageSquareIcon } from "lucide-react";
@@ -121,7 +126,9 @@ function useThreadActionItems(input: {
   const { activeThread, runThread } = input;
   const messages = useMessages();
   const gt = useGT();
-  const threads = useVisibleThreadShells().filter((thread) => !isPinaThread(thread.id));
+  const threads = useVisibleThreadShells().filter(
+    (thread) => !isPinaThread(thread.id) || isNamedPinaConversation(thread.id),
+  );
   const delegatedUnderParent = useDelegatedUnderParent();
   const { environments } = useEnvironments();
   const { projectEnvironmentLocationById } = useEnvironmentLookups();

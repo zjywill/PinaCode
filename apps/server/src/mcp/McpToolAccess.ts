@@ -473,7 +473,8 @@ const routed = Effect.fn("McpToolAccess.routed")(function* <Tools extends Record
         const params =
           scope.thread &&
           isPinaThread(scope.thread.threadId) &&
-          (name === "pinacode_thread_launch" || name === "pinacode_thread_send")
+          (name === "pinacode_thread_launch" || name === "pinacode_thread_send") &&
+          !("reportBack" in input && input.reportBack === "settled")
             ? { ...input, reportBack: true }
             : input;
         const target = PeerForwarding.remoteTarget(scope, environmentId);

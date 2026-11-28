@@ -75,6 +75,7 @@ const state = vi.hoisted(() => ({
     modelSelection: { instanceId: "codex", model: "gpt-5.4" },
     runtimeMode: "full-access",
     interactionMode: "default",
+    archivedAt: null,
     runtime: null,
     latestRun: null as unknown,
   },
@@ -267,6 +268,9 @@ beforeEach(() => {
   state.compactModel = null;
   state.compactDueAt = "";
   state.thread.latestRun = null;
+  state.thread.id = "thread";
+  state.thread.runtimeMode = "full-access";
+  state.thread.interactionMode = "default";
   state.projection = null;
   state.serverConfig = {
     providers: [{ instanceId: "codex", driver: "codex", enabled: true }],
@@ -290,6 +294,45 @@ beforeEach(() => {
 });
 
 describe("mobile task permissions", () => {
+  it("queues voice text in the current Pina conversation with its modes and preserves the draft", async () => {
+    state.thread.id = "pina-assistant-scratch-0";
+    state.thread.runtimeMode = "approval-required";
+    state.thread.interactionMode = "plan";
+    state.grantedEnvironments.add("secondary");
+    state.pendingRequests = { approvals: [], userInputs: [] };
+    const composer = useThreadComposerState(NO_SIDE_CHATS);
+
+    expect(
+      await composer.sendPinaVoiceMessage("How is the release?", new AbortController().signal),
+    ).toBe("message");
+    expect(state.enqueue).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        environmentId: "secondary",
+        threadId: state.thread.id,
+        text: "How is the release?",
+        attachments: [],
+        runtimeMode: "approval-required",
+        interactionMode: "plan",
+        dispatchMode: "queue",
+      }),
+    );
+    expect(state.clearDraft).not.toHaveBeenCalled();
+    expect(state.draft.text).toBe("Keep my draft");
+  });
+
+  it("blocks a voice submission when there is an approval or the current environment denies it", async () => {
+    state.thread.id = "pina-assistant-scratch-0";
+    const signal = new AbortController().signal;
+    const composer = useThreadComposerState(NO_SIDE_CHATS);
+    expect(await composer.sendPinaVoiceMessage("Try sending", signal)).toBeNull();
+
+    state.grantedEnvironments.add("secondary");
+    expect(await composer.sendPinaVoiceMessage("Try sending", signal)).toBeNull();
+    expect(state.approve).not.toHaveBeenCalled();
+    expect(state.enqueue).not.toHaveBeenCalled();
+    expect(state.clearDraft).not.toHaveBeenCalled();
+  });
+
   it("consumes an approval reply without queueing a parent message", async () => {
     state.grantedEnvironments.add("secondary");
     const composer = useThreadComposerState(NO_SIDE_CHATS);

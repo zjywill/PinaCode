@@ -7,6 +7,7 @@ import type {
 import { LegendList } from "@legendapp/list/react-native";
 import {
   AuthOrchestrationOperateScope,
+  isPinaThread,
   type EnvironmentId,
   type EnvironmentMachineKind,
   resolveEnvironmentMachineKind,
@@ -179,6 +180,7 @@ function ArchivedThreadRow(props: {
   readonly isFirst: boolean;
   readonly isLast: boolean;
   readonly onDelete: () => void;
+  readonly onRestore: (() => void) | undefined;
   readonly onSwipeableClose: (methods: SwipeableMethods) => void;
   readonly onSwipeableWillOpen: (methods: SwipeableMethods) => void;
   readonly simultaneousSwipeGesture?: ComponentProps<typeof ThreadSwipeable>["simultaneousWith"];
@@ -237,6 +239,13 @@ function ArchivedThreadRow(props: {
           </View>
         ) : null}
       </View>
+      {canOperateThread && props.onRestore && (
+        <Button
+          label={gt("Unarchive", { $context: "verb, swipe action" })}
+          tone="secondary"
+          onPress={props.onRestore}
+        />
+      )}
     </View>
   );
   const containerStyle = {
@@ -301,8 +310,9 @@ export function ArchivedThreadsScreen(props: {
   readonly onSearchQueryChange: (query: string) => void;
   readonly onSortOrderChange: (sortOrder: ArchivedThreadSortOrder) => void;
   readonly onUnarchiveThread: (thread: EnvironmentThreadShell) => void;
+  readonly onOpenThread: (thread: EnvironmentThreadShell) => void;
 }) {
-  const { onDeleteThread, onUnarchiveThread } = props;
+  const { onDeleteThread, onOpenThread, onUnarchiveThread } = props;
   const gt = useGT();
   const openSwipeableRef = useRef<SwipeableMethods | null>(null);
   const archiveScrollGesture = useNativeGesture();
@@ -376,6 +386,7 @@ export function ArchivedThreadsScreen(props: {
         onSwipeableClose={handleSwipeableClose}
         onSwipeableWillOpen={handleSwipeableWillOpen}
         onUnarchive={() => onUnarchiveThread(item.thread)}
+        onRestore={isPinaThread(item.thread.id) ? () => onOpenThread(item.thread) : undefined}
         simultaneousSwipeGesture={archiveScrollGesture}
         thread={item.thread}
       />

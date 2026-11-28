@@ -2,6 +2,7 @@ import { createMemoryHistory } from "@tanstack/react-router";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   EnvironmentId,
+  pinaConversationThreadId,
   pinaThreadId,
   IssueTrackerKind,
   ORCHESTRATION_V2_WS_METHODS,
@@ -11,6 +12,7 @@ import {
   WS_METHODS,
   type IssueDetail,
   type IssueRef,
+  type OpenPinaInput,
   type ThreadIssueLink,
 } from "@t3tools/contracts";
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
@@ -661,7 +663,80 @@ it("opens the thread actions menu for an older settled thread the shell leaves o
     .toBeVisible();
 });
 
-it("opens Pina without adding the previous thread to its composer", async () => {
+it("creates a named Pina conversation, switches topics, and opens archived history", async () => {
+  await page.viewport(1400, 900);
+  const style = document.createElement("style");
+  style.textContent = stylesheet;
+  document.head.append(style);
+  using _style = { [Symbol.dispose]: () => style.remove() };
+  const projectId = ProjectId.make("project-scratch");
+  const release = {
+    ...threadWithHistory(
+      pinaConversationThreadId(projectId, "b5ba1253-d1b0-4cf7-b0af-d94ac077509f"),
+      1,
+    ),
+    projectId,
+    title: "Release",
+  };
+  const incident = {
+    ...threadWithHistory(
+      pinaConversationThreadId(projectId, "e375beae-8817-4095-9e1f-c1b297247073"),
+      1,
+    ),
+    projectId,
+    title: "Incident",
+  };
+  const archived = {
+    ...threadWithHistory(
+      pinaConversationThreadId(projectId, "40b089ad-e7f6-4bb9-b66a-c6a3f4e194a6"),
+      1,
+    ),
+    projectId,
+    title: "Past release",
+    archived: true as const,
+  };
+  const source = threadWithHistory("app", 1);
+  using _environment = installFakeEnvironment([source, release, incident, archived], {
+    acceptCommands: true,
+  });
+  const create = vi.fn((_input: OpenPinaInput) => Effect.succeed({ threadId: release.id }));
+  using _create = answerRpc(WS_METHODS.openPina, create);
+  __setClientSettingsForTests({
+    ...DEFAULT_CLIENT_SETTINGS,
+    onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+  });
+
+  const router = getRouter(
+    createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${source.id}`] }),
+  );
+  await router.load();
+  await using _app = await render(<AppRoot router={router} />, { router: false });
+  const switcher = page.getByRole("button", { name: "Pina conversations", exact: true });
+  await switcher.click();
+  await page.getByRole("menuitem", { name: "New Pina conversation" }).click();
+  await userEvent.type(page.getByRole("textbox", { name: "Conversation name" }), "Release");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await expect.element(page.getByText(`Answer 0 for ${release.id}.`)).toBeVisible();
+  expect(create).toHaveBeenCalledOnce();
+  expect(create.mock.calls[0]?.[0].newConversation).toEqual({
+    title: "Release",
+    requestId: expect.any(String),
+  });
+  await switcher.click();
+  await page.getByRole("menuitem", { name: "Incident", exact: true }).click();
+  await expect.element(page.getByText(`Answer 0 for ${incident.id}.`)).toBeVisible();
+  await expect.element(switcher).toHaveAttribute("aria-expanded", "false");
+  await switcher.click();
+  await expect.element(switcher).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("menuitem", { name: "Restore and open Past release" }).click();
+  await expect.element(page.getByText(`Answer 0 for ${archived.id}.`)).toBeVisible();
+  expect(dispatchedCommands()).toContainEqual(
+    expect.objectContaining({ type: "thread.unarchive", threadId: archived.id }),
+  );
+  expect(create).toHaveBeenCalledOnce();
+});
+
+it("brings the active thread into Pina as a removable composer reference", async () => {
   await page.viewport(1400, 900);
   const style = document.createElement("style");
   style.textContent = stylesheet;
@@ -674,7 +749,7 @@ it("opens Pina without adding the previous thread to its composer", async () => 
     projectId: ProjectId.make("project-scratch"),
     title: "Pina",
   };
-  using _environment = installFakeEnvironment([source, other, pina]);
+  using _environment = installFakeEnvironment([source, other, pina], { acceptCommands: true });
   using _ensure = answerRpc(WS_METHODS.openPina, () => Effect.succeed({ threadId: pina.id }));
   __setClientSettingsForTests({
     ...DEFAULT_CLIENT_SETTINGS,
@@ -700,9 +775,14 @@ it("opens Pina without adding the previous thread to its composer", async () => 
   await expect.element(panelToggle).not.toBeInTheDocument();
   expect(document.querySelector("[data-thread-details-card]")).toBeNull();
   const editor = page.getByRole("textbox", { name: "Message Pina", exact: true });
-  await editor.click();
   const pinaRef = scopeThreadRef(ENVIRONMENT_ID, pina.id);
-  const readPrompt = () => useComposerDraftStore.getState().getComposerDraft(pinaRef)?.prompt ?? "";
+  const readDraft = () => useComposerDraftStore.getState().getComposerDraft(pinaRef);
+  const readPrompt = () => readDraft()?.prompt ?? "";
+  expect(readDraft()?.threadContexts).toMatchObject([{ threadId: source.id, title: source.title }]);
+  await expect.element(editor.getByText(source.title)).toBeVisible();
+  await editor.click();
+  await userEvent.keyboard("{ControlOrMeta>}a{/ControlOrMeta}{Backspace}");
+  await expect.element(editor.getByText(source.title)).not.toBeInTheDocument();
   expect(readPrompt()).toBe("");
   await userEvent.keyboard("@");
   await expect.element(page.getByRole("option", { name: /Thread login/ })).toBeVisible();
@@ -721,6 +801,12 @@ it("opens Pina without adding the previous thread to its composer", async () => 
   await expect.element(page.getByText(`Answer 0 for ${other.id}.`)).toBeVisible();
   await userEvent.keyboard("{ControlOrMeta>}{Alt>}p{/Alt}{/ControlOrMeta}");
   await expect.element(page.getByText(`Answer 0 for ${pina.id}.`), { timeout: 3000 }).toBeVisible();
+  expect(readDraft()?.threadContexts).toMatchObject([{ threadId: other.id, title: other.title }]);
+  await expect.element(editor.getByText(other.title)).toBeVisible();
+  expect(readPrompt()).toContain(draft);
+  await router.navigate({ to: "/" });
+  await page.getByRole("button", { name: "Pina", exact: true }).click();
+  await expect.element(page.getByText(`Answer 0 for ${pina.id}.`), { timeout: 3000 }).toBeVisible();
   expect(readPrompt()).toBe(draft);
   await page.getByRole("button", { name: "Thread actions for Pina" }).click({ timeout: 3000 });
   await expect
@@ -729,6 +815,30 @@ it("opens Pina without adding the previous thread to its composer", async () => 
   for (const name of ["Pin thread", "Regenerate title", "Turn into project"]) {
     await expect.element(page.getByRole("menuitem", { name })).not.toBeInTheDocument();
   }
+  await userEvent.keyboard("{Escape}");
+  await editor.click();
+  await userEvent.keyboard("{ControlOrMeta>}a{/ControlOrMeta}{Backspace}");
+  await router.navigate({
+    to: "/$environmentId/$threadId",
+    params: { environmentId: ENVIRONMENT_ID, threadId: other.id },
+  });
+  await page.getByRole("button", { name: "Pina", exact: true }).click();
+  await expect.element(editor.getByText(other.title)).toBeVisible();
+  await editor.click();
+  await userEvent.keyboard("{End}Please add a regression test.{Enter}");
+  await vi.waitFor(() =>
+    expect(dispatchedCommands()).toContainEqual(
+      expect.objectContaining({
+        type: "message.dispatch",
+        threadId: pina.id,
+        text: expect.stringContaining("Please add a regression test."),
+        context: {
+          version: 1,
+          records: [expect.objectContaining({ kind: "thread", threadId: other.id })],
+        },
+      }),
+    ),
+  );
 });
 
 it("opens Pina’s delegated tasks from the header and prioritizes a pending question", async () => {

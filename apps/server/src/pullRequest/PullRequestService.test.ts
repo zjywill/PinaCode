@@ -23,6 +23,7 @@ import type { ServerSettings } from "@t3tools/contracts";
 import * as ServerSettingsService from "../serverSettings.ts";
 import { PullRequestOperationError } from "@t3tools/contracts";
 
+import * as ServerConfig from "../config.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as PullRequestFilesViewed from "../persistence/PullRequestFilesViewed.ts";
@@ -332,6 +333,9 @@ function makeService(input: {
   return Effect.flatMap(
     Layer.build(
       Layer.mergeAll(
+        ServerConfig.layerTest(process.cwd(), { prefix: "pina-pr-service-" }).pipe(
+          Layer.provide(NodeServices.layer),
+        ),
         Layer.mock(ServerSettingsService.ServerSettingsService)({
           getSettings: Effect.succeed(input.settings ?? DEFAULT_SERVER_SETTINGS),
         }),
@@ -376,6 +380,80 @@ function makeService(input: {
     (context) => Effect.provideContext(PullRequestService.make, context),
   );
 }
+
+it.effect("reads the linked GitHub PR and its current checks without a project", () =>
+  Effect.gen(function* () {
+    const kind = SourceControlProviderKind.make("github");
+    const url = "https://github.com/acme/app/pull/42";
+    const checks = [
+      { name: "tests", status: "failure", description: null, url: `${url}/checks` },
+      { name: "build", status: "pending", description: null, url: null },
+    ] as const;
+    let reads = 0;
+    const service = yield* makeService({
+      projects: [],
+      onProjectRead: () => assert.fail("An explicit URL does not need a project"),
+      providers: [
+        fakePullRequestProvider(kind, {
+          readsPublicHostWithoutCheckout: true,
+          getChangeRequest: (input) =>
+            Effect.sync(() => {
+              expect(input).toEqual({
+                cwd: expect.stringContaining("pina-pr-service-"),
+                host: "github.com",
+                repository: "acme/app",
+                number: 42,
+              });
+              return { ...hostedChangeRequest(""), headSha: `head-${++reads}`, checks };
+            }),
+        }),
+      ],
+    });
+    expect(yield* service.checksByUrl(`${url}/checks?check_run_id=1#details`)).toEqual({
+      repository: "acme/app",
+      repositoryUrl: "https://github.com/acme/app",
+      number: 42,
+      url,
+      checksUrl: `${url}/checks`,
+      headSha: "head-1",
+      headBranch: "feat/1",
+      checks,
+    });
+    expect((yield* service.checksByUrl(url)).headSha).toBe("head-2");
+    const invalid = yield* service
+      .checksByUrl("https://github.com.example/acme/app/pull/42")
+      .pipe(Effect.flip);
+    expect(invalid.message).toContain("Pass a GitHub pull request link");
+    expect(reads).toBe(2);
+  }),
+);
+
+it.effect("preserves GitHub access failures when reading CI by URL", () =>
+  Effect.gen(function* () {
+    const kind = SourceControlProviderKind.make("github");
+    const service = yield* makeService({
+      projects: [],
+      providers: [
+        fakePullRequestProvider(kind, {
+          readsPublicHostWithoutCheckout: true,
+          getChangeRequest: () =>
+            Effect.fail(
+              new PullRequestProviderError({
+                provider: kind,
+                operation: "getChangeRequest",
+                reason: "forbidden",
+                detail: "GitHub refused access to acme/private.",
+              }),
+            ),
+        }),
+      ],
+    });
+    const denied = yield* service
+      .checksByUrl("https://github.com/acme/private/pull/42")
+      .pipe(Effect.flip);
+    expect(denied.message).toContain("GitHub refused access to acme/private.");
+  }),
+);
 
 it.effect("lists GitHub Enterprise PRs for a stored unknown repository after host discovery", () =>
   Effect.gen(function* () {

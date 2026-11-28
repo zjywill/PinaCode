@@ -19,6 +19,8 @@ import {
   OrchestratorMcpFailure,
   OrchestratorMcpListScheduledTasksInput,
   OrchestratorMcpListScheduledTasksResult,
+  OrchestratorMcpPinaSendInput,
+  OrchestratorMcpPinaSendResult,
   OrchestratorMcpSaveScheduledTaskInput,
   OrchestratorMcpScheduleTaskResult,
   OrchestratorMcpTaskCancelInput,
@@ -39,6 +41,7 @@ import {
   TrimmedNonEmptyString,
 } from "@t3tools/contracts";
 import { McpSchema, Tool, Toolkit } from "effect/ai";
+import * as Digest from "effect/crypto/Digest";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 
@@ -294,6 +297,20 @@ const ThreadSendTool = Tool.make("pinacode_thread_send", {
   .annotate(Tool.Destructive, true)
   .annotate(Tool.OpenWorld, true);
 
+const PinaSendTool = Tool.make("pinacode_pina_send", {
+  description:
+    "Talk to Pina from an authorized external MCP client. Follow-ups stay in this sign-in's Pina conversation. Use a new clientRequestId for each message and reuse it to retry. Share the returned conversation link. If timed out, use pinacode_thread_wait with threadId and runId, then pinacode_thread_read for the reply.",
+  parameters: OrchestratorMcpPinaSendInput,
+  success: OrchestratorMcpPinaSendResult,
+  failure: OrchestratorMcpFailure,
+  failureMode: "return",
+  dependencies: [...dependencies, Digest.Digest],
+})
+  .annotate(Tool.Title, "Talk to Pina")
+  .annotate(Tool.Destructive, true)
+  .annotate(Tool.OpenWorld, true)
+  .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenUnlessExternalMcpClient);
+
 const ThreadWaitTool = Tool.make("pinacode_thread_wait", {
   description:
     "Wait for a thread's run to finish. No `runId`: latest. Idle: at once. On timeout, with `next` end your turn; without, call again.",
@@ -378,6 +395,7 @@ export const OrchestratorToolkit = Toolkit.make(
   ThreadReadTool,
   ThreadUpdateTool,
   ThreadSendTool,
+  PinaSendTool,
   ThreadWaitTool,
   ThreadInterruptTool,
   EnvironmentLinksTool,

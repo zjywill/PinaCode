@@ -87,6 +87,7 @@ import * as ProjectionMaintenance from "./ProjectionMaintenance.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as ProviderSessionManager from "./ProviderSessionManager.ts";
+import { PINA_INSTRUCTIONS_VERSION } from "./pinaInstructions.ts";
 import * as ProviderTurnStart from "./ProviderTurnStartService.ts";
 import * as RunExecutionService from "./RunExecutionService.ts";
 import * as ProviderUsageAnalytics from "../telemetry/ProviderUsageAnalytics.ts";
@@ -1250,7 +1251,10 @@ function makeLocalCommandHarness(input: {
           includesPinaInstructions: true,
           ...(input.pina === "legacy"
             ? {}
-            : { pinaInstructionsVersion: input.pina === "v2" ? 2 : input.pina === "v3" ? 3 : 4 }),
+            : {
+                pinaInstructionsVersion:
+                  input.pina === "v2" ? 2 : input.pina === "v3" ? 3 : PINA_INSTRUCTIONS_VERSION,
+              }),
           status: "completed",
           startedAt: now,
           completedAt: now,

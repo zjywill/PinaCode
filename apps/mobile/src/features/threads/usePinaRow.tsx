@@ -6,14 +6,18 @@ import { resolvePinaEnvironment } from "@t3tools/client-runtime/environment";
 import { useEnvironmentsWithScope } from "../../state/session";
 import { useWorkspaceEnvironments } from "../../state/workspace";
 import { useState } from "react";
+import { useNavigation } from "@react-navigation/native";
 import { Pressable, View } from "react-native";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import {
   AuthOrchestrationOperateScope,
   PINA_ASSISTANT_NAME,
+  isNamedPinaConversation,
   isPinaThread,
   type EnvironmentId,
+  type OpenPinaInput,
   type ScopedThreadRef,
+  type ThreadId,
 } from "@t3tools/contracts";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import {
@@ -22,12 +26,20 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { PinaAvatar } from "../../components/PinaAvatar";
 import { AppText as Text } from "../../components/ui/AppText";
+import { IconButton } from "../../components/ui/IconButton";
+import { Menu } from "../../components/ui/Menu";
 import { SymbolView } from "../../components/ui/AppSymbol";
 import * as Dialog from "../../components/ui/Dialog";
 import { m } from "../../i18n/messages";
-import { useEnvironmentServerConfig, useServerConfigs } from "../../state/entities";
+import { uuidv4 } from "../../lib/uuid";
+import {
+  useEnvironmentServerConfig,
+  useQuietThreadShell,
+  useServerConfigs,
+} from "../../state/entities";
 import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { setPinaSourceThread } from "../../state/use-composer-drafts";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import {
   resolveThreadListV2RowStatus,
@@ -58,8 +70,12 @@ export function usePinaEnvironment(preferred?: EnvironmentId | null) {
   });
 }
 
-export function useOpenPina(environmentId: EnvironmentId | null) {
+export function useOpenPina(
+  environmentId: EnvironmentId | null,
+  sourceThread: ScopedThreadRef | null,
+) {
   const config = useEnvironmentServerConfig(environmentId);
+  const source = useQuietThreadShell(sourceThread);
   const canOperate = useAtomValue(threadEnvironment.openPina.permissionAtom(environmentId));
   const ensure = useAtomCommand(threadEnvironment.openPina, { reportFailure: false });
   const selectDetail = useSelectWorkspaceDetail();
@@ -67,44 +83,71 @@ export function useOpenPina(environmentId: EnvironmentId | null) {
   if (!environmentId || !config?.environment.capabilities.pinaAssistant || !canOperate) {
     return null;
   }
-  const openThread = async () => {
-    const result = await ensure({ environmentId, input: {} });
-    if (result._tag === "Failure") {
-      if (!isAtomCommandInterrupted(result)) throw squashAtomCommandFailure(result);
-      return;
-    }
-    const { threadId } = result.value;
-    selectDetail({ name: "Thread", params: { environmentId, threadId } });
+  const openThread = (threadId: ThreadId) => {
+    const target = { environmentId, threadId };
+    setPinaSourceThread(
+      target,
+      sourceThread === null
+        ? null
+        : { ref: sourceThread, title: source?.title ?? sourceThread.threadId },
+    );
+    selectDetail({ name: "Thread", params: target });
   };
-  const open = () => {
+  const openFromServer = (input: OpenPinaInput) => {
     setOpening(true);
-    return openThread()
-      .catch((error: unknown) => {
-        Dialog.alert(PINA_ASSISTANT_NAME, errorDisplayMessage(error, m) ?? String(error));
+    return ensure({ environmentId, input })
+      .then((result) => {
+        if (result._tag === "Success") {
+          openThread(result.value.threadId);
+        } else if (!isAtomCommandInterrupted(result)) {
+          const error = squashAtomCommandFailure(result);
+          Dialog.alert(PINA_ASSISTANT_NAME, errorDisplayMessage(error, m) ?? String(error));
+        }
       })
       .finally(() => setOpening(false));
   };
-  return { environmentId, opening, open };
+  const open = () =>
+    sourceThread?.environmentId === environmentId && isPinaThread(sourceThread.threadId)
+      ? openThread(sourceThread.threadId)
+      : openFromServer({});
+  return {
+    environmentId,
+    opening,
+    supportsConversations: config.environment.capabilities.pinaConversations === true,
+    open,
+    openThread,
+    create: (title: string) => openFromServer({ newConversation: { title, requestId: uuidv4() } }),
+  };
 }
 
 export function usePinaRow(props: {
   readonly environmentId: EnvironmentId | null;
   readonly openThreadRef: ScopedThreadRef | null;
-  readonly thread?: EnvironmentThreadShell | undefined;
+  readonly sourceThreadRef: ScopedThreadRef | null;
+  readonly conversations: readonly EnvironmentThreadShell[];
+  readonly onArchive: (thread: EnvironmentThreadShell) => void;
+  readonly onRename: (thread: EnvironmentThreadShell) => void;
   readonly environmentLabel?: string | null | undefined;
   readonly now: string;
   readonly horizontalMargin?: boolean | undefined;
 }) {
-  const pina = useOpenPina(props.environmentId);
+  const pina = useOpenPina(props.environmentId, props.sourceThreadRef);
   const gt = useGT();
   const resolve = useMessages();
+  const navigation = useNavigation();
   if (!pina) return null;
   const selected =
     props.openThreadRef?.environmentId === pina.environmentId &&
     isPinaThread(props.openThreadRef.threadId);
-  const status = props.thread ? resolveThreadListV2RowStatus(props.thread) : "ready";
-  const woke =
-    props.thread && !selected && resolveThreadListV2WokeAt(props.thread, { now: props.now });
+  const current = selected
+    ? props.conversations.find((thread) => thread.id === props.openThreadRef?.threadId)
+    : undefined;
+  const thread = selected
+    ? current
+    : props.conversations.find((conversation) => !isNamedPinaConversation(conversation.id));
+  const title = current?.title ?? PINA_ASSISTANT_NAME;
+  const status = thread ? resolveThreadListV2RowStatus(thread) : "ready";
+  const woke = thread && !selected && resolveThreadListV2WokeAt(thread, { now: props.now });
   const statusIcon =
     STATUS_LABEL_BY_STATUS[status] ??
     (woke
@@ -113,7 +156,7 @@ export function usePinaRow(props: {
           label: msg("Woke", { $context: "thread came back from snooze" }),
           iconTintClassName: "accent-foreground-muted",
         }
-      : props.thread && !selected && threadHasUnseenCompletion(props.thread)
+      : thread && !selected && threadHasUnseenCompletion(thread)
         ? DONE_STATUS_LABEL
         : null);
   const statusLabel = statusIcon?.label
@@ -124,47 +167,102 @@ export function usePinaRow(props: {
         ? gt("Working", { $context: "thread status" })
         : null;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={[PINA_ASSISTANT_NAME, props.environmentLabel, statusLabel]
-        .filter(Boolean)
-        .join(", ")}
-      disabled={pina.opening}
-      accessibilityState={{
-        disabled: pina.opening,
-        selected,
-      }}
-      className={`${props.horizontalMargin === false ? "" : "mx-2 "}min-h-14 flex-row items-center gap-3 rounded-xl px-3 ${selected ? "bg-thread-selected" : "active:bg-thread-hover"}`}
-      onPress={() => void pina.open()}
-    >
-      <PinaAvatar size={32} />
-      <Text
-        className={`min-w-0 flex-1 text-base font-semibold ${selected ? "text-thread-selected-foreground" : "text-drawer-foreground"}`}
-        numberOfLines={1}
+    <View className={`${props.horizontalMargin === false ? "" : "mx-2 "}flex-row items-center`}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={[title, props.environmentLabel, statusLabel].filter(Boolean).join(", ")}
+        disabled={pina.opening}
+        accessibilityState={{
+          disabled: pina.opening,
+          selected,
+        }}
+        className={`min-h-14 min-w-0 flex-1 flex-row items-center gap-3 rounded-xl px-3 ${selected ? "bg-thread-selected" : "active:bg-thread-hover"}`}
+        onPress={() => void pina.open()}
       >
-        {PINA_ASSISTANT_NAME}
-      </Text>
-      {props.environmentLabel || statusIcon ? (
-        <View className="flex-row items-center gap-2">
-          {props.environmentLabel ? (
-            <Text
-              className={`text-xs ${selected ? "text-thread-selected-foreground-muted" : "text-drawer-foreground-muted"}`}
-              numberOfLines={1}
-            >
-              {props.environmentLabel}
-            </Text>
-          ) : null}
-          {statusIcon ? (
-            <SymbolView
-              name={statusIcon.icon}
-              size={15}
-              tintColorClassName={
-                selected ? "accent-thread-selected-foreground" : statusIcon.iconTintClassName
-              }
-            />
-          ) : null}
-        </View>
-      ) : null}
-    </Pressable>
+        <PinaAvatar size={32} />
+        <Text
+          className={`min-w-0 flex-1 text-base font-semibold ${selected ? "text-thread-selected-foreground" : "text-drawer-foreground"}`}
+          numberOfLines={1}
+        >
+          {title}
+        </Text>
+        {props.environmentLabel || statusIcon ? (
+          <View className="flex-row items-center gap-2">
+            {props.environmentLabel ? (
+              <Text
+                className={`text-xs ${selected ? "text-thread-selected-foreground-muted" : "text-drawer-foreground-muted"}`}
+                numberOfLines={1}
+              >
+                {props.environmentLabel}
+              </Text>
+            ) : null}
+            {statusIcon ? (
+              <SymbolView
+                name={statusIcon.icon}
+                size={15}
+                tintColorClassName={
+                  selected ? "accent-thread-selected-foreground" : statusIcon.iconTintClassName
+                }
+              />
+            ) : null}
+          </View>
+        ) : null}
+      </Pressable>
+      {pina.supportsConversations && (
+        <Menu
+          actions={[
+            { id: "new", title: gt("New Pina conversation"), image: "plus" },
+            ...props.conversations.map((item) => ({
+              id: item.id,
+              title: item.title,
+              state: item.id === current?.id ? ("on" as const) : ("off" as const),
+            })),
+            ...(current && isNamedPinaConversation(current.id)
+              ? [{ id: "rename", title: gt("Rename thread"), image: "pencil" }]
+              : []),
+            ...(current
+              ? [{ id: "archive", title: gt("Archive conversation"), image: "archivebox" }]
+              : []),
+            { id: "history", title: gt("Archived conversations"), image: "archivebox" },
+          ]}
+          onPressAction={({ nativeEvent }) => {
+            if (nativeEvent.event === "new") {
+              Dialog.prompt({
+                title: gt("New Pina conversation"),
+                initialValue: "",
+                confirmText: gt("Create"),
+                onConfirm: (value) => {
+                  const name = value.trim();
+                  if (!name) return;
+                  if (name.length > 120) {
+                    Dialog.alert(
+                      PINA_ASSISTANT_NAME,
+                      gt("Conversation names can have up to 120 characters."),
+                    );
+                    return;
+                  }
+                  void pina.create(name);
+                },
+              });
+            } else if (nativeEvent.event === "archive" && current) {
+              props.onArchive(current);
+            } else if (nativeEvent.event === "rename" && current) {
+              props.onRename(current);
+            } else if (nativeEvent.event === "history") {
+              navigation.navigate("SettingsArchive");
+            } else {
+              const target = props.conversations.find((item) => item.id === nativeEvent.event);
+              if (target) pina.openThread(target.id);
+            }
+          }}
+        >
+          <IconButton
+            icon="chevron.down"
+            accessibilityLabel={gt("Pina conversations")}
+            disabled={pina.opening}
+          />
+        </Menu>
+      )}
+    </View>
   );
 }

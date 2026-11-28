@@ -6,8 +6,11 @@ import type { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { expect, it, vi } from "vite-plus/test";
 import { retargetSavedNewTaskDraft } from "../../state/use-composer-drafts";
+import type { IncomingShareDraft } from "../sharing/incoming-share-model";
 
 const environmentId = EnvironmentId.make("env-1");
+const secondEnvironmentId = EnvironmentId.make("env-2");
+const readOnlyEnvironmentId = EnvironmentId.make("env-view");
 
 function project(id: string, workspaceRoot: string): EnvironmentProject {
   return {
@@ -30,6 +33,10 @@ const scratch = project("scratch", "/scratch");
 const harness = vi.hoisted(() => ({
   setProject: vi.fn(),
   openScratch: vi.fn(),
+  openPina: vi.fn(),
+  discardShare: vi.fn(),
+  getShare: vi.fn<(id: string) => IncomingShareDraft | null>(() => null),
+  importPhase: vi.fn(),
   selectDetail: vi.fn(),
   navigation: {
     goBack: vi.fn(),
@@ -40,6 +47,7 @@ const harness = vi.hoisted(() => ({
     }),
     getParent: () => undefined,
     canGoBack: () => true,
+    isFocused: () => true,
     dispatch: vi.fn(),
     navigate: vi.fn(),
   },
@@ -73,17 +81,44 @@ vi.mock("@react-navigation/native", () => ({
   useFocusEffect: (effect: () => () => void) => React.useEffect(effect, [effect]),
   useIsFocused: () => true,
   useNavigation: () => harness.navigation,
+  useRoute: () => ({ key: "share-picker" }),
 }));
+vi.mock("@effect/atom-react", () => ({ useAtomValue: () => false }));
 vi.mock("../../components/ui/NavigationRow", () => ({
-  NavigationRow: (props: { title: string; disabled?: boolean; onPress?: () => void }) => (
-    <button aria-label={props.title} disabled={props.disabled === true} onClick={props.onPress}>
+  NavigationRow: (props: {
+    title: string;
+    subtitle?: string;
+    disabled?: boolean;
+    onPress?: () => void;
+  }) => (
+    <button
+      aria-label={[props.title, props.subtitle].filter(Boolean).join(", ")}
+      disabled={props.disabled === true}
+      onClick={props.onPress}
+    >
       {props.title}
     </button>
   ),
 }));
 vi.mock("../../components/ui/Dialog", () => ({ alert: vi.fn() }));
 vi.mock("../../components/ui/AppActivityIndicator", () => ({ AppActivityIndicator: () => null }));
-vi.mock("../../components/ui/AppBar", () => ({ AppBar: () => null }));
+vi.mock("../../components/ui/AppBar", () => ({
+  AppBar: ({
+    actions,
+  }: {
+    actions: ReadonlyArray<{ accessibilityLabel: string; onPress: () => void }>;
+  }) => (
+    <>
+      {actions.map((action) => (
+        <button
+          key={action.accessibilityLabel}
+          aria-label={action.accessibilityLabel}
+          onClick={action.onPress}
+        />
+      ))}
+    </>
+  ),
+}));
 vi.mock("../../components/ui/AppSymbol", () => ({ SymbolView: () => null }));
 vi.mock("../../components/ui/Button", () => ({ Button: () => null }));
 vi.mock("../../components/ui/ScreenContent", () => ({
@@ -96,24 +131,58 @@ vi.mock("../../components/ui/AppText", () => ({
   AppText: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
 }));
 vi.mock("../../components/ProjectFavicon", () => ({ ProjectFavicon: () => null }));
+vi.mock("../../components/PinaAvatar", () => ({ PinaAvatar: () => null }));
 vi.mock("../connection/environmentStatusText", () => ({ runtimeConnectionErrorText: () => null }));
 vi.mock("../../state/entities", () => ({
   useProjects: () => [regular, scratch],
-  useServerConfigs: () => new Map([[environmentId, { scratchWorkspaceRoot: "/scratch" }]]),
+  useServerConfigs: () =>
+    new Map(
+      [environmentId, secondEnvironmentId, readOnlyEnvironmentId].map((id) => [
+        id,
+        {
+          scratchWorkspaceRoot: "/scratch",
+          environment: { capabilities: { pinaAssistant: true } },
+        },
+      ]),
+    ),
 }));
 vi.mock("../../state/projects", () => ({ projectEnvironment: { openScratch: {} } }));
-vi.mock("../../state/use-atom-command", () => ({ useAtomCommand: () => harness.openScratch }));
+vi.mock("../../state/threads", () => ({ threadEnvironment: { openPina: "openPina" } }));
+vi.mock("../../state/session", () => ({
+  useEnvironmentsWithScope: () => new Set([environmentId, secondEnvironmentId]),
+}));
+vi.mock("../../state/use-atom-command", () => ({
+  useAtomCommand: (command: unknown) =>
+    command === "openPina" ? harness.openPina : harness.openScratch,
+}));
 vi.mock("../../state/use-composer-drafts", () => ({ retargetSavedNewTaskDraft: vi.fn() }));
 vi.mock("../../state/use-remote-environment-registry", () => ({
   useRemoteConnectionStatus: () => ({
-    connectedEnvironments: [{ environmentId, connectionState: "connected" }],
+    connectedEnvironments: [
+      { environmentId, environmentLabel: "Laptop", connectionState: "connected" },
+      {
+        environmentId: secondEnvironmentId,
+        environmentLabel: "Build Mac",
+        connectionState: "connected",
+      },
+      {
+        environmentId: readOnlyEnvironmentId,
+        environmentLabel: "Read only",
+        connectionState: "connected",
+      },
+    ],
   }),
 }));
 vi.mock("../../state/workspace", () => ({
   useWorkspaceState: () => ({ state: { hasReadyEnvironment: true } }),
 }));
 vi.mock("../sharing/IncomingShareProvider", () => ({
-  useIncomingShare: () => ({ getShare: () => null, releaseShareReservation: vi.fn() }),
+  useIncomingShare: () => ({
+    getShare: harness.getShare,
+    discardShare: harness.discardShare,
+    releaseShareReservation: vi.fn(),
+  }),
+  incomingShareImports: { inFlightAtom: vi.fn(), phaseAtom: harness.importPhase },
 }));
 vi.mock("../layout/workspace/useSelectWorkspaceDetail", () => ({
   useSelectWorkspaceDetail: () => harness.selectDetail,
@@ -221,4 +290,81 @@ it("cancels the No project draft retarget when another project is picked", async
   await act(async () => screen.retargeting.resolve(true));
 
   expect(harness.selectDetail.mock.calls).toEqual(appDraftSelection);
+});
+
+function renderShare(destination?: IncomingShareDraft["destination"]) {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  const share: IncomingShareDraft = {
+    id: "share-link",
+    schemaVersion: 1,
+    createdAt: "2026-11-28T00:00:00Z",
+    text: "https://github.com/acme/example/issues/1",
+    attachments: [],
+    warnings: [],
+    ...(destination ? { destination } : {}),
+  };
+  harness.getShare.mockReturnValue(share);
+  harness.openPina.mockReset().mockResolvedValue({
+    _tag: "Success",
+    value: { threadId: "pina-assistant-scratch-0" },
+  });
+  harness.importPhase.mockClear();
+  harness.discardShare.mockReset().mockResolvedValue(undefined);
+  harness.navigation.goBack.mockClear();
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  act(() =>
+    root.render(<NewTaskRouteScreen route={{ params: { incomingShareId: share.id } } as never} />),
+  );
+  return {
+    share,
+    row: (label: string) => container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`),
+    [Symbol.dispose]: () => {
+      act(() => root.unmount());
+      harness.getShare.mockReturnValue(null);
+    },
+  };
+}
+
+it("prepares the Pina draft in the selected writable environment", async () => {
+  using screen = renderShare();
+  expect(screen.row("Ask Pina, Read only")).toBeNull();
+  expect(harness.openPina).not.toHaveBeenCalled();
+  expect(harness.importPhase).not.toHaveBeenCalled();
+
+  await act(async () => screen.row("Ask Pina, Build Mac")?.click());
+
+  expect(harness.openPina).toHaveBeenCalledExactlyOnceWith({
+    environmentId: secondEnvironmentId,
+    input: {},
+  });
+  expect(harness.importPhase).toHaveBeenLastCalledWith({
+    flowKey: "share-picker",
+    routeKey: "share-picker",
+    draftKey: "env-2:pina-assistant-scratch-0",
+    destination: { environmentId: secondEnvironmentId, threadId: "pina-assistant-scratch-0" },
+    shareId: screen.share.id,
+  });
+});
+
+it("resumes a reserved share in its original Pina draft", () => {
+  const destination = { environmentId: secondEnvironmentId, threadId: "pina-assistant-scratch-2" };
+  using screen = renderShare(destination);
+  expect(screen.row("Ask Pina, Laptop")).toBeNull();
+  expect(harness.openPina).not.toHaveBeenCalled();
+  expect(harness.importPhase).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      destination,
+      draftKey: "env-2:pina-assistant-scratch-2",
+    }),
+  );
+});
+
+it("discards a cancelled share before opening a conversation or importing it", async () => {
+  using screen = renderShare();
+  await act(async () => screen.row("Cancel import")?.click());
+  expect(harness.discardShare).toHaveBeenCalledExactlyOnceWith(screen.share);
+  expect(harness.navigation.goBack).toHaveBeenCalledOnce();
+  expect(harness.openPina).not.toHaveBeenCalled();
+  expect(harness.importPhase).not.toHaveBeenCalled();
 });

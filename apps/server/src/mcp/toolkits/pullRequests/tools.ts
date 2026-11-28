@@ -4,6 +4,7 @@ import {
   OrchestratorMcpFailure,
   PositiveInt,
   PullRequestCheck,
+  PullRequestChecksReport,
   PullRequestCommentKind,
   PullRequestChecksState,
   PullRequestInvolvement,
@@ -684,6 +685,23 @@ const ReadPullRequestTool = Tool.make("pinacode_pull_request_read", {
   .annotate(Tool.OpenWorld, true)
   .annotate(McpSchema.EnabledWhen, McpInvocationContext.hiddenWithoutForge);
 
+const ReadPullRequestChecksTool = Tool.make("pinacode_pull_request_checks", {
+  description:
+    "Read current CI checks and their source URLs for an explicit github.com PR link, without a checkout.",
+  parameters: Schema.Struct({
+    environmentId: OrchestratorMcpEnvironmentTarget,
+    url: TrimmedNonEmptyString.check(Schema.isMaxLength(4096)),
+  }),
+  success: PullRequestChecksReport,
+  failure: PullRequestToolError,
+  dependencies: [McpInvocationContext.McpInvocationContext, PullRequestService.PullRequestService],
+})
+  .annotate(Tool.Title, "Read pull request checks")
+  .annotate(Tool.Readonly, true)
+  .annotate(Tool.Destructive, false)
+  .annotate(Tool.Idempotent, true)
+  .annotate(Tool.OpenWorld, true);
+
 const ListPullRequestsTool = Tool.make("pinacode_pull_request_list", {
   description: "List PRs in this thread's repository, recently updated first.",
   parameters: Schema.Struct({
@@ -920,6 +938,7 @@ export const PullRequestsToolkit = Toolkit.make(
   WritePullRequestGuidesTool,
   ReadPullRequestGuideTool,
   ReadPullRequestTool,
+  ReadPullRequestChecksTool,
   ListPullRequestsTool,
   CreatePullRequestTool,
   UpdatePullRequestTool,

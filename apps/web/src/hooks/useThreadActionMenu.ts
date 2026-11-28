@@ -10,6 +10,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import { canSnooze, effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 import {
+  isNamedPinaConversation,
   isPinaThread,
   AuthOrchestrationOperateScope,
   type ScopedThreadRef,
@@ -139,7 +140,9 @@ export function useThreadActionMenu(input: {
       canOperate: readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope),
       canTriage: threadTriagePermitted(threadRef.environmentId),
       canFind: onFind !== undefined,
-      canRename: !fixedAssistant && onStartRename !== undefined,
+      canRename:
+        (!fixedAssistant || isNamedPinaConversation(threadRef.threadId)) &&
+        onStartRename !== undefined,
       branch: thread.branch ?? null,
       projectFilter: null,
       isPinned: thread.pinnedAt != null,

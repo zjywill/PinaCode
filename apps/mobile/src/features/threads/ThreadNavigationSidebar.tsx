@@ -1,4 +1,4 @@
-import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
+import { activePinaConversations, parseScopedThreadKey } from "@t3tools/client-runtime/environment";
 import { usePinaRow, usePinaEnvironment } from "./usePinaRow";
 import { isPinaThread } from "@t3tools/contracts";
 import { useGT, useMessages } from "gt-react-native";
@@ -18,7 +18,7 @@ import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-searc
 import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import { THREAD_LIST_ROW_LAYOUT } from "./threadListAnimations";
 import { useAtomValue } from "@effect/atom-react";
-import { useMemo, useRef, useState } from "react";
+import { use, useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { GestureDetector, useNativeGesture } from "react-native-gesture-handler";
 import type { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -83,6 +83,7 @@ import {
   type ThreadListV2ListItem,
 } from "./threadListV2";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
+import { ActiveWorkspaceThreadContext } from "../layout/adaptive-workspace-context";
 import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 
 type SidebarListItem =
@@ -173,15 +174,11 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
   );
   const openThreadKey = activeNewTask ? null : props.selectedThreadKey;
   const openThreadRef = openThreadKey ? parseScopedThreadKey(openThreadKey) : null;
+  const activeThreadRef = use(ActiveWorkspaceThreadContext);
   const pinaEnvironmentId = usePinaEnvironment(
-    options.selectedEnvironmentId ?? openThreadRef?.environmentId,
+    options.selectedEnvironmentId ?? activeThreadRef?.environmentId,
   );
-  const pinaThread = launchingThreads.find(
-    (thread) =>
-      thread.environmentId === pinaEnvironmentId &&
-      thread.archivedAt === null &&
-      isPinaThread(thread.id),
-  );
+  const pinaConversations = activePinaConversations(launchingThreads, pinaEnvironmentId);
   const pinaEnvironmentLabel =
     options.selectedEnvironmentId === null &&
     pinaEnvironmentId !== null &&
@@ -193,7 +190,10 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
     now,
     environmentId: pinaEnvironmentId,
     openThreadRef,
-    thread: pinaThread,
+    sourceThreadRef: activeThreadRef,
+    conversations: pinaConversations,
+    onArchive: archiveThread,
+    onRename: renameThread,
     environmentLabel: pinaEnvironmentLabel,
     horizontalMargin: Platform.OS !== "ios",
   });

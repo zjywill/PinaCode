@@ -1262,34 +1262,90 @@ it.effect("opens Pina with an available provider and the configured access ceili
   }).pipe(Effect.provide(harness.layer));
 });
 
-it.effect("opens one Pina history across concurrent clients, archive and deletion", () => {
-  const harness = scratchHarness();
+it.effect(
+  "opens one default Pina history across concurrent clients without reviving archived histories",
+  () => {
+    const harness = scratchHarness();
+    return Effect.gen(function* () {
+      const launches = yield* ThreadLaunch.ThreadLaunchService;
+      const threads = yield* ThreadManagement.ThreadManagementService;
+      const [desktop, phone] = yield* Effect.all([launches.openPina(), launches.openPina()], {
+        concurrency: 2,
+      });
+      assert.deepEqual(desktop, phone);
+      const { threadId } = desktop;
+      const shell = yield* threads.getThreadShell(threadId);
+      assert.equal(shell?.title, "Pina");
+      assert.deepEqual(harness.claimed, [threadId]);
+      yield* threads.dispatch({
+        type: "thread.archive",
+        commandId: CommandId.make("archive-pina"),
+        threadId,
+      });
+      const replacement = yield* launches.openPina();
+      assert.notEqual(replacement.threadId, threadId);
+      assert.notEqual((yield* threads.getThreadShell(threadId))?.archivedAt, null);
+      yield* threads.dispatch({
+        type: "thread.delete",
+        commandId: CommandId.make("delete-pina"),
+        threadId,
+      });
+      assert.deepEqual(yield* launches.openPina(), replacement);
+    }).pipe(Effect.provide(harness.layer));
+  },
+);
+
+it.effect(
+  "creates independent named Pina histories and retries the same request idempotently",
+  () => {
+    const harness = scratchHarness();
+    return Effect.gen(function* () {
+      const launches = yield* ThreadLaunch.ThreadLaunchService;
+      const threads = yield* ThreadManagement.ThreadManagementService;
+      const release = {
+        newConversation: { title: "Release", requestId: "b5ba1253-d1b0-4cf7-b0af-d94ac077509f" },
+      };
+      const incident = {
+        newConversation: { title: "Incident", requestId: "e375beae-8817-4095-9e1f-c1b297247073" },
+      };
+      const [first, retry, second] = yield* Effect.all(
+        [launches.openPina(release), launches.openPina(release), launches.openPina(incident)],
+        { concurrency: 3 },
+      );
+      assert.deepEqual(first, retry);
+      assert.notEqual(first.threadId, second.threadId);
+      assert.equal((yield* threads.getThreadShell(first.threadId))?.title, "Release");
+      assert.equal((yield* threads.getThreadShell(second.threadId))?.title, "Incident");
+      yield* threads.dispatch({
+        type: "thread.archive",
+        commandId: CommandId.make("archive-release"),
+        threadId: first.threadId,
+      });
+      assert.deepEqual(yield* launches.openPina(release), first);
+      assert.notEqual((yield* threads.getThreadShell(first.threadId))?.archivedAt, null);
+      assert.equal((yield* threads.getThreadShell(second.threadId))?.archivedAt, null);
+      assert.deepEqual(harness.claimed, [first.threadId, second.threadId]);
+    }).pipe(Effect.provide(harness.layer));
+  },
+);
+
+it.effect("bounds an external Pina conversation by the client's modes", () => {
+  const harness = scratchHarness({ serverSettings: { defaultRuntimeMode: "full-access" } });
   return Effect.gen(function* () {
     const launches = yield* ThreadLaunch.ThreadLaunchService;
     const threads = yield* ThreadManagement.ThreadManagementService;
-    const [desktop, phone] = yield* Effect.all([launches.openPina(), launches.openPina()], {
-      concurrency: 2,
-    });
-    assert.deepEqual(desktop, phone);
-    const { threadId } = desktop;
-    const shell = yield* threads.getThreadShell(threadId);
-    assert.equal(shell?.title, "Pina");
-    assert.deepEqual(harness.claimed, [threadId]);
-    yield* threads.dispatch({
-      type: "thread.archive",
-      commandId: CommandId.make("archive-pina"),
-      threadId,
-    });
-    assert.deepEqual(yield* launches.openPina(), phone);
-    assert.equal((yield* threads.getThreadShell(threadId))?.archivedAt, null);
-    yield* threads.dispatch({
-      type: "thread.delete",
-      commandId: CommandId.make("delete-pina"),
-      threadId,
-    });
-    const replacement = yield* launches.openPina();
-    assert.notEqual(replacement.threadId, threadId);
-    assert.deepEqual(yield* launches.openPina(), replacement);
+    const { threadId } = yield* launches.openPina(
+      {
+        newConversation: {
+          title: "Pina · External client",
+          requestId: "b5ba1253-d1b0-4cf7-b0af-d94ac077509f",
+        },
+      },
+      { runtimeMode: "approval-required", interactionMode: "plan" },
+    );
+    const thread = yield* threads.getThreadShell(threadId);
+    assert.equal(thread?.runtimeMode, "approval-required");
+    assert.equal(thread?.interactionMode, "plan");
   }).pipe(Effect.provide(harness.layer));
 });
 

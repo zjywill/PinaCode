@@ -2,7 +2,7 @@ import { useComposerAttachmentActions } from "./use-composer-attachment-actions"
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import * as Effect from "effect/Effect";
 import * as Dialog from "../components/ui/Dialog";
-import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
+import { AuthOrchestrationOperateScope, isPinaThread } from "@t3tools/contracts";
 import { readEnvironmentScope } from "./session";
 import { useAtomValue } from "@effect/atom-react";
 import { compactBeforeSendTokens } from "@t3tools/client-runtime/state/context-window";
@@ -946,6 +946,48 @@ export function useThreadComposerState(input: {
     return messageId;
   };
 
+  const sendPinaVoiceMessage = async (text: string, signal: AbortSignal) => {
+    const thread = selectedThreadShell;
+    if (
+      signal.aborted ||
+      !thread ||
+      !isPinaThread(thread.id) ||
+      thread.archivedAt !== null ||
+      selectedEnvironmentRuntime?.connectionState !== "connected" ||
+      !readEnvironmentScope(thread.environmentId, AuthOrchestrationOperateScope)
+    )
+      return null;
+    const ref = { environmentId: thread.environmentId, threadId: thread.id };
+    const pending = appAtomRegistry.get(environmentThreadDetails.pendingRequestsAtom(ref));
+    if (pending?.approvals.length || pending?.userInputs.length) return null;
+    const draft = getComposerDraftSnapshot(scopedThreadKey(thread.environmentId, thread.id));
+    const modelSelection = draft.modelSelection ?? thread.modelSelection;
+    if (
+      isModelSelectionUnavailable(
+        selectedEnvironmentRuntime.serverConfig,
+        modelSelection,
+        thread.projectId,
+      )
+    ) {
+      return null;
+    }
+    const metadata = makeQueuedMessageMetadata();
+    const messageId = MessageId.make(metadata.messageId);
+    await enqueueThreadOutboxMessage({
+      ...ref,
+      messageId,
+      commandId: CommandId.make(metadata.commandId),
+      text,
+      attachments: [],
+      modelSelection,
+      runtimeMode: draft.runtimeMode ?? thread.runtimeMode,
+      interactionMode: draft.interactionMode ?? thread.interactionMode,
+      dispatchMode: "queue",
+      createdAt: metadata.createdAt,
+    });
+    return messageId;
+  };
+
   // Side chats do not nest or start from subagents, and need a server that forks them.
   const sideChatUnavailableReason = (() => {
     const serverConfig = selectedEnvironmentRuntime?.serverConfig;
@@ -1095,6 +1137,11 @@ export function useThreadComposerState(input: {
     onNativePasteText,
     onRemoveDraftImage,
     onSendMessage,
+    sendPinaVoiceMessage,
+    pinaVoiceProjection:
+      selectedThreadShell && isPinaThread(selectedThreadShell.id)
+        ? selectedThreadProjection?.projection
+        : undefined,
     onSendCommand,
     sideChatUnavailableReason,
   };
