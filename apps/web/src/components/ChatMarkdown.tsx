@@ -92,7 +92,11 @@ import React, {
   type ReactNode,
 } from "react";
 import { parseAssistantCitationHref } from "@t3tools/shared/assistantCitations";
-import { parseComposerContextHref } from "@t3tools/shared/composerContextReferences";
+import {
+  parseComposerContextHref,
+  parseComposerProjectHref,
+} from "@t3tools/shared/composerContextReferences";
+import { ProjectReferenceChip } from "./contextChipParts";
 import { parseThreadLinkHref } from "@t3tools/shared/threadLinks";
 import { AssistantCitationEmbed } from "./chat/AssistantCitationChip";
 import { MarkdownThreadLink } from "./chat/MarkdownThreadLink";
@@ -450,6 +454,7 @@ function safeUrl(value: string): string {
 function markdownUrlTransform(href: string) {
   if (parseAssistantCitationHref(href)) return href;
   if (parseComposerContextHref(href)) return href;
+  if (parseComposerProjectHref(href)) return href;
   if (parseThreadLinkHref(href)) return href;
   if (isWindowsDrivePathHref(href)) return href;
   if (isLocalEditorFileHref(href)) return href;
@@ -508,7 +513,7 @@ function blockFileLinkSources(
   imageBaseDir: string | undefined,
 ): BlockFileLinkSources {
   const hrefs = extractMarkdownLinkHrefs(renderCodexInlineDirectivesAsMarkdown(text))
-    .filter((href) => !parseComposerContextHref(href))
+    .filter((href) => !parseComposerContextHref(href) && !parseComposerProjectHref(href))
     .map(decodeMarkdownLinkEscapes)
     .map(normalizeMarkdownLinkHrefKey)
     .filter((href) => resolveMarkdownFileLinkMeta(href, cwd, imageBaseDir ?? cwd));
@@ -1337,6 +1342,16 @@ const CHAT_MARKDOWN_COMPONENTS = {
     const trailing = after !== undefined && CITATION_ENDS_BLOCK.test(text.slice(after));
     if (citation) {
       return <AssistantCitationEmbed citation={citation} leading={leading} trailing={trailing} />;
+    }
+    if (href && parseComposerProjectHref(href)) {
+      return (
+        <ProjectReferenceChip
+          label={hastPlainTextDeep(node)}
+          copyMarkdown={
+            before !== undefined && after !== undefined ? text.slice(before, after) : undefined
+          }
+        />
+      );
     }
     const threadLink = href ? parseThreadLinkHref(href) : null;
     if (threadLink) {

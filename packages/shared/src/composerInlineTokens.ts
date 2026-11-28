@@ -1,4 +1,8 @@
-import { collectComposerContextReferences } from "./composerContextReferences.ts";
+import {
+  collectComposerContextReferences,
+  collectComposerProjectReferences,
+  composerProjectReferencesToPlainText,
+} from "./composerContextReferences.ts";
 import { composerFileLinkPath } from "./composerTrigger.ts";
 import { fileBasename } from "./path.ts";
 
@@ -124,6 +128,7 @@ export function composerMathRanges(
   const links = [
     ...mentions.filter((mention) => mention.type === "mention" && mention.source.startsWith("[")),
     ...collectComposerContextReferences(text),
+    ...collectComposerProjectReferences(text),
   ];
   let masked = text;
   for (const { start, end } of links) {
@@ -208,4 +213,8 @@ export function composerFileLinksToPlainText(text: string): string {
     cursor = token.end;
   }
   return result + text.slice(cursor);
+}
+
+export function composerInlineLinksToPlainText(text: string): string {
+  return composerProjectReferencesToPlainText(composerFileLinksToPlainText(text));
 }

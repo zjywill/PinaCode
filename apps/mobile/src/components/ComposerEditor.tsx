@@ -8,7 +8,10 @@ import { T, useGT } from "gt-react-native";
 import { useEffect, useState } from "react";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { encodeComposerContextFragment } from "@t3tools/shared/composerContextClipboard";
-import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import {
+  collectComposerContextReferences,
+  collectComposerProjectReferences,
+} from "@t3tools/shared/composerContextReferences";
 import {
   collectAssistantCitations,
   serializeAssistantCitation,
@@ -255,6 +258,7 @@ export function ComposerEditor({
             onInertChipPress?.();
             return;
           }
+          if (collectComposerProjectReferences(selection.source).length > 0) return;
           const path = composerMentionPath(selection.source, draft.context);
           if (path && onOpenMention) {
             onOpenMention(path);

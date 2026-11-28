@@ -22,7 +22,7 @@ import type {
   ComposerDraftContextRecords,
 } from "../composerContextPresentation";
 import { ContextChip, ContextChipLabel } from "../ContextChip";
-import { ContextChipShell } from "../contextChipParts";
+import { ContextChipShell, ProjectReferenceChip } from "../contextChipParts";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { SkillChipIcon } from "./SkillInlineText";
 
@@ -92,6 +92,8 @@ export function CollapsedComposerPromptPreview(props: {
             label={fileDisplayName(segment.path)}
           />
         );
+      case "project-reference":
+        return <ProjectReferenceChip key={key} label={segment.label} />;
       case "context-reference": {
         const entry = resolvedContextRecord(props.contextRecords, segment.kind, segment.contextId);
         return entry ? (

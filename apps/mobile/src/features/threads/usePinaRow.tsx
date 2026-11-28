@@ -32,14 +32,10 @@ import { SymbolView } from "../../components/ui/AppSymbol";
 import * as Dialog from "../../components/ui/Dialog";
 import { m } from "../../i18n/messages";
 import { uuidv4 } from "../../lib/uuid";
-import {
-  useEnvironmentServerConfig,
-  useQuietThreadShell,
-  useServerConfigs,
-} from "../../state/entities";
+import { useEnvironmentServerConfig, useServerConfigs } from "../../state/entities";
 import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { setPinaSourceThread } from "../../state/use-composer-drafts";
+import { clearLegacyPinaSource } from "../../state/use-composer-drafts";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import {
   resolveThreadListV2RowStatus,
@@ -72,10 +68,9 @@ export function usePinaEnvironment(preferred?: EnvironmentId | null) {
 
 export function useOpenPina(
   environmentId: EnvironmentId | null,
-  sourceThread: ScopedThreadRef | null,
+  activeThread: ScopedThreadRef | null,
 ) {
   const config = useEnvironmentServerConfig(environmentId);
-  const source = useQuietThreadShell(sourceThread);
   const canOperate = useAtomValue(threadEnvironment.openPina.permissionAtom(environmentId));
   const ensure = useAtomCommand(threadEnvironment.openPina, { reportFailure: false });
   const selectDetail = useSelectWorkspaceDetail();
@@ -85,12 +80,7 @@ export function useOpenPina(
   }
   const openThread = (threadId: ThreadId) => {
     const target = { environmentId, threadId };
-    setPinaSourceThread(
-      target,
-      sourceThread === null
-        ? null
-        : { ref: sourceThread, title: source?.title ?? sourceThread.threadId },
-    );
+    clearLegacyPinaSource(target);
     selectDetail({ name: "Thread", params: target });
   };
   const openFromServer = (input: OpenPinaInput) => {
@@ -107,8 +97,8 @@ export function useOpenPina(
       .finally(() => setOpening(false));
   };
   const open = () =>
-    sourceThread?.environmentId === environmentId && isPinaThread(sourceThread.threadId)
-      ? openThread(sourceThread.threadId)
+    activeThread?.environmentId === environmentId && isPinaThread(activeThread.threadId)
+      ? openThread(activeThread.threadId)
       : openFromServer({});
   return {
     environmentId,
@@ -123,7 +113,7 @@ export function useOpenPina(
 export function usePinaRow(props: {
   readonly environmentId: EnvironmentId | null;
   readonly openThreadRef: ScopedThreadRef | null;
-  readonly sourceThreadRef: ScopedThreadRef | null;
+  readonly activeThreadRef: ScopedThreadRef | null;
   readonly conversations: readonly EnvironmentThreadShell[];
   readonly onArchive: (thread: EnvironmentThreadShell) => void;
   readonly onRename: (thread: EnvironmentThreadShell) => void;
@@ -131,7 +121,7 @@ export function usePinaRow(props: {
   readonly now: string;
   readonly horizontalMargin?: boolean | undefined;
 }) {
-  const pina = useOpenPina(props.environmentId, props.sourceThreadRef);
+  const pina = useOpenPina(props.environmentId, props.activeThreadRef);
   const gt = useGT();
   const resolve = useMessages();
   const navigation = useNavigation();

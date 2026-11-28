@@ -10,7 +10,7 @@ import {
   isAttachmentOnlyBootstrapPrompt,
   replaceComposerContextReferences,
 } from "@t3tools/shared/composerContextReferences";
-import { composerFileLinksToPlainText } from "@t3tools/shared/composerInlineTokens";
+import { composerInlineLinksToPlainText } from "@t3tools/shared/composerInlineTokens";
 import {
   parseGoalCommand,
   type ChatAttachment as ContractChatAttachment,
@@ -274,7 +274,7 @@ export function QueuedRunsControl({
           const previewText = isAttachmentOnlyBootstrapPrompt(item.text)
             ? ""
             : assistantCitationsToPlainText(
-                composerFileLinksToPlainText(
+                composerInlineLinksToPlainText(
                   replaceComposerContextReferences(item.text, (reference) => reference.label),
                 ),
               ).trim();

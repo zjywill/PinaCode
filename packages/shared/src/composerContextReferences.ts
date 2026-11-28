@@ -6,6 +6,7 @@ import {
   type ElementContextDetails,
   type EnvironmentId,
   type KnownComposerContextRecord,
+  type ScopedProjectRef,
   type ScopedThreadRef,
   type ThreadContextRecord,
 } from "@t3tools/contracts";
@@ -26,6 +27,10 @@ const CONTEXT_LINK = new RegExp(
   String.raw`(!?)\[([^[\]\n]{0,${MAX_LINK_LABEL_LENGTH}})\]\((${COMPOSER_CONTEXT_HREF_PREFIX}[^\s)]{1,200})\)`,
   "g",
 );
+const PROJECT_HREF_PREFIX = "t3-project://v1/new-thread?";
+const PROJECT_HREF =
+  /^t3-project:\/\/v1\/new-thread\?projectId=([^&\s()]+)&environmentId=([^&\s()]+)$/;
+const PROJECT_LINK = /(?<![!\\])\[((?:\\[\\[\]]|[^\\[\]\r\n])*)\]\((t3-project:[^\s)]+)\)/g;
 
 // The digest alone distinguishes producer ids sharing the truncated 48-character slug.
 function fnv1a64(value: string): string {
@@ -197,6 +202,74 @@ function fencedCodeRanges(markdown: string) {
   };
   visit(markdownParser.parse(markdown));
   return ranges;
+}
+
+export function formatComposerProjectReference(project: ScopedProjectRef, label: string): string {
+  const encodeId = (id: string) =>
+    encodeURIComponent(id).replaceAll("(", "%28").replaceAll(")", "%29");
+  const escapedLabel = label.replace(/[\r\n]/g, " ").replace(/[\\[\]]/g, "\\$&");
+  return `[${escapedLabel}](${PROJECT_HREF_PREFIX}projectId=${encodeId(project.projectId)}&environmentId=${encodeId(project.environmentId)})`;
+}
+
+export function parseComposerProjectHref(href: string) {
+  const match = PROJECT_HREF.exec(href);
+  if (!match) return null;
+  try {
+    return {
+      projectId: decodeURIComponent(match[1]!),
+      environmentId: decodeURIComponent(match[2]!),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function collectComposerProjectReferences(text: string) {
+  if (!text.includes(PROJECT_HREF_PREFIX)) return [];
+  const fences = fencedCodeRanges(text);
+  return Array.from(text.matchAll(PROJECT_LINK)).flatMap((match) => {
+    const [source, escapedLabel = "", href = ""] = match;
+    const start = match.index;
+    const end = start + source.length;
+    if (fences.some((range) => start < range.end && end > range.start)) return [];
+    const project = parseComposerProjectHref(href);
+    return project
+      ? [
+          {
+            ...project,
+            source,
+            start,
+            end,
+            label: escapedLabel.replace(/\\([\\[\]])/g, "$1"),
+          },
+        ]
+      : [];
+  });
+}
+
+function replaceComposerProjectReferences(
+  text: string,
+  replace: (reference: ReturnType<typeof collectComposerProjectReferences>[number]) => string,
+): string {
+  let body = "";
+  let cursor = 0;
+  for (const reference of collectComposerProjectReferences(text)) {
+    body += text.slice(cursor, reference.start) + replace(reference);
+    cursor = reference.end;
+  }
+  return body + text.slice(cursor);
+}
+
+export function composerProjectReferencesToPlainText(text: string): string {
+  return replaceComposerProjectReferences(text, (reference) => reference.label);
+}
+
+function projectProviderText(text: string): string {
+  return replaceComposerProjectReferences(
+    expandAssistantCitationsForProvider(text),
+    ({ label, projectId, environmentId }) =>
+      `${label} (projectId: ${projectId}, environmentId: ${environmentId})`,
+  );
 }
 
 export function collectComposerContextReferences(
@@ -446,12 +519,12 @@ export function projectComposerContextForProvider(input: {
   records: ReadonlyArray<ComposerContextRecord>;
 }): string {
   const occurrences = collectComposerContextReferences(input.text);
-  if (occurrences.length === 0) return expandAssistantCitationsForProvider(input.text);
+  if (occurrences.length === 0) return projectProviderText(input.text);
   const recordsById = new Map<ComposerContextId, ComposerContextRecord | undefined>();
   for (const record of input.records) {
     recordsById.set(record.contextId, recordsById.has(record.contextId) ? undefined : record);
   }
-  const body = expandAssistantCitationsForProvider(
+  const body = projectProviderText(
     replaceComposerContextReferences(input.text, (occurrence) =>
       formatComposerContextProviderMarker(
         recordsById.get(occurrence.contextId)?.kind ?? occurrence.kind,

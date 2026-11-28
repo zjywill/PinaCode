@@ -1,6 +1,6 @@
 import type { EnvironmentId, PullRequestContextMetadata } from "@t3tools/contracts";
 import { useGT } from "gt-react";
-import { CircleDashedIcon, FilmIcon, ImageIcon } from "lucide-react";
+import { CircleDashedIcon, FilmIcon, ImageIcon, MessagesSquareIcon } from "lucide-react";
 import {
   useEffect,
   useState,
@@ -53,6 +53,24 @@ export function ContextChipShell({
   );
   if (!tooltip) return chip;
   return <SharedTooltipTrigger render={chip} label={tooltip} className="whitespace-pre-wrap" />;
+}
+
+export function ProjectReferenceChip({
+  label,
+  copyMarkdown,
+}: {
+  label: string;
+  copyMarkdown?: string | undefined;
+}) {
+  return (
+    <ContextChipShell
+      kind="project"
+      icon={<MessagesSquareIcon aria-hidden="true" />}
+      label={label}
+      title={label}
+      data-markdown-copy={copyMarkdown}
+    />
+  );
 }
 
 export function ContextChipPopover(props: {

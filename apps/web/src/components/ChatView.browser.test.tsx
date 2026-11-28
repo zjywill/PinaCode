@@ -743,7 +743,7 @@ it("creates a named Pina conversation, switches topics, and opens archived histo
   expect(create).toHaveBeenCalledOnce();
 });
 
-it("brings the active thread into Pina as a removable composer reference", async () => {
+it("keeps Pina's composer intact when switching from another thread", async () => {
   await page.viewport(1400, 900);
   const style = document.createElement("style");
   style.textContent = stylesheet;
@@ -785,12 +785,10 @@ it("brings the active thread into Pina as a removable composer reference", async
   const pinaRef = scopeThreadRef(ENVIRONMENT_ID, pina.id);
   const readDraft = () => useComposerDraftStore.getState().getComposerDraft(pinaRef);
   const readPrompt = () => readDraft()?.prompt ?? "";
-  expect(readDraft()?.threadContexts).toMatchObject([{ threadId: source.id, title: source.title }]);
-  await expect.element(editor.getByText(source.title)).toBeVisible();
-  await editor.click();
-  await userEvent.keyboard("{ControlOrMeta>}a{/ControlOrMeta}{Backspace}");
+  expect(readDraft()?.threadContexts ?? []).toEqual([]);
   await expect.element(editor.getByText(source.title)).not.toBeInTheDocument();
   expect(readPrompt()).toBe("");
+  await editor.click();
   await userEvent.keyboard("@");
   await expect.element(page.getByRole("option", { name: /Thread login/ })).toBeVisible();
   await userEvent.keyboard("gpt");
@@ -798,9 +796,9 @@ it("brings the active thread into Pina as a removable composer reference", async
   await userEvent.keyboard("{Backspace}{Backspace}{Backspace}render");
   await page.getByRole("option", { name: /New thread in render/ }).click();
   const draft = readPrompt();
-  expect(draft).toContain("New thread in render");
-  expect(draft).toContain(`projectId: ${PROJECT_ID}`);
-  expect(draft).toContain(`environmentId: ${ENVIRONMENT_ID}`);
+  const projectChip = editor.getByText("New thread in render", { exact: true });
+  await expect.element(projectChip).toBeVisible();
+  await expect.element(editor).not.toHaveTextContent(PROJECT_ID);
   await router.navigate({
     to: "/$environmentId/$threadId",
     params: { environmentId: ENVIRONMENT_ID, threadId: other.id },
@@ -808,9 +806,9 @@ it("brings the active thread into Pina as a removable composer reference", async
   await expect.element(page.getByText(`Answer 0 for ${other.id}.`)).toBeVisible();
   await userEvent.keyboard("{ControlOrMeta>}{Alt>}p{/Alt}{/ControlOrMeta}");
   await expect.element(page.getByText(`Answer 0 for ${pina.id}.`), { timeout: 3000 }).toBeVisible();
-  expect(readDraft()?.threadContexts).toMatchObject([{ threadId: other.id, title: other.title }]);
-  await expect.element(editor.getByText(other.title)).toBeVisible();
-  expect(readPrompt()).toContain(draft);
+  expect(readDraft()?.threadContexts).toEqual([]);
+  expect(readPrompt()).toBe(draft);
+  await expect.element(projectChip).toBeVisible();
   await router.navigate({ to: "/" });
   await page.getByRole("button", { name: "Pina", exact: true }).click();
   await expect.element(page.getByText(`Answer 0 for ${pina.id}.`), { timeout: 3000 }).toBeVisible();
@@ -824,13 +822,19 @@ it("brings the active thread into Pina as a removable composer reference", async
   }
   await userEvent.keyboard("{Escape}");
   await editor.click();
-  await userEvent.keyboard("{ControlOrMeta>}a{/ControlOrMeta}{Backspace}");
+  await userEvent.keyboard("{End}{Backspace}{Backspace}");
+  await expect.element(projectChip).not.toBeInTheDocument();
+  expect(readPrompt()).toBe("");
+  await userEvent.keyboard("@billing");
+  await page.getByRole("option", { name: /Thread billing/ }).click();
+  const manualDraft = readPrompt();
   await router.navigate({
     to: "/$environmentId/$threadId",
     params: { environmentId: ENVIRONMENT_ID, threadId: other.id },
   });
   await page.getByRole("button", { name: "Pina", exact: true }).click();
   await expect.element(editor.getByText(other.title)).toBeVisible();
+  expect(readPrompt()).toBe(manualDraft);
   await editor.click();
   await userEvent.keyboard("{End}Please add a regression test.{Enter}");
   await vi.waitFor(() =>

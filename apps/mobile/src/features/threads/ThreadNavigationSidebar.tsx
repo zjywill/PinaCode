@@ -190,7 +190,7 @@ function ThreadNavigationSidebarPane(props: ThreadNavigationSidebarProps) {
     now,
     environmentId: pinaEnvironmentId,
     openThreadRef,
-    sourceThreadRef: activeThreadRef,
+    activeThreadRef,
     conversations: pinaConversations,
     onArchive: archiveThread,
     onRename: renameThread,

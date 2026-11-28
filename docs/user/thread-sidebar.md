@@ -75,9 +75,9 @@ and worktree while you stay in the new thread composer. This requires a Git proj
 
 Open **Pina** at the top of the thread list and ask “Which threads need my input?”
 Pina can look across projects on the connected environment, read a conversation,
-and send it a follow-up. Open Pina from a thread and its reference appears in
-the composer. You can remove it before sending and pick a different thread with `@`.
-Opening Pina with no thread selected clears the automatic reference.
+and send it a follow-up. To refer to a specific thread, type `@` in Pina's composer
+and choose the thread. You can also choose **New thread in…** for a project and
+describe what Pina should start there.
 With a hardware keyboard,
 press `Cmd+Option+P` on macOS or iOS, or `Ctrl+Alt+P` on Windows, Linux or Android.
 

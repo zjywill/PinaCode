@@ -30,6 +30,7 @@ import * as Schema from "effect/Schema";
 import {
   ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
   collectComposerContextReferences,
+  collectComposerProjectReferences,
   formatComposerContextReference,
   isImageReferencesOnly,
   replaceComposerContextReferences,
@@ -216,17 +217,20 @@ export function composerContextEditorTokens(
 ) {
   const references = collectComposerContextReferences(text);
   const citations = collectAssistantCitations(text);
+  const projects = collectComposerProjectReferences(text);
   const inlineTokens = tokens.filter(
     (token) =>
       // `$HOME` and other `$name` text that is not one of the provider's skills stays prose.
       (token.type !== "skill" || knownSkills.has(token.value)) &&
       !references.some((ref) => token.start < ref.end && token.end > ref.start) &&
-      !citations.some((ref) => token.start < ref.end && token.end > ref.start),
+      !citations.some((ref) => token.start < ref.end && token.end > ref.start) &&
+      !projects.some((ref) => token.start < ref.end && token.end > ref.start),
   );
   const taken = [
     ...inlineTokens,
     ...references,
     ...citations,
+    ...projects,
     ...composerMathRanges(text, markdownMathRanges),
   ];
   const models = modelTokens.filter(
@@ -249,6 +253,7 @@ export function composerContextEditorTokens(
       value: assistantCitationLabel(ref.citation),
       ...ref,
     })),
+    ...projects.map((ref) => ({ type: "project" as const, value: ref.label, ...ref })),
   ].sort((a, b) => a.start - b.start);
 }
 

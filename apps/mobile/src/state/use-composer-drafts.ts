@@ -30,8 +30,7 @@ import * as Option from "effect/Option";
 import {
   parseScopedThreadKey,
   scopedThreadKey,
-  updatePinaComposerDraft,
-  type PinaSourceThread,
+  removeLegacyPinaSourceReferences,
 } from "@t3tools/client-runtime/environment";
 import type {
   EnvironmentShellState,
@@ -370,23 +369,16 @@ export function setComposerDraftContext(
   }));
 }
 
-export function setPinaSourceThread(target: ScopedThreadRef, source: PinaSourceThread | null) {
+export function clearLegacyPinaSource(target: ScopedThreadRef) {
   const draftKey = scopedThreadKey(target);
   updateComposerDrafts((current) => {
     const draft = normalizeDraft(current[draftKey]);
     const records = draft.context?.records ?? [];
-    const updated = updatePinaComposerDraft(target, source, {
+    const updated = removeLegacyPinaSourceReferences({
       text: draft.text,
       records,
     });
     if (updated === null) return current;
-    if (updated.cursor !== undefined) {
-      rememberComposerDraftSelection(draftKey, updated.text, {
-        start: updated.cursor,
-        end: updated.cursor,
-      });
-    }
-    if (updated.text === draft.text && updated.records === records) return current;
     return withComposerDraft(current, draftKey, {
       ...draft,
       text: updated.text,

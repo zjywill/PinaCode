@@ -380,11 +380,11 @@ function ThreadRouteContent(
     selectedThreadProject,
     selectedEnvironmentConnection,
   } = useThreadSelection();
-  const pinaSource =
+  const pinaEnvironmentId =
     selectedThread && !isPinaThread(selectedThread.id) && !props.inspectorPresentation
-      ? { environmentId: selectedThread.environmentId, threadId: selectedThread.id }
+      ? selectedThread.environmentId
       : null;
-  const pina = useOpenPina(pinaSource?.environmentId ?? null, pinaSource);
+  const pina = useOpenPina(pinaEnvironmentId, null);
   useRememberThreadProject(selectedThreadProject);
   const canOperateThread = useEnvironmentScope(
     selectedThread?.environmentId ?? null,

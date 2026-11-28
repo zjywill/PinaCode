@@ -276,7 +276,7 @@ export function HomeScreen(props: HomeScreenProps) {
     now,
     environmentId: pinaEnvironmentId,
     openThreadRef,
-    sourceThreadRef: activeThreadRef,
+    activeThreadRef,
     conversations: pinaConversations,
     onArchive: props.onArchiveThread,
     onRename: props.onRenameThread,

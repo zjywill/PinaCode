@@ -162,6 +162,7 @@ import {
 } from "./composerAttachmentInsertion";
 import type { ComposerDraftContextRecords } from "./composerContextPresentation";
 import { SharedTooltipTrigger } from "./ui/shared-tooltip";
+import { ProjectReferenceChip } from "./contextChipParts";
 
 export interface ComposerPromptEditorHandle {
   focus: () => void;
@@ -610,6 +611,34 @@ function ComposerCitationNodeView({ node, editor, getPos }: NodeViewProps) {
   );
 }
 
+const ComposerProjectReferenceExtension = Node.create({
+  name: "composer-project-reference",
+  group: "inline",
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return { label: { default: "" }, source: { default: "" } };
+  },
+  parseHTML() {
+    return [{ tag: "span[data-composer-project-reference]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["span", { "data-composer-project-reference": "", ...HTMLAttributes }];
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(ComposerProjectReferenceNodeView);
+  },
+});
+
+function ComposerProjectReferenceNodeView({ node }: NodeViewProps) {
+  return (
+    <NodeViewWrapper as="span" className={CHIP_NODE_SELECTION_CLASS_NAME} contentEditable={false}>
+      <ProjectReferenceChip label={node.attrs.label as string} />
+    </NodeViewWrapper>
+  );
+}
+
 const ComposerContextReferenceExtension = Node.create({
   name: "composer-context-reference",
   group: "inline",
@@ -953,6 +982,7 @@ function createComposerExtensions(richText: boolean) {
     ComposerModelExtension,
     ComposerCitationExtension,
     ComposerContextReferenceExtension,
+    ComposerProjectReferenceExtension,
     ComposerChipSelectionExtension,
     ...(richText
       ? [

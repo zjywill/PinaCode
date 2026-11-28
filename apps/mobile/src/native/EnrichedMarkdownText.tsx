@@ -3,6 +3,7 @@ import {
   collectComposerContextReferences,
   formatComposerContextHref,
   formatComposerContextReference,
+  parseComposerProjectHref,
 } from "@t3tools/shared/composerContextReferences";
 import {
   markdownForNativeRendering,
@@ -321,6 +322,7 @@ export function MobileEnrichedMarkdownText(props: SelectableMarkdownTextProps) {
   } | null>(null);
   const { fileContextMenu, onFileContextMenuAction } = props;
   const onLinkPress = (url: string) => {
+    if (parseComposerProjectHref(url)) return;
     const model = enrichedModelReference(url, props.models);
     if (model) {
       Dialog.alert(model.label, enrichedModelDetails(model));

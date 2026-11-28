@@ -209,7 +209,7 @@ export function ComposerEditor({
           token.type === "mention" ? token.value : contextRecordFileName(record),
         );
         return {
-          type: token.type === "citation" ? "context" : token.type,
+          type: token.type === "citation" || token.type === "project" ? "context" : token.type,
           source: token.source,
           start: token.start,
           end: token.end,
@@ -225,7 +225,7 @@ export function ComposerEditor({
                 ? model.label
                 : token.type === "context"
                   ? `${token.label}${props.context?.records.some((record) => record.contextId === token.contextId) ? "" : " · unavailable"}`
-                  : token.type === "citation"
+                  : token.type === "citation" || token.type === "project"
                     ? token.value
                     : basename(token.value).normalize("NFC"),
           detail: token.type === "context" ? composerChipSizeSuffix(record, messages) : "",

@@ -13,6 +13,7 @@ import {
   scoreSearchTerms,
   scoreThreadSearch,
 } from "@t3tools/shared/paletteSearch";
+import { formatComposerProjectReference } from "@t3tools/shared/composerContextReferences";
 
 import { scopedProjectKey } from "./environment/scoped.ts";
 import { sortThreads } from "./state/threadSort.ts";
@@ -192,7 +193,7 @@ export function matchPinaProjectItems(
 }
 
 export function composerProjectPrompt(item: ComposerProjectItem) {
-  return `${item.label} (projectId: ${item.project.projectId}, environmentId: ${item.project.environmentId}) `;
+  return `${formatComposerProjectReference(item.project, item.label)} `;
 }
 
 export interface ComposerEnvironmentCandidate {

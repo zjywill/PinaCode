@@ -145,7 +145,7 @@ it("selects a new thread in a project with no sessions from Pina's @ picker", as
   expect(item.label).toBe("New thread in Storefront");
   await act(async () => menu?.onSelect(item));
   expect(onChangeDraftMessage).toHaveBeenCalledWith(
-    "Please investigate New thread in Storefront (projectId: shop-id, environmentId: local) ",
+    "Please investigate [New thread in Storefront](t3-project://v1/new-thread?projectId=shop-id&environmentId=local) ",
   );
   await act(async () => root.render(<Probe key="machine" draft="@buildbox" />));
   expect(menu?.items.map((item) => item.type)).toEqual(["environment"]);

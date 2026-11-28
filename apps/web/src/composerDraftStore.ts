@@ -38,8 +38,7 @@ import {
   scopeProjectRef,
   scopedThreadKey,
   scopeThreadRef,
-  updatePinaComposerDraft,
-  type PinaSourceThread,
+  removeLegacyPinaSourceReferences,
 } from "@t3tools/client-runtime/environment";
 import * as Schema from "effect/Schema";
 import * as Equal from "effect/Equal";
@@ -760,7 +759,7 @@ interface ComposerDraftStoreState {
     threadRef: ComposerThreadTarget,
     records: ReadonlyArray<ThreadContextRecord>,
   ) => void;
-  setPinaSourceThread: (threadRef: ScopedThreadRef, source: PinaSourceThread | null) => void;
+  clearLegacyPinaSource: (threadRef: ScopedThreadRef) => void;
   /** Mentions machines as context; already-mentioned machines are skipped. */
   addEnvironmentContexts: (
     threadRef: ComposerThreadTarget,
@@ -4337,25 +4336,21 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             return { draftsByThreadKey: nextDraftsByThreadKey };
           });
         },
-        setPinaSourceThread: (threadRef, source) => {
+        clearLegacyPinaSource: (threadRef) => {
           const threadKey = resolveComposerDraftKey(get(), threadRef);
           if (!threadKey) return;
           set((state) => {
-            const existing = state.draftsByThreadKey[threadKey] ?? createEmptyThreadDraft();
-            const updated = updatePinaComposerDraft(threadRef, source, {
+            const existing = state.draftsByThreadKey[threadKey];
+            if (!existing) return state;
+            const updated = removeLegacyPinaSourceReferences({
               text: existing.prompt,
               records: existing.threadContexts,
             });
-            if (
-              updated === null ||
-              (updated.text === existing.prompt && updated.records === existing.threadContexts)
-            ) {
-              return state;
-            }
+            if (updated === null) return state;
             const draft = {
               ...existing,
               prompt: updated.text,
-              threadContexts: [...updated.records],
+              threadContexts: updated.records,
             };
             const draftsByThreadKey = { ...state.draftsByThreadKey };
             if (shouldRemoveDraft(draft)) delete draftsByThreadKey[threadKey];

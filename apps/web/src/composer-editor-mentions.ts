@@ -1,7 +1,10 @@
 import { collectComposerModelMentions } from "@t3tools/client-runtime/composer-model-mentions";
 import type { AssistantCitation } from "@t3tools/contracts";
 import { collectAssistantCitations } from "@t3tools/shared/assistantCitations";
-import { collectComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import {
+  collectComposerContextReferences,
+  collectComposerProjectReferences,
+} from "@t3tools/shared/composerContextReferences";
 import {
   collectComposerInlineTokens,
   composerMathRanges,
@@ -33,6 +36,11 @@ export type ComposerPromptSegment =
   | {
       type: "citation";
       citation: AssistantCitation;
+      source: string;
+    }
+  | {
+      type: "project-reference";
+      label: string;
       source: string;
     }
   | {
@@ -107,12 +115,14 @@ export function collectComposerPromptInlineTokens(text: string) {
       : [...inlineTokens, ...models].sort((left, right) => left.start - right.start);
   const citations = collectAssistantCitations(text);
   const references = collectComposerContextReferences(text);
-  if (citations.length === 0 && references.length === 0) return tokens;
+  const projects = collectComposerProjectReferences(text);
+  if (citations.length === 0 && references.length === 0 && projects.length === 0) return tokens;
 
   // An unfinished @ mention can otherwise consume the start of a link label.
   const links = [
     ...citations.map((match) => ({ ...match, type: "citation" as const })),
     ...references.map((match) => ({ ...match, type: "context-reference" as const })),
+    ...projects.map((match) => ({ ...match, type: "project-reference" as const })),
   ];
   return [
     ...tokens.filter(
@@ -141,6 +151,8 @@ function splitPromptTextIntoComposerSegments(text: string): ComposerPromptSegmen
 
     if (match.type === "citation") {
       segments.push({ type: "citation", citation: match.citation, source: match.source });
+    } else if (match.type === "project-reference") {
+      segments.push({ type: "project-reference", label: match.label, source: match.source });
     } else if (match.type === "context-reference") {
       segments.push({
         type: "context-reference",

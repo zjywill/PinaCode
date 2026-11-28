@@ -10,7 +10,7 @@ import {
   type ScopedThreadRef,
   type ThreadId,
 } from "@t3tools/contracts";
-import { readThreadShell, useServerConfigs } from "../state/entities";
+import { useServerConfigs } from "../state/entities";
 import { useComposerDraftStore } from "../composerDraftStore";
 import {
   useConnectedEnvironmentIds,
@@ -32,7 +32,7 @@ import { randomUUID } from "../lib/utils";
 
 export function useOpenPina(
   preferred: EnvironmentId | null | undefined,
-  sourceThread: ScopedThreadRef | null,
+  activeThread: ScopedThreadRef | null,
 ) {
   const primary = usePrimaryEnvironmentId();
   const connected = useConnectedEnvironmentIds();
@@ -56,15 +56,7 @@ export function useOpenPina(
     configs.get(environmentId)?.environment.capabilities.pinaConversations === true;
   const openThread = async (threadId: ThreadId) => {
     const target = scopeThreadRef(environmentId, threadId);
-    useComposerDraftStore.getState().setPinaSourceThread(
-      target,
-      sourceThread === null
-        ? null
-        : {
-            ref: sourceThread,
-            title: readThreadShell(sourceThread)?.title ?? sourceThread.threadId,
-          },
-    );
+    useComposerDraftStore.getState().clearLegacyPinaSource(target);
     await navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(target) });
   };
   const openFromServer = async (input: OpenPinaInput) => {
@@ -82,8 +74,8 @@ export function useOpenPina(
     return true;
   };
   const open = async () => {
-    if (sourceThread?.environmentId === environmentId && isPinaThread(sourceThread.threadId)) {
-      await openThread(sourceThread.threadId);
+    if (activeThread?.environmentId === environmentId && isPinaThread(activeThread.threadId)) {
+      await openThread(activeThread.threadId);
     } else {
       await openFromServer({});
     }

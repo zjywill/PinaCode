@@ -41,7 +41,7 @@ import {
   getComposerDraftSnapshot,
   mergeComposerDraftContent,
   scheduleUnusedComposerAttachmentCleanup,
-  setPinaSourceThread,
+  clearLegacyPinaSource,
   undoComposerDraftMerge,
 } from "../../state/use-composer-drafts";
 import {
@@ -397,7 +397,7 @@ export const incomingShareImports = makeIncomingShareImports({
         threadId: ThreadId.make(destination.threadId),
       },
     } as const;
-    setPinaSourceThread(detail.params, null);
+    clearLegacyPinaSource(detail.params);
     startOpeningDetail(detail);
     rootNavigationRef.dispatch(selectWorkspaceDetail(detail));
   },

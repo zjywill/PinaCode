@@ -3,7 +3,7 @@ import type { ContextMenuSource } from "@t3tools/contracts";
 import { contextMenuSourceOf } from "../../contextMenuSource";
 import { assistantCitationsToPlainText } from "@t3tools/shared/assistantCitations";
 import { replaceComposerContextReferences } from "@t3tools/shared/composerContextReferences";
-import { composerFileLinksToPlainText } from "@t3tools/shared/composerInlineTokens";
+import { composerInlineLinksToPlainText } from "@t3tools/shared/composerInlineTokens";
 import { T, useGT, useMessages } from "gt-react";
 import { SquarePenIcon, XIcon } from "lucide-react";
 import {
@@ -89,7 +89,7 @@ const SidebarDraftRow = memo(function SidebarDraftRow(props: {
   const terminalLabels = terminalContextDisplayLabels(composer.terminalContexts, resolve);
   const promptPreview =
     assistantCitationsToPlainText(
-      composerFileLinksToPlainText(
+      composerInlineLinksToPlainText(
         replaceComposerContextReferences(
           composer.prompt,
           (occurrence) =>

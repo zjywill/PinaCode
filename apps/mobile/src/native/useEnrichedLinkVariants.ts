@@ -28,6 +28,7 @@ import {
   enrichedThreadLinkPresentation,
 } from "../lib/enrichedLinkPresentation";
 import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
+import { parseComposerProjectHref } from "@t3tools/shared/composerContextReferences";
 
 function chipCustomization(
   chip: ReturnType<typeof enrichedContextLinkPresentation>,
@@ -71,6 +72,12 @@ function presentation(
 ): MarkdownLinkCustomization | undefined {
   const custom = props.linkCustomization?.(url);
   if (custom) return custom;
+  if (parseComposerProjectHref(url)) {
+    return {
+      icon: CONTEXT_CHIP_ICON_SOURCES["messages-square"],
+      chip: { accent: contextChipPresentation("project").accent, tintsIcon: true },
+    };
+  }
   const citation = parseAssistantCitationHref(url);
   if (citation)
     return {

@@ -3,6 +3,7 @@ import {
   type ComposerContextRecord,
   EnvironmentId,
   MessageId,
+  ProjectId,
   ThreadId,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
@@ -11,7 +12,9 @@ import { serializeAssistantCitation } from "./assistantCitations.ts";
 import {
   ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
   collectComposerContextReferences,
+  composerProjectReferencesToPlainText,
   formatComposerContextHref,
+  formatComposerProjectReference,
   isImageReferencesOnly,
   parseComposerContextHref,
   projectComposerContextForProvider,
@@ -155,6 +158,21 @@ describe("attachment-only bootstrap prompts", () => {
 });
 
 describe("provider projection", () => {
+  it("recovers the scoped project from a composer reference and leaves a fenced example literal", () => {
+    const reference = formatComposerProjectReference(
+      { projectId: ProjectId.make("team/repo"), environmentId: EnvironmentId.make("dev)&qa") },
+      "在 [团队] 中新建会话",
+    );
+    const example = `\`\`\`md\n${reference}\n\`\`\``;
+    const text = `${example}\n${reference} Check login.`;
+    expect(projectComposerContextForProvider({ text, records: [] })).toBe(
+      `${example}\n在 [团队] 中新建会话 (projectId: team/repo, environmentId: dev)&qa) Check login.`,
+    );
+    expect(composerProjectReferencesToPlainText(text)).toBe(
+      `${example}\n在 [团队] 中新建会话 Check login.`,
+    );
+  });
+
   const terminal: ComposerContextRecord = {
     version: 1,
     contextId: ctx("ctx_t"),
