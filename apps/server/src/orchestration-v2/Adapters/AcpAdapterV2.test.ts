@@ -6034,7 +6034,7 @@ describe("AcpAdapterV2", () => {
         modelSelection,
         runtimePolicy,
       });
-      yield* Queue.clear(protocolEvents);
+      const configurationEvents = yield* Queue.clear(protocolEvents);
 
       yield* runtime.startTurn(
         makeTurnInput({
@@ -6046,18 +6046,20 @@ describe("AcpAdapterV2", () => {
           now: yield* DateTime.now,
         }),
       );
-      const methods: Array<string> = [];
-      while (!methods.includes("session/prompt")) {
+      while (true) {
         const event = yield* Queue.take(protocolEvents);
-        if (event.direction !== "outgoing") continue;
-        const method = rawProtocolMethod(event);
-        if (method !== undefined) methods.push(method);
+        configurationEvents.push(event);
+        if (event.direction === "outgoing" && rawProtocolMethod(event) === "session/prompt") break;
       }
 
-      assert.include(
-        methods,
-        "session/set_config_option",
-        "the selected model was only applied to the provisional setup, which offered no model",
+      assert.isTrue(
+        configurationEvents.some(
+          (event) =>
+            event.direction === "outgoing" &&
+            rawProtocolMethod(event) === "session/set_config_option" &&
+            rawProtocolRequestParam(event, "value") === modelSelection.model,
+        ),
+        "the selected model must be applied to the adopted session before prompting",
       );
       assert.isTrue(
         publishedConfigurations.at(-1)?.some((option) => option.category === "model"),

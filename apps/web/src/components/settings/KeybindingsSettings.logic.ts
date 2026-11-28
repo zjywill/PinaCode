@@ -1,5 +1,4 @@
 import {
-  PINA_ASSISTANT_NAME,
   STATIC_KEYBINDING_COMMANDS,
   type ClientSettings,
   type KeybindingCommand,
@@ -466,6 +465,7 @@ export function buildKeybindingCommandOptions(
 }
 
 const COMMAND_LABELS: Partial<Record<KeybindingCommand, string>> = {
+  "pina.open": msg("Pina"),
   "workspace.focusNext": msg("Focus Next Workspace Area"),
   "workspace.focusPrevious": msg("Focus Previous Workspace Area"),
   "composer.sendAlternate": msg("Composer: Opposite Queue or Steer Action"),
@@ -552,7 +552,6 @@ const LATE_COMMAND_LABELS: Partial<Record<KeybindingCommand, string>> = {
 };
 
 export function commandLabel(command: KeybindingCommand, resolve: MessageResolver = m): string {
-  if (command === "pina.open") return PINA_ASSISTANT_NAME;
   const label = COMMAND_LABELS[command];
   if (label) return resolve(label);
   const usageLabel = USAGE_COMMAND_LABELS[command as keyof typeof USAGE_COMMAND_LABELS];

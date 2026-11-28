@@ -50,10 +50,35 @@ const INPUT: UsageSummaryInput = {
   timeZone: "UTC",
 };
 
-const CONFIG = {
+const CONFIG: ServerConfig = {
+  environment: {
+    environmentId: TARGET.environmentId,
+    label: TARGET.label,
+    platform: { os: "unknown", arch: "other" },
+    serverVersion: "0.0.1",
+    capabilities: { repositoryIdentity: false },
+  },
+  auth: {
+    policy: "loopback-browser",
+    bootstrapMethods: [],
+    sessionMethods: [],
+    sessionCookieName: "test_session",
+  },
+  cwd: "/workspace",
+  keybindingsConfigPath: "/workspace/keybindings.json",
+  keybindings: [],
+  issues: [],
+  providers: [],
+  availableEditors: [],
+  observability: {
+    logsDirectoryPath: "/workspace/logs",
+    localTracingEnabled: false,
+    otlpTracesEnabled: false,
+    otlpMetricsEnabled: false,
+    otlpLogsEnabled: false,
+  },
   settings: DEFAULT_SERVER_SETTINGS,
-  environment: { serverVersion: "0.0.1", capabilities: {} },
-} as ServerConfig;
+};
 
 const PRICING = { status: "unavailable" as const, source: "test", fetchedAt: null, knownModels: 0 };
 
