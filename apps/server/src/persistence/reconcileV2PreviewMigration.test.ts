@@ -99,6 +99,7 @@ describe("V2 preview upgrade", () => {
         [118, "WorkflowPools"],
         [119, "WorkflowRunSubject"],
         [120, "PinaTurnReports"],
+        [121, "DelegationRecoveryIndex"],
       ]);
       assert.deepStrictEqual(yield* runMigrations(), []);
       assert.deepStrictEqual(yield* sql`SELECT * FROM orchestration_v2_legacy_imports`, imports);
@@ -241,6 +242,7 @@ describe("V2 preview upgrade", () => {
         [118, "WorkflowPools"],
         [119, "WorkflowRunSubject"],
         [120, "PinaTurnReports"],
+        [121, "DelegationRecoveryIndex"],
       ]);
     }).pipe(Effect.provide(NodeSqliteClient.layer({ filename: ":memory:" }))),
   );

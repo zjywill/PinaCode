@@ -368,19 +368,28 @@ it.effect("still knows No project when its folder is the target of a symlinked S
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const root = yield* requireRoot;
-      const target = path.join(baseDir, "visible-chats");
-      yield* fileSystem.makeDirectory(target);
+      const folder = path.join(baseDir, "folders");
+      const alias = path.join(baseDir, "alias");
+      yield* fileSystem.makeDirectory(path.join(folder, "visible-chats"), { recursive: true });
+      yield* fileSystem.symlink(folder, alias);
+      const target = path.join(alias, "visible-chats");
       yield* fileSystem.symlink(target, root);
       const { projectId } = yield* scratch.ensureScratchProject;
-      yield* projects.update({
-        commandId: CommandId.make("command:point-at-target"),
-        projectId,
-        workspaceRoot: target,
-      });
+      const canonicalTarget = yield* fileSystem.realPath(target);
+      for (const [name, workspaceRoot] of [
+        ["canonical", canonicalTarget],
+        ["alias", target],
+      ] as const) {
+        yield* projects.update({
+          commandId: CommandId.make(`command:point-at-${name}`),
+          projectId,
+          workspaceRoot,
+        });
 
-      assert.isTrue(yield* scratch.isScratchProject(projectId));
-      assert.equal((yield* scratch.ensureScratchProject).projectId, projectId);
-      assert.deepStrictEqual(yield* scratch.scratchRoot, Option.some(target));
+        assert.isTrue(yield* scratch.isScratchProject(projectId));
+        assert.equal((yield* scratch.ensureScratchProject).projectId, projectId);
+        assert.deepStrictEqual(yield* scratch.scratchRoot, Option.some(workspaceRoot));
+      }
     }),
   ),
 );

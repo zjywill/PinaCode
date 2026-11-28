@@ -8,6 +8,7 @@ import {
   VcsProcessSpawnError,
 } from "@t3tools/contracts";
 import { foldLatinDiacritics, newProjectFolderName } from "@t3tools/shared/path";
+import { resolveSymlinkTarget } from "@t3tools/shared/symlink";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -285,17 +286,23 @@ const make = Effect.gen(function* () {
     Effect.onInterrupt(() => invalidate),
   );
   // A symlinked scratch folder lets the No project live at either the link or its target.
-  const scratchProjectRoot = (root: string) =>
-    fileSystem.realPath(root).pipe(
-      Effect.flatMap((target) =>
-        target === root
-          ? Effect.succeed(root)
-          : projects
-              .getByWorkspaceRoot(target)
-              .pipe(Effect.map((project) => (Option.isSome(project) ? target : root))),
-      ),
-      Effect.orElseSucceed(() => root),
-    );
+  const scratchProjectRoot = Effect.fn("ManagedProjectFolders.scratchProjectRoot")(
+    function* (root: string) {
+      const canonicalTarget = yield* fileSystem.realPath(root);
+      if (canonicalTarget === root) return root;
+      if (Option.isSome(yield* projects.getByWorkspaceRoot(canonicalTarget)))
+        return canonicalTarget;
+
+      const linkTarget = yield* resolveSymlinkTarget(root).pipe(
+        Effect.provideService(FileSystem.FileSystem, fileSystem),
+        Effect.provideService(Path.Path, path),
+      );
+      if (linkTarget === root || linkTarget === canonicalTarget) return root;
+      if ((yield* fileSystem.realPath(linkTarget)) !== canonicalTarget) return root;
+      return Option.isSome(yield* projects.getByWorkspaceRoot(linkTarget)) ? linkTarget : root;
+    },
+    (effect, root) => effect.pipe(Effect.orElseSucceed(() => root)),
+  );
   const scratchRoot = scratchProbe.pipe(
     Effect.flatMap((probed) =>
       Result.isSuccess(probed)
