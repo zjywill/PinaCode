@@ -1,4 +1,5 @@
 import { PrimaryConnectionTarget } from "@t3tools/client-runtime/connection";
+import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { createEnvironmentThreadShellAtoms } from "@t3tools/client-runtime/state/threads";
@@ -21,6 +22,7 @@ import {
   ComposerContextId,
   EnvironmentId,
   MessageId,
+  pinaThreadId,
   ProjectId,
   ProviderInstanceId,
   RuntimeRequestId,
@@ -226,6 +228,7 @@ import {
   retargetNewTaskDraft,
   retargetSavedNewTaskDraft,
   setComposerDraftText,
+  setPinaSourceThread,
   insertComposerDraftContext,
   insertComposerDraftText,
   rememberComposerDraftSelection,
@@ -242,6 +245,43 @@ const DRAFT: ComposerDraft = {
   text: "hello",
   attachments: [],
 };
+
+it("keeps the Pina source in the mobile draft until it is deleted or the entry has no source", () => {
+  const environmentId = EnvironmentId.make("pina-test");
+  const target = { environmentId, threadId: pinaThreadId(ProjectId.make("scratch"), 0) };
+  const source = {
+    ref: { environmentId, threadId: ThreadId.make("previous") },
+    title: "Previous thread",
+  };
+  const key = scopedThreadKey(target);
+  const prompt = "Add a regression test";
+  setComposerDraftText(key, prompt);
+  setPinaSourceThread(target, source);
+
+  const draft = getComposerDraftSnapshot(key);
+  expect(draft.context?.records).toMatchObject([
+    { kind: "thread", environmentId, threadId: source.ref.threadId },
+  ]);
+  const sourcePrefix = `${formatComposerContextReference(draft.context!.records[0]!)} `;
+  expect(draft.text).toBe(sourcePrefix + prompt);
+  expect(captureComposerDraftInsertion(key)).toMatchObject({
+    start: sourcePrefix.length,
+    end: sourcePrefix.length,
+  });
+  rememberComposerDraftSelection(key, draft.text, {
+    start: draft.text.length,
+    end: draft.text.length,
+  });
+  setPinaSourceThread(target, source);
+  expect(captureComposerDraftInsertion(key).start).toBe(sourcePrefix.length);
+  expect(getComposerDraftSnapshot(key)).toEqual(draft);
+  setComposerDraftText(key, prompt);
+  expect(getComposerDraftSnapshot(key).context).toBeUndefined();
+
+  setPinaSourceThread(target, source);
+  setPinaSourceThread(target, null);
+  expect(getComposerDraftSnapshot(key)).toMatchObject({ text: prompt, context: undefined });
+});
 
 it.each(["picker open", "reading image"] as const)(
   "recovers only accepted screenshots when a question is cancelled while %s",

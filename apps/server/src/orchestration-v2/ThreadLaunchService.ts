@@ -9,12 +9,15 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   ProviderInstanceId,
   OrchestrationDispatchCommandError,
+  pinaConversationThreadId,
   pinaThreadId,
   isProviderAvailable,
+  isRuntimeModeAbove,
   resolveProjectProviderInstanceEnabled,
   type ChatAttachment,
   type MessageId,
   type ModelSelection,
+  type OpenPinaInput,
   type OrchestrationV2Actor,
   type OrchestrationV2CreationSource,
   type OrchestrationV2DelegatedFrom,
@@ -246,13 +249,15 @@ export class ThreadLaunchNotRepositoryError extends Schema.TaggedError<ThreadLau
   }
 }
 
+type PinaModeLimit = Pick<ThreadLaunchInput, "runtimeMode" | "interactionMode">;
+
 export class ThreadLaunchService extends Context.Service<
   ThreadLaunchService,
   {
-    readonly openPina: () => Effect.Effect<
-      { readonly threadId: ThreadId },
-      OrchestrationDispatchCommandError
-    >;
+    readonly openPina: (
+      input?: OpenPinaInput,
+      limit?: PinaModeLimit,
+    ) => Effect.Effect<{ readonly threadId: ThreadId }, OrchestrationDispatchCommandError>;
     readonly launch: (
       input: ThreadLaunchInput,
     ) => Effect.Effect<
@@ -1853,72 +1858,82 @@ const make = Effect.gen(function* () {
     );
   });
 
+  const launchPina = Effect.fn("ThreadLaunchService.launchPina")(function* (
+    projectId: ProjectId,
+    threadId: ThreadId,
+    title: string,
+    limit?: PinaModeLimit,
+  ) {
+    const commandId = CommandId.make(`create:${threadId}`);
+    const settings = resolveProjectSettings(yield* serverSettings.getSettings, projectId).settings;
+    const providers = yield* providerRegistry.getProviders;
+    const usableProviders = providers.filter(
+      (entry) =>
+        entry.enabled &&
+        entry.installed &&
+        entry.status !== "error" &&
+        entry.status !== "disabled" &&
+        entry.auth.status !== "unauthenticated" &&
+        isProviderAvailable(entry) &&
+        resolveProjectProviderInstanceEnabled(settings, projectId, entry.instanceId),
+    );
+    const preferred = settings.defaultModelSelection;
+    const configured = usableProviders.find((entry) => entry.instanceId === preferred?.instanceId);
+    const provider = configured ?? usableProviders.find((entry) => entry.models.length > 0);
+    const model = provider?.models.find((entry) => entry.isDefault) ?? provider?.models[0];
+    const modelSelection =
+      configured && preferred
+        ? preferred
+        : provider && model
+          ? { instanceId: provider.instanceId, model: model.slug }
+          : (preferred ?? {
+              instanceId: ProviderInstanceId.make("codex"),
+              model: DEFAULT_MODEL,
+            });
+    yield* launch({
+      commandId,
+      projectId,
+      threadId,
+      title,
+      titleRenamed: true,
+      modelSelection,
+      runtimeMode:
+        limit && isRuntimeModeAbove(settings.defaultRuntimeMode, limit.runtimeMode)
+          ? limit.runtimeMode
+          : settings.defaultRuntimeMode,
+      interactionMode: limit?.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE,
+      workspaceStrategy: { type: "root" },
+      createdBy: "system",
+      creationSource: "server",
+    });
+    return { threadId };
+  });
+
   const pinaLock = yield* Semaphore.make(1);
   const openPina = Effect.fn("ThreadLaunchService.openPina")(
-    function* () {
+    function* ({ newConversation }: OpenPinaInput = {}, limit?: PinaModeLimit) {
       const { projectId } = yield* managedFolders.ensureScratchProject;
+      if (newConversation !== undefined) {
+        const threadId = pinaConversationThreadId(projectId, newConversation.requestId);
+        if ((yield* threads.getThreadShell(threadId)) !== null) return { threadId };
+        const receipt = yield* receipts.getByCommandId(CommandId.make(`create:${threadId}`));
+        if (Option.isSome(receipt) && receipt.value.status === "accepted") {
+          return yield* new OrchestrationDispatchCommandError({
+            message: "This Pina conversation has been deleted.",
+          });
+        }
+        return yield* launchPina(projectId, threadId, newConversation.title, limit);
+      }
       for (let generation = 0; ; generation++) {
         const threadId = pinaThreadId(projectId, generation);
-        const commandId = CommandId.make(`create:${threadId}`);
         const existing = yield* threads.getThreadShell(threadId);
-        if (existing !== null) {
-          if (existing.archivedAt !== null) {
-            yield* threads.dispatch({
-              type: "thread.unarchive",
-              commandId: CommandId.make(
-                `open:${threadId}:${DateTime.toEpochMillis(existing.archivedAt)}`,
-              ),
-              threadId,
-            });
-          }
-          return { threadId };
+        if (existing?.archivedAt === null) return { threadId };
+        if (existing !== null) continue;
+        // A deleted conversation keeps its receipt and must never be recreated.
+        if (Option.isSome(yield* receipts.getByCommandId(CommandId.make(`create:${threadId}`)))) {
+          continue;
         }
-        // A deleted conversation retains its creation receipt. Open a fresh history after deletion.
-        if (Option.isSome(yield* receipts.getByCommandId(commandId))) continue;
-        const settings = resolveProjectSettings(
-          yield* serverSettings.getSettings,
-          projectId,
-        ).settings;
-        const providers = yield* providerRegistry.getProviders;
-        const usableProviders = providers.filter(
-          (entry) =>
-            entry.enabled &&
-            entry.installed &&
-            entry.status !== "error" &&
-            entry.status !== "disabled" &&
-            entry.auth.status !== "unauthenticated" &&
-            isProviderAvailable(entry) &&
-            resolveProjectProviderInstanceEnabled(settings, projectId, entry.instanceId),
-        );
-        const preferred = settings.defaultModelSelection;
-        const configured = usableProviders.find(
-          (entry) => entry.instanceId === preferred?.instanceId,
-        );
-        const provider = configured ?? usableProviders.find((entry) => entry.models.length > 0);
-        const model = provider?.models.find((entry) => entry.isDefault) ?? provider?.models[0];
-        const modelSelection =
-          configured && preferred
-            ? preferred
-            : provider && model
-              ? { instanceId: provider.instanceId, model: model.slug }
-              : (preferred ?? {
-                  instanceId: ProviderInstanceId.make("codex"),
-                  model: DEFAULT_MODEL,
-                });
-        yield* launch({
-          commandId,
-          projectId,
-          threadId,
-          title: PINA_ASSISTANT_NAME,
-          titleRenamed: true,
-          modelSelection,
-          runtimeMode: settings.defaultRuntimeMode,
-          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-          workspaceStrategy: { type: "root" },
-          createdBy: "system",
-          creationSource: "server",
-        });
-        return { threadId };
+        return yield* launchPina(projectId, threadId, PINA_ASSISTANT_NAME);
       }
     },
     pinaLock.withPermits(1),

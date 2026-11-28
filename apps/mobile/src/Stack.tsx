@@ -52,6 +52,8 @@ import { ArchivedThreadsRouteScreen } from "./features/archive/ArchivedThreadsRo
 import { AttachmentFileScreen } from "./features/files/AttachmentFileScreen";
 import { ThreadFilesTreeScreen, ThreadFileScreen } from "./features/files/ThreadFilesRouteScreen";
 import { AdaptiveWorkspaceLayout } from "./features/layout/AdaptiveWorkspaceLayout";
+import { ActiveWorkspaceThreadContext } from "./features/layout/adaptive-workspace-context";
+import { parseActiveThreadPath } from "./features/keyboard/hardwareKeyboardCommands";
 import {
   HardwareKeyboardCommandOverlay,
   HardwareKeyboardCommandProvider,
@@ -479,14 +481,16 @@ function RootStackLayout(props: {
         <SettingsEnvironmentFilterProvider open={settingsOpen}>
           <WorkspaceConnectionStatusProvider>
             <AndroidWorkspaceTabsProvider state={props.state}>
-              <AdaptiveWorkspaceLayout
-                pathname={workspaceLocation.pathname}
-                workspaceRouteKey={workspaceLocation.routeKey}
-                workspaceRouteName={workspaceLocation.routeName}
-              >
-                {props.children}
-                <HardwareKeyboardCommandOverlay />
-              </AdaptiveWorkspaceLayout>
+              <ActiveWorkspaceThreadContext value={parseActiveThreadPath(pathname)}>
+                <AdaptiveWorkspaceLayout
+                  pathname={workspaceLocation.pathname}
+                  workspaceRouteKey={workspaceLocation.routeKey}
+                  workspaceRouteName={workspaceLocation.routeName}
+                >
+                  {props.children}
+                  <HardwareKeyboardCommandOverlay />
+                </AdaptiveWorkspaceLayout>
+              </ActiveWorkspaceThreadContext>
             </AndroidWorkspaceTabsProvider>
           </WorkspaceConnectionStatusProvider>
         </SettingsEnvironmentFilterProvider>

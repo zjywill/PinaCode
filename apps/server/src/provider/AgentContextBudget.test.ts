@@ -38,6 +38,7 @@ import { ManagedProjectFolders } from "../project/ManagedProjectFolders.ts";
 import { ProjectCloneTracker } from "../project/ProjectCloneTracker.ts";
 import { ProjectService } from "../project/ProjectService.ts";
 import { ProjectSetupScriptRunner } from "../project/ProjectSetupScriptRunner.ts";
+import { RepositoryProjectSetup } from "../project/RepositoryProjectSetup.ts";
 import { IssueService } from "../issue/IssueService.ts";
 import { PullRequestReviewGuideService } from "../pullRequest/PullRequestReviewGuideService.ts";
 import { PullRequestService } from "../pullRequest/PullRequestService.ts";
@@ -82,6 +83,7 @@ const toolHandlerServices = Layer.mergeAll(
   Layer.mock(PullRequestService)({}),
   Layer.mock(GitManager)({}),
   Layer.mock(RemoteDelegation)({}),
+  Layer.mock(RepositoryProjectSetup)({}),
   Layer.mock(ScheduledTaskService)({}),
   Layer.mock(SecretRequests)({}),
   ServerConfig.layerTest(process.cwd(), { prefix: "t3-agent-context-budget-" }),

@@ -569,8 +569,18 @@ export const OrchestratorMcpThreadReadResult = Schema.Struct({
 export type OrchestratorMcpThreadReadResult = typeof OrchestratorMcpThreadReadResult.Type;
 
 /** `reportBack` on `pinacode_thread_send` and `pinacode_thread_launch`. */
-export const OrchestratorMcpReportBackDescription =
+const OrchestratorMcpReportBackDescription =
   "Record this turn as your task: when it ends, you are woken with its result even after your turn ends, as for `pinacode_delegate_task`. Use it when you will report the result. Never steers.";
+
+export const OrchestratorMcpLaunchReportBack = Schema.Union([
+  Schema.Boolean,
+  Schema.Literal("settled"),
+]).annotate({
+  description:
+    OrchestratorMcpReportBackDescription +
+    ' Use "settled" for a new coordinator that delegates work: report its answer after its tasks and their follow-up turns settle.',
+});
+export type OrchestratorMcpLaunchReportBack = typeof OrchestratorMcpLaunchReportBack.Type;
 
 export const OrchestratorMcpThreadSendInput = Schema.Struct({
   environmentId: OrchestratorMcpEnvironmentTarget,
@@ -643,6 +653,23 @@ export const OrchestratorMcpThreadWaitResult = Schema.Struct({
   output: Schema.optional(Schema.Json),
 });
 export type OrchestratorMcpThreadWaitResult = typeof OrchestratorMcpThreadWaitResult.Type;
+
+export const OrchestratorMcpPinaSendInput = Schema.Struct({
+  message: OrchestratorMcpPrompt,
+  clientRequestId: OrchestratorMcpClientRequestId,
+  timeoutMs: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 20_000 }))),
+});
+export type OrchestratorMcpPinaSendInput = typeof OrchestratorMcpPinaSendInput.Type;
+
+export const OrchestratorMcpPinaSendResult = Schema.Struct({
+  threadId: ThreadId,
+  link: TrimmedNonEmptyString,
+  runId: RunId,
+  status: OrchestratorMcpThreadStatus,
+  timedOut: Schema.Boolean,
+  reply: Schema.NullOr(Schema.String),
+});
+export type OrchestratorMcpPinaSendResult = typeof OrchestratorMcpPinaSendResult.Type;
 
 export const OrchestratorMcpThreadInterruptInput = Schema.Struct({
   followRestarts: Schema.optional(Schema.Boolean),

@@ -3056,8 +3056,8 @@ export const layerWsRpc = (
                 Effect.ignoreCause({ log: true }),
               ),
           }),
-        [WS_METHODS.openPina]: () =>
-          startup.enqueueCommand(threadLaunch.openPina()).pipe(
+        [WS_METHODS.openPina]: (input) =>
+          startup.enqueueCommand(threadLaunch.openPina(input)).pipe(
             Effect.catchTags({
               ServerRuntimeStartupError: (cause) =>
                 Effect.fail(

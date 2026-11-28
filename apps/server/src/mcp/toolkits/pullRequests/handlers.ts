@@ -1111,6 +1111,14 @@ const make = Effect.gen(function* () {
         };
       }),
     ),
+    pinacode_pull_request_checks: McpToolAccess.reads(({ url }) =>
+      McpInvocationContext.requireMcpCapability("pull-requests").pipe(
+        Effect.andThen(pullRequests.checksByUrl(url)),
+        Effect.mapError((error) =>
+          error._tag === "PullRequestOperationError" ? forgeFailure(error) : error,
+        ),
+      ),
+    ),
     pinacode_pull_request_list: McpToolAccess.reads((input) =>
       Effect.gen(function* () {
         const thread = yield* requireThread(PullRequestForgeError, undefined);

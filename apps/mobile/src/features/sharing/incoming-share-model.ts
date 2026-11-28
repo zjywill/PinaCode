@@ -30,15 +30,20 @@ export interface IncomingShareDraft {
   readonly warnings: ReadonlyArray<string>;
 }
 
-export interface IncomingShareDestination {
-  readonly environmentId: string;
-  readonly projectId: string;
-}
+const IncomingShareDestinationSchema = Schema.Union([
+  Schema.Struct({ environmentId: Schema.String, threadId: Schema.String }),
+  Schema.Struct({ environmentId: Schema.String, projectId: Schema.String }),
+]);
 
-const IncomingShareDestinationSchema = Schema.Struct({
-  environmentId: Schema.String,
-  projectId: Schema.String,
-});
+export type IncomingShareDestination = typeof IncomingShareDestinationSchema.Type;
+
+export function incomingShareDestinationKey(destination: IncomingShareDestination): string {
+  return JSON.stringify(
+    "threadId" in destination
+      ? ["thread", destination.environmentId, destination.threadId]
+      : ["project", destination.environmentId, destination.projectId],
+  );
+}
 
 export const IncomingShareDraftSchema = Schema.Struct({
   schemaVersion: Schema.Literal(1),

@@ -30,6 +30,7 @@ import {
   AuthTerminalReadScope,
   DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
+  isPinaThread,
   isProviderNativeSubagentThread,
   MessageId,
   ThreadId,
@@ -122,6 +123,7 @@ import {
   threadRouteOpensDraft,
 } from "./thread-route-hydration";
 import { ThreadHeader } from "./ThreadHeader";
+import { PinaVoiceThreadHeader } from "./PinaVoiceThreadHeader";
 import { resumeThread } from "./resume-thread";
 import {
   useAndroidWorkspaceBack,
@@ -131,6 +133,7 @@ import { openSettings } from "../settings/settings-navigation";
 import { ThreadInspectorHeader, type ThreadInspectorPresentation } from "./thread-inspector-header";
 import { InspectorContentScope, ThreadInspectorPreview } from "./thread-inspector-preview";
 import { useStartSideChat } from "./useStartSideChat";
+import { useOpenPina } from "./usePinaRow";
 import { useThreadStatusAnnouncements } from "./useThreadStatusAnnouncements";
 import type { ThreadInspectorMode, ThreadInspectorTarget } from "./thread-inspector-navigation";
 import { useSelectWorkspaceDetail } from "../layout/workspace/useSelectWorkspaceDetail";
@@ -377,6 +380,11 @@ function ThreadRouteContent(
     selectedThreadProject,
     selectedEnvironmentConnection,
   } = useThreadSelection();
+  const pinaSource =
+    selectedThread && !isPinaThread(selectedThread.id) && !props.inspectorPresentation
+      ? { environmentId: selectedThread.environmentId, threadId: selectedThread.id }
+      : null;
+  const pina = useOpenPina(pinaSource?.environmentId ?? null, pinaSource);
   useRememberThreadProject(selectedThreadProject);
   const canOperateThread = useEnvironmentScope(
     selectedThread?.environmentId ?? null,
@@ -1029,6 +1037,15 @@ function ThreadRouteContent(
   }
 
   const serverConfig = routeEnvironmentRuntime?.serverConfig ?? null;
+  const threadHeader = {
+    title: selectedThread.title,
+    subtitle: threadStatusLabel ?? headerSubtitle,
+    gitControls: threadGitControlProps,
+    hasThreadCwd: selectedThreadCwd !== null,
+    inspectorMode,
+    onOpenFilesInspector: handleOpenFilesInspector,
+    onReturnToThread: props.onReturnToThread,
+  } as const;
   return (
     <>
       {inspectorHeader}
@@ -1050,15 +1067,39 @@ function ThreadRouteContent(
       />
       <ThreadScreenBinding
         header={
-          props.inspectorPresentation ? null : (
+          props.inspectorPresentation ? null : isPinaThread(selectedThread.id) ? (
+            <PinaVoiceThreadHeader
+              {...threadHeader}
+              key={scopedThreadKey(environmentId, selectedThread.id)}
+              threadKey={scopedThreadKey(environmentId, selectedThread.id)}
+              connected={routeConnectionState === "connected"}
+              canOperate={canOperateThread && selectedThread.archivedAt === null}
+              needsInput={Boolean(
+                requests.activePendingApproval ||
+                requests.activePendingUserInput ||
+                selectedThread.source.pendingRuntimeRequest,
+              )}
+              projection={composer.pinaVoiceProjection}
+              onSendVoice={composer.sendPinaVoiceMessage}
+              interruptibleRunId={composer.interruptibleRunId}
+              onInterruptVoice={handleStopThread}
+            />
+          ) : (
             <ThreadHeader
-              title={selectedThread.title}
-              subtitle={threadStatusLabel ?? headerSubtitle}
-              gitControls={threadGitControlProps}
-              hasThreadCwd={selectedThreadCwd !== null}
-              inspectorMode={inspectorMode}
-              onOpenFilesInspector={handleOpenFilesInspector}
-              onReturnToThread={props.onReturnToThread}
+              {...threadHeader}
+              actions={
+                pina && routeConnectionState === "connected"
+                  ? [
+                      {
+                        accessibilityLabel: gt("Ask Pina"),
+                        icon: "bubble.left",
+                        loading: pina.opening,
+                        separateBackground: false,
+                        onPress: () => void pina.open(),
+                      },
+                    ]
+                  : undefined
+              }
             />
           )
         }

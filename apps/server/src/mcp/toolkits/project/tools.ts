@@ -17,12 +17,14 @@ import {
   ProjectUpdatePayload,
   ProjectId,
   OrchestratorMcpClientRequestId,
-  OrchestratorMcpReportBackDescription,
+  OrchestratorMcpLaunchReportBack,
   NodeId,
   OrchestratorMcpEnvironmentTarget,
   OrchestratorMcpFailure,
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
+  SourceControlEnsureRepositoryProjectInput,
+  SourceControlEnsureRepositoryProjectResult,
 } from "@t3tools/contracts";
 import * as FileSystem from "effect/FileSystem";
 import * as DocumentText from "../../../provider/DocumentText.ts";
@@ -36,6 +38,7 @@ import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/ai";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import * as ProjectCloneTracker from "../../../project/ProjectCloneTracker.ts";
+import * as RepositoryProjectSetup from "../../../project/RepositoryProjectSetup.ts";
 import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.ts";
 import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as SourceControlRepositoryService from "../../../sourceControl/SourceControlRepositoryService.ts";
@@ -130,6 +133,19 @@ const ProjectCloneTool = Tool.make("pinacode_project_clone", {
 })
   .annotate(Tool.Destructive, true)
   .annotate(Tool.OpenWorld, true);
+const RepositoryProjectTool = Tool.make("pinacode_project_ensure_repository", {
+  ...shared,
+  description:
+    "Find or register a project for a repository URL on the selected environment. Reuse a matching project or clone into a managed folder before registration. Requires full access. Retry with the same URL after a failure.",
+  parameters: Schema.Struct({
+    environmentId: OrchestratorMcpEnvironmentTarget,
+    ...SourceControlEnsureRepositoryProjectInput.fields,
+  }),
+  success: SourceControlEnsureRepositoryProjectResult,
+  dependencies: [...shared.dependencies, RepositoryProjectSetup.RepositoryProjectSetup],
+})
+  .annotate(Tool.Destructive, true)
+  .annotate(Tool.OpenWorld, true);
 const ThreadLaunchTool = Tool.make("pinacode_thread_launch", {
   ...shared,
   description:
@@ -165,9 +181,7 @@ const ThreadLaunchTool = Tool.make("pinacode_thread_launch", {
         description: "As in `pinacode_thread_send`. Needs `message`.",
       }),
     ),
-    reportBack: Schema.optional(
-      Schema.Boolean.annotate({ description: OrchestratorMcpReportBackDescription }),
-    ),
+    reportBack: Schema.optional(OrchestratorMcpLaunchReportBack),
     clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),
     /** Set by a linked environment launching its agent's delegated task here; ignored otherwise. */
     delegatedFrom: Schema.optional(OrchestrationV2DelegatedFrom),
@@ -208,4 +222,5 @@ export const ProjectToolkit = Toolkit.make(
   ProjectUpdateTool,
   ProjectDeleteTool,
   ProjectCloneTool,
+  RepositoryProjectTool,
 );

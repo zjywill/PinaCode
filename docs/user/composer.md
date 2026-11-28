@@ -53,8 +53,11 @@ before an upload finishes requires you to attach that file again.
 
 You can drag or paste images into the web or desktop composer. HEIC and HEIF
 photos are converted to JPEG there and when selected from the mobile photo
-library; photos over the image limit are also resized to fit. On mobile, you can
-also send files to T3 Code through another app's system share sheet.
+library. Photos over the image limit are also resized to fit. On iOS and Android,
+choose **Pina Code** in another app's system share sheet to bring a link or
+image into the app. Choose **Ask Pina** for the environment you want to use.
+Review the draft, add your instructions, and tap **Send** when ready. You can
+cancel in the destination picker or edit the draft once it opens.
 On Android, you can also drag images from another app into the message input
 in split screen.
 
@@ -263,6 +266,18 @@ a saved preference, but simultaneous same-name inputs remain separately selectab
 
 T3 Code deletes the temporary recording from your phone after transcription or
 cancellation. The transcript stays in your draft until you send the message to the agent.
+
+### Talk to Pina
+
+Open a Pina conversation and tap the microphone in its header to start a voice
+conversation. Speak a short question, then pause. Pina answers aloud and starts
+listening again. The transcribed questions and Pina’s responses appear in that
+conversation. Use **Interrupt Pina** to ask your next question sooner, or
+**End voice conversation** to stop the microphone and speech.
+
+Voice conversations use your existing transcription setting. If Pina asks for
+an approval or the connection or microphone fails, you can continue in the same
+chat. Review any unsent transcription in the draft.
 
 ## Queued messages
 

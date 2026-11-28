@@ -67,6 +67,7 @@ import * as ManagedProjectFolders from "../project/ManagedProjectFolders.ts";
 import * as ProjectCloneTracker from "../project/ProjectCloneTracker.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as RepositoryIdentityResolver from "../project/RepositoryIdentityResolver.ts";
+import * as RepositoryProjectSetup from "../project/RepositoryProjectSetup.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
@@ -631,7 +632,12 @@ const boxToolkitLayer = (thread: BoxThread) => {
           }),
       }),
     ),
-    Layer.provide(Layer.mock(ProjectCloneTracker.ProjectCloneTracker)({})),
+    Layer.provide(
+      Layer.merge(
+        Layer.mock(ProjectCloneTracker.ProjectCloneTracker)({}),
+        Layer.mock(RepositoryProjectSetup.RepositoryProjectSetup)({}),
+      ),
+    ),
     Layer.provide(Layer.mock(SecretRequests.SecretRequests)({})),
     Layer.provide(ServerSettings.layerTest()),
     Layer.provide(NodeServices.layer),
@@ -811,7 +817,12 @@ const makeLaptop = (
       ),
       Layer.provide(Layer.mock(SecretRequests.SecretRequests)({})),
       Layer.provide(NodeServices.layer),
-      Layer.provide(Layer.mock(GitVcsDriver.GitVcsDriver)({})),
+      Layer.provide(
+        Layer.merge(
+          Layer.mock(GitVcsDriver.GitVcsDriver)({}),
+          Layer.mock(RepositoryProjectSetup.RepositoryProjectSetup)({}),
+        ),
+      ),
       Layer.fresh,
     );
     const here = yield* Layer.build(layerHere);
@@ -984,10 +995,14 @@ const delegateToBox = (laptopEnv: Effect.Success<ReturnType<typeof makeLaptop>>)
     );
 
 /** Waits until the task here has the result its thread there ended with. */
-const taskResult = (laptopEnv: Effect.Success<ReturnType<typeof makeLaptop>>, taskId: NodeId) =>
+const taskResult = (
+  laptopEnv: Effect.Success<ReturnType<typeof makeLaptop>>,
+  taskId: NodeId,
+  threadId = parentThreadId,
+) =>
   laptopEnv.orchestrator
     .streamStoredEventsFrom({
-      threadId: parentThreadId,
+      threadId,
       afterSequence: 0,
       eventType: "subagent.updated",
     })
@@ -3037,9 +3052,13 @@ const finishOther = (
     });
   });
 
-it.effect.each(["pinacode_thread_launch", "pinacode_thread_send"] as const)(
-  "Pina receives the ordinary project's result automatically after %s",
-  (tool) =>
+it.effect.each([
+  { tool: "pinacode_thread_launch", settled: false },
+  { tool: "pinacode_thread_send", settled: false },
+  { tool: "pinacode_thread_launch", settled: true },
+] as const)(
+  "Pina receives the project's result after $tool (settled: $settled)",
+  ({ tool, settled }) =>
     Effect.scoped(
       Effect.gen(function* () {
         const offers = yield* SubscriptionRef.make<
@@ -3051,9 +3070,14 @@ it.effect.each(["pinacode_thread_launch", "pinacode_thread_send"] as const)(
         const threadId = ThreadId.make("pina-assistant-scratch-0");
         yield* seedParent(a, modelSelection, threadId);
         yield* seedOtherProjectThread(a);
+        const pinaScope = { ...parentScope, thread: { ...parentScope.thread!, threadId } };
         const destination =
           tool === "pinacode_thread_launch"
-            ? { projectId: "project:elsewhere", title: "Review the issues" }
+            ? {
+                projectId: "project:elsewhere",
+                title: "Review the issues",
+                ...(settled ? { reportBack: "settled" } : {}),
+              }
             : { threadId: otherThreadId, reportBack: false };
         const result = yield* a.call(
           tool,
@@ -3062,7 +3086,7 @@ it.effect.each(["pinacode_thread_launch", "pinacode_thread_send"] as const)(
             message: "Review the issues",
             clientRequestId: "pina-dispatch",
           },
-          { ...parentScope, thread: { ...parentScope.thread!, threadId } },
+          pinaScope,
         );
         expect(result.isError, JSON.stringify(result.content)).toBe(false);
         const { taskId } = result.structuredContent as { taskId: NodeId };
@@ -3072,22 +3096,96 @@ it.effect.each(["pinacode_thread_launch", "pinacode_thread_send"] as const)(
         const task = parent.subagents[0]!;
         expect(task).toMatchObject({ id: taskId, childThreadId: null });
         const child = task.remoteChild!;
+        expect(child.runOnly).toBe(!settled);
+        let followUpTaskId: NodeId | undefined;
+        const launchReply = "Two issues remain open.";
+        const acceptedReply = "Both issues accepted. The regression tests passed.";
+        yield* finishOther(a, child.runId!, launchReply, child.threadId);
+        if (settled) {
+          const followUp = yield* a.call(
+            "pinacode_thread_send",
+            { threadId: child.threadId, message: "Use UTC for the export issue." },
+            pinaScope,
+          );
+          expect(followUp.isError, JSON.stringify(followUp.content)).toBe(false);
+          const sent = followUp.structuredContent as { runId: RunId; taskId: NodeId };
+          expect(sent.taskId).toBeDefined();
+          followUpTaskId = sent.taskId;
+          const messageId = MessageId.make("message:coordinator-acceptance");
+          yield* a.threads.dispatch({
+            type: "message.dispatch",
+            commandId: CommandId.make("command:coordinator-acceptance"),
+            threadId: child.threadId,
+            messageId,
+            text: "The worker sessions have finished. Review their results.",
+            attachments: [],
+            dispatchMode: { type: "queue_after_active" },
+            createdBy: "agent",
+            creationSource: "server",
+          });
+          const projection = yield* a.orchestrator.getThreadProjection(child.threadId);
+          const wake = projection.runs.find((run) => run.userMessageId === messageId)!;
+          yield* finishOther(a, sent.runId, "I added the UTC requirement.", child.threadId);
+          yield* a.orchestrator
+            .streamStoredEventsFrom({
+              threadId: child.threadId,
+              afterSequence: 0,
+              eventType: "run.updated",
+            })
+            .pipe(
+              Stream.filter(
+                ({ event }) =>
+                  event.type === "run.updated" &&
+                  event.payload.id === wake.id &&
+                  event.payload.status === "starting",
+              ),
+              Stream.runHead,
+            );
+          const trigger = projection.messages.find((message) => message.id === messageId)!;
+          // Completion intake stamps the trigger message before it starts the coordinator's run.
+          yield* a.sink.write({
+            events: [
+              {
+                id: EventId.make("event:coordinator-acceptance-wake"),
+                type: "message.updated",
+                threadId: child.threadId,
+                runId: wake.id,
+                occurredAt: trigger.updatedAt,
+                payload: {
+                  ...trigger,
+                  delegatedCompletion: {
+                    parentRunId: sent.runId,
+                    generation: 1,
+                    taskIds: [NodeId.make("worker-export")],
+                  },
+                },
+              },
+            ],
+          });
+          yield* finishOther(a, wake.id, acceptedReply, child.threadId);
+        }
         yield* finishOther(a, parentRunId, "Dispatched.", threadId);
-        yield* finishOther(a, child.runId!, "Two issues remain open.", child.threadId);
         yield* Deferred.succeed(follow, undefined);
         yield* SubscriptionRef.changes(offers).pipe(
           Stream.filter((seen) => seen.some((offer) => offer.threadId === threadId)),
           Stream.runHead,
         );
-        const updated = yield* a.orchestrator.getThreadProjection(threadId);
-        expect(updated.subagents[0]).toMatchObject({
+        expect(yield* taskResult(a, taskId, threadId)).toMatchObject({
           status: "completed",
-          result: "Two issues remain open.",
+          result: launchReply,
         });
-        expect(
-          updated.runs.find((run) => run.id === parentRunId)?.delegatedCompletion?.delivery
-            ?.taskIds,
-        ).toEqual([taskId]);
+        if (followUpTaskId !== undefined)
+          expect(yield* taskResult(a, followUpTaskId, threadId)).toMatchObject({
+            status: "completed",
+            result: acceptedReply,
+          });
+        if (!settled) {
+          const updated = yield* a.orchestrator.getThreadProjection(threadId);
+          expect(
+            updated.runs.find((run) => run.id === parentRunId)?.delegatedCompletion?.delivery
+              ?.taskIds,
+          ).toEqual([taskId]);
+        }
       }),
     ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );

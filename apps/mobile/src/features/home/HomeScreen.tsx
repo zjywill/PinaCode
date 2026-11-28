@@ -1,4 +1,4 @@
-import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
+import { activePinaConversations, parseScopedThreadKey } from "@t3tools/client-runtime/environment";
 import { usePinaRow, usePinaEnvironment } from "../threads/usePinaRow";
 import { isPinaThread } from "@t3tools/contracts";
 import { useGT, useMessages } from "gt-react-native";
@@ -105,6 +105,7 @@ import { SwipeableScrollGateProvider, useSwipeableScrollGate } from "./thread-sw
 import { useFabScroll } from "./FabScrollContext";
 import { holdLaunchSplashForHomeRows, settleLaunchSplashHomeRows } from "./home-launch-splash";
 import { useWorkspaceTabs } from "../layout/workspace/WorkspaceTabsContext";
+import { ActiveWorkspaceThreadContext } from "../layout/adaptive-workspace-context";
 import { ThreadListFilters } from "./ThreadListFilters";
 import { deriveHomeEmptyState } from "./home-empty-state";
 
@@ -258,15 +259,11 @@ export function HomeScreen(props: HomeScreenProps) {
   );
   const openThreadKey = activeNewTask ? null : primaryColumn?.selectedThreadKey;
   const openThreadRef = openThreadKey ? parseScopedThreadKey(openThreadKey) : null;
+  const activeThreadRef = use(ActiveWorkspaceThreadContext);
   const pinaEnvironmentId = usePinaEnvironment(
-    props.selectedEnvironmentId ?? openThreadRef?.environmentId,
+    props.selectedEnvironmentId ?? activeThreadRef?.environmentId,
   );
-  const pinaThread = props.threads.find(
-    (thread) =>
-      thread.environmentId === pinaEnvironmentId &&
-      thread.archivedAt === null &&
-      isPinaThread(thread.id),
-  );
+  const pinaConversations = activePinaConversations(props.threads, pinaEnvironmentId);
   const pinaEnvironmentLabel =
     props.selectedEnvironmentId === null &&
     pinaEnvironmentId !== null &&
@@ -278,7 +275,10 @@ export function HomeScreen(props: HomeScreenProps) {
     now,
     environmentId: pinaEnvironmentId,
     openThreadRef,
-    thread: pinaThread,
+    sourceThreadRef: activeThreadRef,
+    conversations: pinaConversations,
+    onArchive: props.onArchiveThread,
+    onRename: props.onRenameThread,
     environmentLabel: pinaEnvironmentLabel,
     horizontalMargin: !sidebarSurface,
   });

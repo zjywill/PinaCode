@@ -34,6 +34,7 @@ import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as ProviderAdapterRegistry from "../orchestration-v2/ProviderAdapterRegistry.ts";
 import * as ProjectCloneTracker from "../project/ProjectCloneTracker.ts";
 import * as ProjectService from "../project/ProjectService.ts";
+import * as RepositoryProjectSetup from "../project/RepositoryProjectSetup.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
@@ -187,7 +188,7 @@ const boxLaunches = (seen: Ref.Ref<Seen>) =>
 
 /** B clones and registers whatever it is asked to, and records it. */
 const boxProjects = (seen: Ref.Ref<Seen>) =>
-  Layer.merge(
+  Layer.mergeAll(
     Layer.mock(ProjectService.ProjectService)({
       getById: (id) =>
         Effect.succeed(
@@ -230,6 +231,18 @@ const boxProjects = (seen: Ref.Ref<Seen>) =>
             repository: null,
           }),
         ),
+    }),
+    Layer.mock(RepositoryProjectSetup.RepositoryProjectSetup)({
+      ensure: (remoteUrl) =>
+        Effect.sync(() => {
+          expect(remoteUrl).toBe("https://github.com/acme/app");
+          return {
+            projectId: boxProject,
+            title: "app",
+            workspaceRoot: "/projects/acme-app",
+            created: true,
+          };
+        }),
     }),
   );
 
@@ -310,6 +323,7 @@ const makeLaptop = Effect.gen(function* () {
     ),
     Layer.provide(Layer.mock(GitVcsDriver.GitVcsDriver)({})),
     Layer.provide(Layer.mock(SourceControlRepositoryService.SourceControlRepositoryService)({})),
+    Layer.provide(Layer.mock(RepositoryProjectSetup.RepositoryProjectSetup)({})),
     Layer.provide(
       ServerConfig.layerTest(process.cwd(), { prefix: "t3-peer-forwarding-laptop-" }).pipe(
         Layer.provide(NodeServices.layer),
@@ -592,6 +606,7 @@ it.effect("brings a repository to a linked environment, only through full access
       const a = yield* makeLaptop;
       const clone = { repository: "pingdotgg/t3code", destinationPath: "/home/box/t3code" };
       const register = { title: "t3code", workspaceRoot: "/home/box/t3code" };
+      const ensure = { remoteUrl: "https://github.com/acme/app" };
 
       yield* linkTo(a.links, b, "full-access");
       const cloned = yield* a.call("thread:laptop-full", "pinacode_project_clone", {
@@ -604,6 +619,16 @@ it.effect("brings a repository to a linked environment, only through full access
         ...register,
       });
       expect(created.structuredContent).toMatchObject(register);
+      const ensured = yield* a.call("thread:laptop-full", "pinacode_project_ensure_repository", {
+        environmentId: box.environmentId,
+        ...ensure,
+      });
+      expect(failureOf(ensured)).toBeUndefined();
+      expect(ensured.structuredContent).toMatchObject({
+        projectId: boxProject,
+        workspaceRoot: "/projects/acme-app",
+        created: true,
+      });
       expect((yield* Ref.get(seen)).clones).toEqual([clone]);
       expect((yield* Ref.get(seen)).projects).toMatchObject([register]);
 
@@ -621,6 +646,7 @@ it.effect("brings a repository to a linked environment, only through full access
       for (const [name, args] of [
         ["pinacode_project_clone", clone],
         ["pinacode_project_create", register],
+        ["pinacode_project_ensure_repository", ensure],
       ] as const) {
         const refused = yield* a.call("thread:laptop-full", name, {
           environmentId: box.environmentId,

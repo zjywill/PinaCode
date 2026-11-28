@@ -3,7 +3,7 @@ import * as Dialog from "../../components/ui/Dialog";
 import { m } from "../../i18n/messages";
 import Constants from "expo-constants";
 import * as Crypto from "expo-crypto";
-import { EnvironmentId, PROVIDER_SEND_TURN_MAX_FILE_BYTES } from "@t3tools/contracts";
+import { EnvironmentId, PROVIDER_SEND_TURN_MAX_FILE_BYTES, ThreadId } from "@t3tools/contracts";
 import {
   clearSharedPayloads,
   getResolvedSharedPayloadsAsync,
@@ -15,7 +15,7 @@ import { msg } from "gt-react-native";
 import { Atom } from "effect/reactivity";
 import { useSyncExternalStore } from "react";
 import { Platform } from "react-native";
-import { CommonActions } from "@react-navigation/native";
+import { CommonActions, StackActions } from "@react-navigation/native";
 
 import {
   buildIncomingShareDraft,
@@ -31,6 +31,7 @@ import { subscribeAppActive } from "../../lib/appState";
 import { coalescedRun } from "../../lib/coalescedRun";
 import { rootNavigationRef } from "../../lib/rootNavigation";
 import { selectWorkspaceDetail } from "../layout/workspace/workspace-detail-selection";
+import { startOpeningDetail } from "../layout/workspace/useSelectWorkspaceDetail";
 import { isDraftThreadRoute } from "../threads/thread-route-state";
 import { makeIncomingShareImports } from "../threads/incomingShareImport";
 import { liveNewTaskFlowKeys, newTaskFlowKey } from "../threads/new-task-flow-state";
@@ -40,6 +41,7 @@ import {
   getComposerDraftSnapshot,
   mergeComposerDraftContent,
   scheduleUnusedComposerAttachmentCleanup,
+  setPinaSourceThread,
   undoComposerDraftMerge,
 } from "../../state/use-composer-drafts";
 import {
@@ -223,7 +225,6 @@ let snapshot: IncomingShareSnapshot = { drafts: [], isLoading: true };
 const snapshotListeners = new Set<() => void>();
 let presentation = EMPTY_INCOMING_SHARE_PRESENTATION_STATE;
 
-// A share that arrives while a new-task draft is on screen goes into that draft, by its flow key.
 const handedSharesAtom = Atom.make<Readonly<Record<string, string>>>({}).pipe(
   Atom.keepAlive,
   Atom.withLabel("mobile:incoming-share-handed"),
@@ -244,19 +245,30 @@ function isPendingShare(shareId: string | undefined): boolean {
   return shareId !== undefined && snapshot.drafts.some((draft) => draft.id === shareId);
 }
 
-/** Hands the oldest pending share to the draft on screen once that draft's own imports finished. */
-function handPendingShareToOpenDraft(route: { readonly key: string; readonly params?: object }) {
-  const pendingShareId = snapshot.drafts[0]?.id;
-  const flowKey = newTaskFlowKey(route);
-  if (pendingShareId === undefined || flowKey === undefined) return;
-  const draft = (route.params as { draft?: { incomingShareId?: string | string[] } }).draft;
+function routeHasPendingShare(route: { readonly key: string; readonly params?: object }) {
+  const draft = (route.params as { draft?: { incomingShareId?: string | string[] } } | undefined)
+    ?.draft;
   const routeShareId = Array.isArray(draft?.incomingShareId)
     ? draft.incomingShareId[0]
     : draft?.incomingShareId;
-  const handed = appAtomRegistry.get(handedSharesAtom);
-  if (isPendingShare(routeShareId) || isPendingShare(handed[flowKey])) return;
-  if (Object.values(handed).includes(pendingShareId)) return;
-  appAtomRegistry.set(handedSharesAtom, { ...handed, [flowKey]: pendingShareId });
+  const flowKey = newTaskFlowKey(route);
+  return (
+    isPendingShare(routeShareId) ||
+    (flowKey !== undefined && isPendingShare(appAtomRegistry.get(handedSharesAtom)[flowKey]))
+  );
+}
+
+export function handIncomingShareToDraft(
+  route: { readonly key: string; readonly params?: object },
+  shareId: string,
+): boolean {
+  const flowKey = newTaskFlowKey(route);
+  if (flowKey === undefined || routeHasPendingShare(route)) return false;
+  appAtomRegistry.set(handedSharesAtom, {
+    ...appAtomRegistry.get(handedSharesAtom),
+    [flowKey]: shareId,
+  });
+  return true;
 }
 
 function publish(drafts: ReadonlyArray<IncomingShareDraft>) {
@@ -304,7 +316,7 @@ const refreshIncomingShares = coalescedRun(async () => {
 });
 
 /**
- * Opens the oldest pending share as a new-task draft unless the user already
+ * Opens the pending share's destination picker unless the user already
  * dismissed it. Runs whenever the inbox or the root navigation state changes.
  */
 export function presentPendingIncomingShare(): void {
@@ -312,18 +324,16 @@ export function presentPendingIncomingShare(): void {
   const state = rootNavigationRef.getRootState();
   if (!state) return;
   const route = state.routes[state.index];
-  if (route && isDraftThreadRoute(route)) handPendingShareToOpenDraft(route);
   const transition = transitionIncomingSharePresentation(presentation, {
-    isShareSheetPresented: isDraftThreadRoute(state.routes[state.index]),
+    isShareSheetPresented:
+      state.routes.some((candidate) => candidate.name === "NewTaskProject") ||
+      Boolean(route && isDraftThreadRoute(route) && routeHasPendingShare(route)),
     pendingShareId: snapshot.drafts[0]?.id ?? null,
   });
   presentation = transition.state;
   if (!transition.shareIdToPresent) return;
   rootNavigationRef.dispatch(
-    selectWorkspaceDetail({
-      name: "Thread",
-      params: { draft: { incomingShareId: transition.shareIdToPresent } },
-    }),
+    StackActions.push("NewTaskProject", { incomingShareId: transition.shareIdToPresent }),
   );
 }
 
@@ -339,6 +349,11 @@ async function consumeShare(shareId: string) {
   publish(await incomingShareInbox.consume(shareId));
 }
 
+async function discardShare(share: IncomingShareDraft) {
+  await consumeShare(share.id);
+  scheduleUnusedComposerAttachmentCleanup(share.attachments);
+}
+
 async function reserveShare(shareId: string, destination: IncomingShareDestination) {
   publish(await incomingShareInbox.reserve(shareId, destination));
 }
@@ -350,7 +365,7 @@ async function releaseShareReservation(
   publish(await incomingShareInbox.releaseReservation(shareId, expectedDestination));
 }
 
-/** Moves shares into new-task drafts; see makeIncomingShareImports. */
+/** Moves shares into composer drafts; see makeIncomingShareImports. */
 export const incomingShareImports = makeIncomingShareImports({
   registry: appAtomRegistry,
   getShare: (shareId) => snapshot.drafts.find((draft) => draft.id === shareId) ?? null,
@@ -368,6 +383,24 @@ export const incomingShareImports = makeIncomingShareImports({
       ),
     }),
   releaseUnusedAttachments: scheduleUnusedComposerAttachmentCleanup,
+  onImported: (target) => {
+    const { destination } = target;
+    if (
+      !("threadId" in destination) ||
+      rootNavigationRef.getCurrentRoute()?.key !== target.routeKey
+    )
+      return;
+    const detail = {
+      name: "Thread",
+      params: {
+        environmentId: EnvironmentId.make(destination.environmentId),
+        threadId: ThreadId.make(destination.threadId),
+      },
+    } as const;
+    setPinaSourceThread(detail.params, null);
+    startOpeningDetail(detail);
+    rootNavigationRef.dispatch(selectWorkspaceDetail(detail));
+  },
   onWarnings: (warnings) => {
     Dialog.alert(m(msg("Some shared content was skipped")), warnings.join("\n"));
   },
@@ -412,7 +445,10 @@ export const incomingShareImports = makeIncomingShareImports({
 
 /** Abandons the share imports of draft routes that left the stack. */
 export function pruneIncomingShareImports(state: Parameters<typeof liveNewTaskFlowKeys>[0]) {
-  const live = liveNewTaskFlowKeys(state);
+  const live = new Set(liveNewTaskFlowKeys(state));
+  for (const route of state.routes) {
+    if (route.name === "NewTaskProject") live.add(route.key);
+  }
   void incomingShareImports.prune(live);
   const handed = appAtomRegistry.get(handedSharesAtom);
   if (Object.keys(handed).some((flowKey) => !live.has(flowKey))) {
@@ -432,6 +468,7 @@ export function useIncomingShare() {
     pendingShare: drafts[0] ?? null,
     isLoading,
     getShare: (shareId: string) => drafts.find((draft) => draft.id === shareId) ?? null,
+    discardShare,
     releaseShareReservation,
   };
 }

@@ -246,6 +246,40 @@ const makeHarness = Effect.fn("makePullRequestsToolkitHarness")(function* (
 });
 
 describe("pull request toolkit handlers", () => {
+  it.effect(
+    "exposes CI by explicit link without a thread or project and checks the capability",
+    () =>
+      Effect.gen(function* () {
+        const url = "https://github.com/acme/app/pull/42";
+        const report = {
+          repository: "acme/app",
+          repositoryUrl: "https://github.com/acme/app",
+          number: 42,
+          url,
+          checksUrl: `${url}/checks`,
+          headSha: "head-from-github",
+          headBranch: "fix/tests",
+          checks: [],
+        };
+        const reads = yield* Ref.make<ReadonlyArray<string>>([]);
+        const harness = yield* makeHarness({
+          project: null,
+          thread: null,
+          pullRequests: {
+            checksByUrl: (link) =>
+              Ref.update(reads, (seen) => [...seen, link]).pipe(Effect.as(report)),
+          },
+        });
+        expect(yield* harness.call("pinacode_pull_request_checks", { url })).toEqual(report);
+        const error = yield* harness
+          .call("pinacode_pull_request_checks", { url }, ["preview"])
+          .pipe(Effect.flip);
+        expect(error).toMatchObject({ capability: "pull-requests" });
+        expect(yield* Ref.get(reads)).toEqual([url]);
+        expect(yield* Ref.get(harness.commands)).toEqual([]);
+      }),
+  );
+
   it.effect("refuses a credential without the pull-requests capability", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness();

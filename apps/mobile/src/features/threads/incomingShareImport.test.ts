@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { DraftComposerAttachment } from "../../lib/composerImages";
 import type { IncomingShareDraft } from "../sharing/incoming-share-model";
-import { undoComposerDraftMergeState, type ComposerDraft } from "../../state/use-composer-drafts";
+import {
+  mergeComposerDraftContentState,
+  undoComposerDraftMergeState,
+  type ComposerDraft,
+} from "../../state/use-composer-drafts";
 import {
   makeIncomingShareImports,
   type ShareImportDeps,
@@ -135,6 +139,49 @@ describe("transitionShareImport", () => {
 });
 
 describe("incoming share imports", () => {
+  it("recovers a Pina share already merged before restart without duplicating text or images", async () => {
+    const attachment: DraftComposerAttachment = {
+      id: "screenshot",
+      type: "image",
+      name: "Screenshot.png",
+      mimeType: "image/png",
+      sizeBytes: 5,
+      fileUri: "file:///drafts/screenshot.png",
+      previewUri: "file:///drafts/screenshot.png",
+    };
+    const destination = { environmentId: "env-2", threadId: "pina-assistant-scratch-0" };
+    const target = importTarget({ destination, draftKey: "env-2:pina-assistant-scratch-0" });
+    const incoming = {
+      ...share([attachment]),
+      destination,
+      text: "https://github.com/acme/example/issues/1",
+    };
+    const saved = mergeComposerDraftContentState({}, target.draftKey, {
+      sourceShareId: incoming.id,
+      text: incoming.text,
+      attachments: incoming.attachments,
+    });
+    const onImported = vi.fn();
+    const { imports, watch, inbox, deps } = setup({
+      readDraft: (draftKey) => saved[draftKey] ?? { text: "", attachments: [] },
+      mergeIntoDraft: async (draftKey, content) => {
+        expect(mergeComposerDraftContentState(saved, draftKey, content)).toBe(saved);
+        return { skippedAttachmentCount: 0 };
+      },
+      onImported,
+    });
+    inbox.set(incoming.id, incoming);
+    const watched = watch(target);
+    await imports.settled(target);
+
+    expect(watched.phase()).toBe("done");
+    expect(deps.reserve).toHaveBeenCalledExactlyOnceWith(incoming.id, destination);
+    expect(deps.consume).toHaveBeenCalledExactlyOnceWith(incoming.id);
+    expect(onImported).toHaveBeenCalledExactlyOnceWith(target);
+    expect(saved[target.draftKey]?.text).toBe(incoming.text);
+    expect(saved[target.draftKey]?.attachments).toEqual([attachment]);
+  });
+
   it("reserves, attaches and consumes once, releasing files the draft did not keep", async () => {
     const kept = fileAttachment("kept");
     const skipped = fileAttachment("skipped");

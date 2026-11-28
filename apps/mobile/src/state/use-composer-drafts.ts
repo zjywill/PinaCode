@@ -27,7 +27,12 @@ import * as Schema from "effect/Schema";
 import { useEffect, useState } from "react";
 import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
 import * as Option from "effect/Option";
-import { parseScopedThreadKey, scopedThreadKey } from "@t3tools/client-runtime/environment";
+import {
+  parseScopedThreadKey,
+  scopedThreadKey,
+  updatePinaComposerDraft,
+  type PinaSourceThread,
+} from "@t3tools/client-runtime/environment";
 import type {
   EnvironmentShellState,
   EnvironmentThreadShell,
@@ -363,6 +368,31 @@ export function setComposerDraftContext(
     ...current,
     [draftKey]: { ...normalizeDraft(current[draftKey]), context },
   }));
+}
+
+export function setPinaSourceThread(target: ScopedThreadRef, source: PinaSourceThread | null) {
+  const draftKey = scopedThreadKey(target);
+  updateComposerDrafts((current) => {
+    const draft = normalizeDraft(current[draftKey]);
+    const records = draft.context?.records ?? [];
+    const updated = updatePinaComposerDraft(target, source, {
+      text: draft.text,
+      records,
+    });
+    if (updated === null) return current;
+    if (updated.cursor !== undefined) {
+      rememberComposerDraftSelection(draftKey, updated.text, {
+        start: updated.cursor,
+        end: updated.cursor,
+      });
+    }
+    if (updated.text === draft.text && updated.records === records) return current;
+    return withComposerDraft(current, draftKey, {
+      ...draft,
+      text: updated.text,
+      context: updated.records.length > 0 ? { version: 1, records: updated.records } : undefined,
+    });
+  });
 }
 
 export function insertComposerDraftContext(

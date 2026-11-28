@@ -38,6 +38,8 @@ import {
   scopeProjectRef,
   scopedThreadKey,
   scopeThreadRef,
+  updatePinaComposerDraft,
+  type PinaSourceThread,
 } from "@t3tools/client-runtime/environment";
 import * as Schema from "effect/Schema";
 import * as Equal from "effect/Equal";
@@ -756,6 +758,7 @@ interface ComposerDraftStoreState {
     threadRef: ComposerThreadTarget,
     records: ReadonlyArray<ThreadContextRecord>,
   ) => void;
+  setPinaSourceThread: (threadRef: ScopedThreadRef, source: PinaSourceThread | null) => void;
   /** Mentions machines as context; already-mentioned machines are skipped. */
   addEnvironmentContexts: (
     threadRef: ComposerThreadTarget,
@@ -4295,6 +4298,32 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             if (shouldRemoveDraft(nextDraft)) delete nextDraftsByThreadKey[threadKey];
             else nextDraftsByThreadKey[threadKey] = nextDraft;
             return { draftsByThreadKey: nextDraftsByThreadKey };
+          });
+        },
+        setPinaSourceThread: (threadRef, source) => {
+          const threadKey = resolveComposerDraftKey(get(), threadRef);
+          if (!threadKey) return;
+          set((state) => {
+            const existing = state.draftsByThreadKey[threadKey] ?? createEmptyThreadDraft();
+            const updated = updatePinaComposerDraft(threadRef, source, {
+              text: existing.prompt,
+              records: existing.threadContexts,
+            });
+            if (
+              updated === null ||
+              (updated.text === existing.prompt && updated.records === existing.threadContexts)
+            ) {
+              return state;
+            }
+            const draft = {
+              ...existing,
+              prompt: updated.text,
+              threadContexts: [...updated.records],
+            };
+            const draftsByThreadKey = { ...state.draftsByThreadKey };
+            if (shouldRemoveDraft(draft)) delete draftsByThreadKey[threadKey];
+            else draftsByThreadKey[threadKey] = draft;
+            return { draftsByThreadKey };
           });
         },
         addEnvironmentContexts: (threadRef, records, options) => {

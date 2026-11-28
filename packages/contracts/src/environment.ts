@@ -137,6 +137,7 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   usagePriceOverrides: Schema.optionalKey(Schema.Boolean),
   usageModelAliases: Schema.optionalKey(Schema.Boolean),
   pinaAssistant: Schema.optionalKey(Schema.Boolean),
+  pinaConversations: Schema.optionalKey(Schema.Boolean),
   threadPinning: Schema.optionalKey(Schema.Boolean),
   threadPinReorder: Schema.optionalKey(Schema.Boolean),
   threadActiveReorder: Schema.optionalKey(Schema.Boolean),

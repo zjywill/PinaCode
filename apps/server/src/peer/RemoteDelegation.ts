@@ -1,5 +1,6 @@
 import {
   CommandId,
+  isPinaThread,
   MessageId,
   type EnvironmentId,
   NodeId,
@@ -122,8 +123,8 @@ export class RemoteDelegation extends Context.Service<
       sent: OrchestratorMcpThreadSendResult,
     ) => Effect.Effect<OrchestratorMcpThreadSendResult, OrchestratorMcpFailure>;
     /**
-     * A `pinacode_thread_launch` with `reportBack`: its first run is a task of the
-     * calling thread. Undefined when no calling thread can own it.
+     * Tracks the launched thread's first run or its delegated work as a task of the caller.
+     * Undefined when no calling thread can own it.
      */
     readonly reportBack: (
       scope: McpInvocationContext.McpInvocationScope,
@@ -133,6 +134,7 @@ export class RemoteDelegation extends Context.Service<
         readonly runId: RunId;
         readonly messageId: string;
         readonly message: string;
+        readonly untilDelegatedWorkSettled?: boolean;
         readonly delegationWake?: "always" | "settled_only";
         readonly clientRequestId?: string | undefined;
       },
@@ -545,6 +547,7 @@ const make = Effect.gen(function* () {
       readonly message: string;
       readonly clientRequestId?: string | undefined;
       readonly reportBack: boolean;
+      readonly untilDelegatedWorkSettled?: boolean;
       readonly delegationWake?: "always" | "settled_only";
     },
   ) {
@@ -557,6 +560,11 @@ const make = Effect.gen(function* () {
       task.remoteChild?.environmentId === environmentId &&
       task.remoteChild.threadId === request.threadId;
     const finished = parent?.subagents.find((task) => isThere(task) && task.result !== null);
+    const untilDelegatedWorkSettled =
+      request.untilDelegatedWorkSettled ??
+      (isPinaThread(parentThreadId) &&
+        parent?.subagents.some((task) => isThere(task) && task.remoteChild?.runOnly === false) ===
+          true);
     // Bound as a follow-up here is: a background caller's foreground run may have ended.
     const parentRun = parent === undefined ? null : followUpOwnerRun(parent.runs);
     if (parentRun === null || parentRun.rootNodeId === null) {
@@ -602,7 +610,7 @@ const make = Effect.gen(function* () {
           threadId: request.threadId,
           label: child.label,
           runId: request.runId,
-          ...(request.reportBack ? { runOnly: request.delegationWake === undefined } : {}),
+          ...(request.reportBack ? { runOnly: !untilDelegatedWorkSettled } : {}),
         },
         completionWake: request.delegationWake ?? "always",
       })
@@ -1252,27 +1260,44 @@ const make = Effect.gen(function* () {
     // A later run's answer there may be another open follow-up's, or its restart, which no run id
     // here names; concurrent sends may record here out of their order there. Then this task's
     // answer is its own run's latest restart, the one waited on.
+    const settledRun = waited.resultRun;
     const sharedThread =
-      waited.resultRun !== undefined &&
-      waited.resultRun.runId !== waited.runId &&
+      settledRun !== undefined &&
+      settledRun.runId !== waited.runId &&
       (yield* threads.getThreadRecords(parentThreadId, ["subagents"]).pipe(
-        Effect.map(({ subagents }) => {
+        Effect.flatMap(({ subagents }) => {
           const recordedAt = subagents.find((task) => task.id === taskId)?.startedAt ?? null;
-          return subagents.some(
-            (other) =>
-              other.id !== taskId &&
-              other.remoteChild?.environmentId === remote.environmentId &&
-              other.remoteChild.threadId === remote.threadId &&
-              // One that settled before this was recorded ran before it there.
-              (recordedAt === null ||
-                other.completedAt === null ||
-                DateTime.isGreaterThan(other.completedAt, recordedAt)),
+          const overlapping = subagents.flatMap((other) =>
+            other.id !== taskId &&
+            other.remoteChild?.environmentId === remote.environmentId &&
+            other.remoteChild.threadId === remote.threadId &&
+            // One that settled before this was recorded ran before it there.
+            (recordedAt === null ||
+              other.completedAt === null ||
+              DateTime.isGreaterThan(other.completedAt, recordedAt))
+              ? [other.remoteChild]
+              : [],
+          );
+          if (overlapping.length === 0) return Effect.succeed(false);
+          if (!isHere(remote)) return Effect.succeed(true);
+          // A review wake belongs to the turn that delegated the work, even with a later send.
+          return projections.getRunMessage(remote.threadId, settledRun.runId).pipe(
+            Effect.map((message) => {
+              const owner = message?.delegatedCompletion?.parentRunId;
+              if (owner !== undefined && (owner === remote.runId || owner === waited.runId))
+                return false;
+              return (
+                overlapping.some((other) => !followsRun(other)) ||
+                (owner === undefined && message?.notification?.source.kind !== "delegated_task")
+              );
+            }),
+            Effect.orElseSucceed(() => true),
           );
         }),
       ));
     const resultRun =
-      waited.resultRun !== undefined && !sharedThread
-        ? waited.resultRun
+      settledRun !== undefined && !sharedThread
+        ? settledRun
         : { runId: waited.runId, status: waited.status };
     const result = yield* lastReply(
       scope,

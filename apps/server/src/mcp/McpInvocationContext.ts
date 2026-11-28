@@ -229,6 +229,15 @@ export const hiddenFromThreads = (): boolean => {
   return scope?.thread === undefined;
 };
 
+export const hiddenUnlessExternalMcpClient = (): boolean => {
+  const fiber = Fiber.getCurrent();
+  const scope = fiber && Context.getOrUndefined(fiber.context, McpInvocationContext);
+  return (
+    scope === undefined ||
+    (scope.thread === undefined && scope.client !== undefined && scope.client.linked !== true)
+  );
+};
+
 /** `McpSchema.EnabledWhen` for tools that only serve links, hidden while the beta is off. */
 export const hiddenWhileLinksOff = (): boolean => {
   const fiber = Fiber.getCurrent();

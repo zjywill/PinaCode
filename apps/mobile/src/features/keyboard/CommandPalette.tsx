@@ -11,6 +11,7 @@ import {
 } from "@t3tools/client-runtime/state/thread-search";
 import { isShownUnderParent } from "@t3tools/client-runtime/state/threads";
 import {
+  isNamedPinaConversation,
   isPinaThread,
   PINA_ASSISTANT_NAME,
   THREAD_JUMP_KEYBINDING_COMMANDS,
@@ -299,7 +300,7 @@ export function CommandPalette(props: {
   const pinaEnvironmentId = usePinaEnvironment(
     activeThreadRef?.environmentId ?? (activeDraft && newTaskFlow.selectedEnvironmentId),
   );
-  const pina = useOpenPina(pinaEnvironmentId);
+  const pina = useOpenPina(pinaEnvironmentId, activeThreadRef);
   const canTriage =
     useAtomValue(serverEnvironment.prepareTriage.permissionAtom(triageEnvironmentId)) &&
     triageEnvironmentId !== null &&
@@ -483,7 +484,7 @@ export function CommandPalette(props: {
       .filter(
         (thread) =>
           thread.archivedAt === null &&
-          !isPinaThread(thread.id) &&
+          (!isPinaThread(thread.id) || isNamedPinaConversation(thread.id)) &&
           !isShownUnderParent(
             { environmentId: thread.environmentId, threadId: thread.id },
             thread.lineage,

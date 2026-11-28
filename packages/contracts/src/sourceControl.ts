@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { GitRefName, PositiveInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { GitRefName, PositiveInt, ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { VcsDriverKind } from "./vcs.ts";
 
 /** Accept unknown hosts so clients can fall back to generic presentation. */
@@ -81,6 +81,19 @@ export const SourceControlCloneRepositoryResult = Schema.Struct({
   repository: Schema.NullOr(SourceControlRepositoryInfo),
 });
 export type SourceControlCloneRepositoryResult = typeof SourceControlCloneRepositoryResult.Type;
+
+export const SourceControlEnsureRepositoryProjectInput = Schema.Struct({
+  remoteUrl: TrimmedNonEmptyString.check(Schema.isMaxLength(4096)),
+});
+
+export const SourceControlEnsureRepositoryProjectResult = Schema.Struct({
+  projectId: ProjectId,
+  title: TrimmedNonEmptyString,
+  workspaceRoot: TrimmedNonEmptyString,
+  created: Schema.Boolean,
+});
+export type SourceControlEnsureRepositoryProjectResult =
+  typeof SourceControlEnsureRepositoryProjectResult.Type;
 
 export const SourceControlPublishRepositoryInput = Schema.Struct({
   cwd: TrimmedNonEmptyString,

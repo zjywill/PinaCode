@@ -6,6 +6,7 @@ import { m } from "../../i18n/messages";
 import { SerializedAsyncQueue } from "../../lib/serialized-async-queue";
 import {
   hasIncomingShareContent,
+  incomingShareDestinationKey,
   type IncomingShareDestination,
   type IncomingShareDraft,
 } from "./incoming-share-model";
@@ -145,12 +146,10 @@ export class IncomingShareInbox {
       }
       if (target.destination) {
         if (
-          target.destination.environmentId !== destination.environmentId ||
-          target.destination.projectId !== destination.projectId
+          incomingShareDestinationKey(target.destination) !==
+          incomingShareDestinationKey(destination)
         ) {
-          throw new Error(
-            m(msg("The shared content is already reserved for another project draft.")),
-          );
+          throw new Error(m(msg("The shared content is already reserved for another draft.")));
         }
         return sortAndDedupeIncomingShares(persisted);
       }
@@ -177,8 +176,8 @@ export class IncomingShareInbox {
         return sortAndDedupeIncomingShares(persisted);
       }
       if (
-        target.destination.environmentId !== expectedDestination.environmentId ||
-        target.destination.projectId !== expectedDestination.projectId
+        incomingShareDestinationKey(target.destination) !==
+        incomingShareDestinationKey(expectedDestination)
       ) {
         throw new Error(
           m(msg("The shared content reservation changed before it could be released.")),

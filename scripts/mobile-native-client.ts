@@ -432,6 +432,7 @@ export const prebuildAndroid = Effect.fn("nativeClient.prebuildAndroid")(functio
 });
 
 const artifactNames = { ios: "T3CodeDev.app", android: "app-debug.apk" } as const;
+const iosDevelopmentTarget = "PinaCodeDev";
 // R2 requires equal-sized parts and Workers cap request bodies at 100 MB.
 const partSize = 64 * 1024 * 1024;
 const RemoteCredentials = Schema.fromJsonString(
@@ -743,9 +744,9 @@ const build = Effect.fn("nativeClient.build")(function* (
         [
           "xcodebuild",
           "-workspace",
-          path.join(mobile, "ios/T3CodeDev.xcworkspace"),
+          path.join(mobile, "ios", `${iosDevelopmentTarget}.xcworkspace`),
           "-scheme",
-          "T3CodeDev",
+          iosDevelopmentTarget,
           "-configuration",
           "Debug",
           "-destination",
@@ -759,7 +760,7 @@ const build = Effect.fn("nativeClient.build")(function* (
         true,
       );
       yield* command("ditto", [
-        path.join(output, "Build/Products/Debug-iphonesimulator", artifactNames.ios),
+        path.join(output, "Build/Products/Debug-iphonesimulator", `${iosDevelopmentTarget}.app`),
         path.join(staging, artifactNames.ios),
       ]);
     } else {

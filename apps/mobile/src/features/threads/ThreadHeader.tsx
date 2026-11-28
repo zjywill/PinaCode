@@ -23,6 +23,8 @@ export function ThreadHeader(props: {
   readonly hasThreadCwd: boolean;
   readonly inspectorMode: ThreadInspectorMode | null;
   readonly onOpenFilesInspector: () => void;
+  readonly actions?: ReadonlyArray<AppBarAction> | undefined;
+  readonly threadTools?: "menu" | "hidden";
 }) {
   const gt = useGT();
   const m = useMessages();
@@ -32,19 +34,53 @@ export function ThreadHeader(props: {
   const gitMenu = useThreadGitMenuDefinition(props.gitControls);
   const terminalMenu = threadTerminalMenu(props.gitControls, m);
   const filesVisible = props.inspectorMode === "files" && panes.auxiliaryPaneVisible;
-  const actions: AppBarAction[] = props.hasThreadCwd
-    ? [
-        {
+  const filesAction: AppBarAction | null =
+    props.hasThreadCwd && props.threadTools !== "hidden"
+      ? {
           accessibilityLabel: filesVisible ? gt("Close files") : gt("Open files"),
           icon: "folder",
           selected: filesVisible,
           disabled: !props.gitControls.canOpenFiles,
           separateBackground: false,
           onPress: filesVisible ? toggleAuxiliaryPane : props.onOpenFilesInspector,
-        },
-      ]
-    : [];
-  const menus = [gitMenu, terminalMenu].filter((menu): menu is AppBarMenu => menu !== null);
+        }
+      : null;
+  const workspaceMenus =
+    props.threadTools === "hidden"
+      ? []
+      : [gitMenu, terminalMenu].filter((menu): menu is AppBarMenu => menu !== null);
+  const groupTools = props.threadTools === "menu";
+  const menus: ReadonlyArray<AppBarMenu> =
+    groupTools && (workspaceMenus.length > 0 || filesAction)
+      ? [
+          {
+            title: gt("Workspace"),
+            icon: "ellipsis",
+            items: [
+              ...workspaceMenus.map((menu) => ({
+                id: menu.title,
+                title: menu.title,
+                icon: typeof menu.icon === "string" ? menu.icon : menu.icon.ios,
+                items: menu.items,
+              })),
+              ...(filesAction
+                ? [
+                    {
+                      id: "files",
+                      title: filesAction.accessibilityLabel,
+                      icon: "folder",
+                      selected: filesAction.selected,
+                      disabled: filesAction.disabled,
+                      onPress: filesAction.onPress,
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      : workspaceMenus;
+  const actions =
+    filesAction && !groupTools ? [...(props.actions ?? []), filesAction] : props.actions;
 
   return (
     <AppBar

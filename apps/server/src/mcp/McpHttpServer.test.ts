@@ -1881,7 +1881,7 @@ it.effect("hides tools for links and refuses another environment while the beta 
 );
 
 it.effect(
-  "lists watch tools only to threads that are not delegated children, and forge tools only where the project has a forge",
+  "limits watch and project forge tools while offering checks by URL without a project forge",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -2001,7 +2001,7 @@ it.effect(
           noForgeTools.filter(
             (name) => name.startsWith("pinacode_pull_request_") || name.startsWith("pinacode_ci_"),
           ),
-        ).toEqual([]);
+        ).toEqual(["pinacode_pull_request_checks"]);
       }),
     ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );

@@ -1,4 +1,5 @@
 import { useOpenPina } from "../hooks/useOpenPina";
+import { PinaConversationsMenu } from "./PinaConversationsMenu";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { msg, T, useGT, useMessages } from "gt-react";
 import { m } from "../i18n/messages";
@@ -54,6 +55,7 @@ import {
   type EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/models";
 import {
+  activePinaConversations,
   parseScopedThreadKey,
   scopeProjectRef,
   scopeThreadRef,
@@ -61,6 +63,7 @@ import {
 } from "@t3tools/client-runtime/environment";
 import {
   AuthOrchestrationOperateScope,
+  isNamedPinaConversation,
   isPinaThread,
   PINA_ASSISTANT_NAME,
   type ContextMenuSource,
@@ -971,6 +974,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     reorderActiveThread,
     markThreadUnread,
     archiveThread,
+    unarchiveThread,
     deleteThread,
   } = useThreadActions();
   const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
@@ -1130,6 +1134,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     routeThreadRef?.environmentId ??
       newThreadContext.activeDraftThread?.environmentId ??
       singleProjectGroupEnvironment(chosenProjectGroups),
+    routeThreadRef,
   );
   const chosenScopeProjectKeys =
     chosenProjectGroups.length === 0
@@ -1143,14 +1148,17 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         );
   const threads = useQuietThreadShells();
   const promotingDraftThreadKeys = usePromotingDraftThreadKeys();
+  const pinaConversations = activePinaConversations(threads, pina?.environmentId ?? null);
+  const openPinaId =
+    routeThreadRef !== null &&
+    routeThreadRef.environmentId === pina?.environmentId &&
+    isPinaThread(routeThreadRef.threadId)
+      ? routeThreadRef.threadId
+      : null;
   const pinaThread =
-    pina &&
-    threads.find(
-      (thread) =>
-        thread.environmentId === pina.environmentId &&
-        thread.archivedAt === null &&
-        isPinaThread(thread.id),
-    );
+    openPinaId === null
+      ? pinaConversations.find((thread) => !isNamedPinaConversation(thread.id))
+      : pinaConversations.find((thread) => thread.id === openPinaId);
   const ordinaryThreads = threads.filter((thread) => !isPinaThread(thread.id));
   const listedThreads =
     promotingDraftThreadKeys.length === 0
@@ -3193,39 +3201,77 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         fixedHeader={
           <SidebarGroup className="z-[1]">
             {pina && (
-              <SidebarMenuButton
-                aria-label={PINA_ASSISTANT_NAME}
-                size="lg"
-                isActive={
-                  routeRowRef !== null &&
-                  routeRowRef.environmentId === pina.environmentId &&
-                  isPinaThread(routeRowRef.threadId)
-                }
-                onClick={() => {
-                  if (isMobile) setOpenMobile(false);
-                  if (pinaThread && pinaWokeUnseen && pinaWokeAt) {
-                    acknowledgeWoke(scopeThreadRef(pina.environmentId, pinaThread.id), pinaWokeAt);
+              <div className="flex items-center gap-1">
+                <SidebarMenuButton
+                  aria-label={PINA_ASSISTANT_NAME}
+                  size="lg"
+                  isActive={
+                    routeRowRef !== null &&
+                    routeRowRef.environmentId === pina.environmentId &&
+                    isPinaThread(routeRowRef.threadId)
                   }
-                  void pina.open();
-                }}
-              >
-                <img src={pinaAvatarUrl} alt="" className="size-8 shrink-0" />
-                <span className="min-w-0 flex-1 truncate text-base font-semibold text-sidebar-foreground">
-                  {PINA_ASSISTANT_NAME}
-                </span>
-                {pinaThread ? (
-                  <>
-                    {pinaWokeUnseen && (
-                      <AlarmClockIcon
-                        role="img"
-                        aria-label={gt("Woke", { $context: "thread status: woke from snooze" })}
-                      />
-                    )}
-                    <ThreadRowLeadingStatus thread={pinaThread} />
-                    <ThreadRowTrailingStatus thread={pinaThread} />
-                  </>
-                ) : null}
-              </SidebarMenuButton>
+                  onClick={() => {
+                    if (isMobile) setOpenMobile(false);
+                    if (pinaThread && pinaWokeUnseen && pinaWokeAt) {
+                      acknowledgeWoke(
+                        scopeThreadRef(pina.environmentId, pinaThread.id),
+                        pinaWokeAt,
+                      );
+                    }
+                    void pina.open();
+                  }}
+                >
+                  <img src={pinaAvatarUrl} alt="" className="size-8 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate text-base font-semibold text-sidebar-foreground">
+                    {pinaThread && pinaThread.id === openPinaId
+                      ? pinaThread.title
+                      : PINA_ASSISTANT_NAME}
+                  </span>
+                  {pinaThread ? (
+                    <>
+                      {pinaWokeUnseen && (
+                        <AlarmClockIcon
+                          role="img"
+                          aria-label={gt("Woke", { $context: "thread status: woke from snooze" })}
+                        />
+                      )}
+                      <ThreadRowLeadingStatus thread={pinaThread} />
+                      <ThreadRowTrailingStatus thread={pinaThread} />
+                    </>
+                  ) : null}
+                </SidebarMenuButton>
+                {pina.supportsConversations && (
+                  <PinaConversationsMenu
+                    environmentId={pina.environmentId}
+                    conversations={pinaConversations}
+                    selectedId={openPinaId}
+                    onOpen={(id) => {
+                      if (isMobile) setOpenMobile(false);
+                      void pina.openThread(id);
+                    }}
+                    onRestore={async (id) => {
+                      const result = await unarchiveThread(scopeThreadRef(pina.environmentId, id));
+                      if (result._tag === "Failure") {
+                        if (!isAtomCommandInterrupted(result))
+                          toastManager.add({
+                            type: "error",
+                            title: m(msg("Failed to unarchive thread")),
+                            description:
+                              thrownErrorMessage(squashAtomCommandFailure(result), m) ?? undefined,
+                          });
+                        return;
+                      }
+                      if (isMobile) setOpenMobile(false);
+                      await pina.openThread(id);
+                    }}
+                    onCreate={async (title) => {
+                      const created = await pina.create(title);
+                      if (created && isMobile) setOpenMobile(false);
+                      return created;
+                    }}
+                  />
+                )}
+              </div>
             )}
             <SidebarThreadHeader
               hasProjects={projectGroups.length > 0}

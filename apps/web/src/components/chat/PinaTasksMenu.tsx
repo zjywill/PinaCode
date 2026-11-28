@@ -7,6 +7,7 @@ import {
   type ThreadId,
   type EnvironmentId,
   reportsTurnsToPina,
+  isNamedPinaConversation,
   isOrchestrationV2WorkActive,
 } from "@t3tools/contracts";
 import { useGT } from "gt-react";
@@ -120,7 +121,8 @@ export function PinaTasksMenu({
     const existing = tasks.get(key);
     if (
       !existing &&
-      (shell.environmentId !== parentRef.environmentId ||
+      (isNamedPinaConversation(parentRef.threadId) ||
+        shell.environmentId !== parentRef.environmentId ||
         shell.archivedAt ||
         shell.deletedAt ||
         !reportsTurnsToPina(shell.source) ||

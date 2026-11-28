@@ -6,6 +6,7 @@ import {
   OrchestrationV2SearchThreadsResult,
 } from "./orchestrationV2.ts";
 import { OrchestrationDispatchCommandError } from "./orchestrationDispatch.ts";
+import { OpenPinaInput } from "./pina.ts";
 import {
   McpAppCallToolInput,
   McpAppCallToolResult,
@@ -1687,7 +1688,7 @@ const WsProjectsMutateRpc = Rpc.make(WS_METHODS.projectsMutate, {
 });
 
 const WsOpenPinaRpc = Rpc.make(WS_METHODS.openPina, {
-  payload: Schema.Struct({}),
+  payload: OpenPinaInput,
   success: Schema.Struct({ threadId: ThreadId }),
   error: Schema.Union([OrchestrationDispatchCommandError, EnvironmentAuthorizationError]),
 });

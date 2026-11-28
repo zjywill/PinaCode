@@ -4,10 +4,11 @@ import { msg } from "gt-react-native";
 import { m } from "../../i18n/messages";
 import type { DraftComposerAttachment } from "../../lib/composerImages";
 import type { ComposerDraft } from "../../state/use-composer-drafts";
-import type {
-  IncomingShareDestination,
-  IncomingShareDraft,
-  selectIncomingShareAttachmentsForServer,
+import {
+  incomingShareDestinationKey,
+  type IncomingShareDestination,
+  type IncomingShareDraft,
+  type selectIncomingShareAttachmentsForServer,
 } from "../sharing/incoming-share-model";
 
 export type ShareImportPhase =
@@ -101,6 +102,7 @@ export interface ShareImportDeps {
   /** Sweeps files no draft retained; the sweep re-checks ownership. */
   readonly releaseUnusedAttachments: (attachments: ReadonlyArray<DraftComposerAttachment>) => void;
   readonly onWarnings: (warnings: ReadonlyArray<string>) => void;
+  readonly onImported?: (target: ShareImportTarget) => void;
   readonly onImportFailure: (target: ShareImportTarget, error: unknown) => void;
   /** Reported even after the route left: the undo is still incomplete. */
   readonly onCancelFailure: (target: ShareImportTarget, error: unknown) => void;
@@ -132,8 +134,7 @@ function keyOf(target: ShareImportTarget): string {
     target.flowKey,
     target.routeKey,
     target.draftKey,
-    target.destination.environmentId,
-    target.destination.projectId,
+    incomingShareDestinationKey(target.destination),
     target.shareId,
   ]);
 }
@@ -207,8 +208,7 @@ export function makeIncomingShareImports(deps: ShareImportDeps) {
     try {
       await deps.reserve(shareId, destination);
       entry.reservedFor = destination;
-      // The durable reservation makes an interrupted transfer resume only in
-      // this project instead of copying into a second project draft.
+      // A durable reservation resumes an interrupted transfer in the same draft.
       if (stopped()) return;
       advance(entry, "reserved");
       const share = deps.getShare(shareId);
@@ -263,6 +263,7 @@ export function makeIncomingShareImports(deps: ShareImportDeps) {
         );
       }
       if (warnings.length > 0) deps.onWarnings(warnings);
+      deps.onImported?.(entry.target);
     } catch (error) {
       if (stopped()) return;
       advance(entry, "failed");

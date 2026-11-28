@@ -68,7 +68,7 @@ export function HardwareKeyboardCommandProvider({
   const pinaEnvironmentId = usePinaEnvironment(
     activeThreadRef?.environmentId ?? (draft && flow.selectedEnvironmentId),
   );
-  const pina = useOpenPina(pinaEnvironmentId);
+  const pina = useOpenPina(pinaEnvironmentId, activeThreadRef);
   const canOpenPina = pina !== null;
   const copyTarget = useMemo(
     () =>

@@ -4,6 +4,7 @@ import {
   idleCompactionOf,
   isProviderAvailable,
   isPinaThread,
+  PINA_ASSISTANT_NAME,
   reportsTurnsToPina,
   MessageId,
   type ModelSelection,
@@ -20,6 +21,8 @@ import {
   type OrchestratorMcpCapabilitiesInput,
   type OrchestratorMcpCapabilitiesResult,
   type OrchestratorMcpModelOption,
+  type OrchestratorMcpPinaSendInput,
+  type OrchestratorMcpPinaSendResult,
   type OrchestratorMcpCreateThreadsInput,
   type OrchestratorMcpCreateThreadsResult,
   type OrchestratorMcpCreatedThread,
@@ -73,7 +76,12 @@ import { getProviderOptionCurrentValue, withLegacyUltracodeEffort } from "@t3too
 import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { runRanAfter } from "@t3tools/shared/orchestrationV2ThreadError";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
-import { formatThreadLink } from "@t3tools/shared/threadLinks";
+import {
+  formatHostedThreadLink,
+  formatThreadLink,
+  hostedThreadLink,
+  replaceThreadLinks,
+} from "@t3tools/shared/threadLinks";
 import { threadPullRequestUpdatedAtMs } from "@t3tools/shared/threadPullRequests";
 import {
   normalizeThreadPullRequestKey,
@@ -81,10 +89,12 @@ import {
 } from "../sourceControl/threadPullRequests.ts";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Hex from "effect/encoding/Hex";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -234,6 +244,10 @@ export interface OrchestratorMcpServiceShape {
     scope: McpInvocationScope,
     input: OrchestratorMcpThreadSendInput,
   ) => Effect.Effect<OrchestratorMcpThreadSendResult, OrchestratorMcpFailure>;
+  readonly sendToPina: (
+    scope: McpInvocationScope,
+    input: OrchestratorMcpPinaSendInput,
+  ) => Effect.Effect<OrchestratorMcpPinaSendResult, OrchestratorMcpFailure, Digest.Digest>;
   readonly waitForThread: (
     scope: McpInvocationScope,
     input: OrchestratorMcpThreadWaitInput,
@@ -902,6 +916,16 @@ function stableOperationMessageId(input: {
   );
 }
 
+function hostedPinaReply(scope: McpInvocationScope, text: string) {
+  return replaceThreadLinks(withoutWebhookUrlToken(text), (link, label) =>
+    formatHostedThreadLink(
+      { environmentId: link.environmentId ?? scope.environmentId, threadId: link.threadId },
+      label ?? "",
+      scope.client?.hostedAppUrl,
+    ),
+  );
+}
+
 function threadTitle(input: {
   readonly parentTitle: string;
   readonly prompt: string | undefined;
@@ -1247,8 +1271,9 @@ function timelineItem(input: {
   readonly maxChars: number;
   readonly textOffset?: number;
   readonly messagesByThreadId: ReadonlyMap<ThreadId, OrchestrationV2ThreadProjection["messages"]>;
+  readonly hostedText?: string;
 }): OrchestratorMcpThreadTimelineItem {
-  const itemText = turnItemText(input.row.item);
+  const itemText = input.hostedText ?? turnItemText(input.row.item);
   const text = itemText === null ? null : withoutWebhookUrlToken(itemText);
   const offset = input.textOffset ?? 0;
   const end = textPageEnd(text, offset, input.maxChars);
@@ -3064,6 +3089,7 @@ const make = Effect.gen(function* () {
             messageId,
             message: prompt,
             clientRequestId: input.clientRequestId,
+            untilDelegatedWorkSettled: true,
             delegationWake: input.mode === "wait" ? "settled_only" : "always",
           }));
         if (taskId === undefined)
@@ -3783,6 +3809,11 @@ const make = Effect.gen(function* () {
           row,
           maxChars,
           messagesByThreadId,
+          ...(scope.client?.hostedAppUrl &&
+          isPinaThread(row.sourceThreadId) &&
+          row.item.type === "assistant_message"
+            ? { hostedText: hostedPinaReply(scope, row.item.text) }
+            : {}),
           ...(input.itemId === undefined ? {} : { textOffset: input.textOffset ?? 0 }),
         })),
         newestFirst,
@@ -3916,6 +3947,118 @@ const make = Effect.gen(function* () {
             { ...input, reportBack },
             sent,
           );
+    }),
+    sendToPina: Effect.fn("OrchestratorMcpService.sendToPina")(function* (scope, input) {
+      const client = scope.client;
+      if (
+        !client ||
+        client.linked ||
+        scope.thread ||
+        client.access === "read-only" ||
+        !scope.capabilities.has("orchestration")
+      ) {
+        return yield* failure(
+          "capability_denied",
+          "Talking to Pina requires an outside MCP client approved to operate threads.",
+        );
+      }
+      const digest = yield* Digest.Digest;
+      const hash = yield* digest
+        .digest(Digest.sha256, new TextEncoder().encode(`pina-mcp:${client.sessionId}`))
+        .pipe(
+          Effect.map(Hex.encode),
+          Effect.mapError(() =>
+            failure(
+              "orchestration_error",
+              "Could not identify this MCP client's Pina conversation.",
+            ),
+          ),
+        );
+      const requestId = [
+        hash.slice(0, 8),
+        hash.slice(8, 12),
+        hash.slice(12, 16),
+        hash.slice(16, 20),
+        hash.slice(20, 32),
+      ].join("-");
+      const limits = clientModeCeiling(client);
+      const { threadId } = yield* threadLaunch
+        .openPina(
+          {
+            newConversation: {
+              requestId,
+              title: `${PINA_ASSISTANT_NAME} · ${client.label}`.slice(0, 120),
+            },
+          },
+          limits,
+        )
+        .pipe(Effect.mapError((error) => failure("orchestration_error", error.message)));
+      const thread = yield* threadManagement
+        .getThreadShell(threadId)
+        .pipe(Effect.mapError(threadManagementFailure));
+      if (thread === null || thread.deletedAt !== null) {
+        return yield* failure(
+          "thread_not_found",
+          "This MCP client's Pina conversation was not found.",
+        );
+      }
+      if (thread.archivedAt !== null) {
+        return yield* failure(
+          "thread_archived",
+          "Restore this Pina conversation in the app before sending another message.",
+        );
+      }
+      yield* assertTargetWithinLimits(limits, thread);
+
+      const request = { scope, requestKey: input.clientRequestId, operation: "pina-send" };
+      const { run: sent } = yield* threadManagement
+        .sendToThread({
+          projectId: thread.projectId,
+          commandId: stableCommandId(request),
+          threadId,
+          messageId: stableOperationMessageId(request),
+          text: input.message,
+          attachments: [],
+          mode: "queue",
+          createdBy: "agent",
+          creationSource: "mcp",
+        })
+        .pipe(Effect.mapError(threadManagementFailure));
+      const waited = yield* threadManagement
+        .waitForThread({
+          projectId: thread.projectId,
+          threadId,
+          runId: sent.id,
+          timeoutMs: input.timeoutMs ?? 12_000,
+        })
+        .pipe(Effect.mapError(threadManagementFailure));
+      const run = waited.run ?? sent;
+      let reply: string | null = null;
+      if (!waited.timedOut && run.status === "completed") {
+        const records = yield* threadManagement
+          .getThreadRecords(threadId, ["messages", "turnItems"], {
+            messageRoles: ["assistant"],
+            messageRunIds: [run.id],
+            turnItemRunIds: [run.id],
+            turnItemTypes: SUBAGENT_RESULT_TURN_ITEM_TYPES,
+          })
+          .pipe(Effect.mapError(threadManagementFailure));
+        const result = subagentResultForRun({ ...records, providerTurns: [] }, run);
+        if (result.messageId !== null || result.turnItemId !== null) {
+          reply = hostedPinaReply(scope, result.text.slice(0, 16_000));
+        }
+      }
+      return {
+        threadId,
+        link: hostedThreadLink(
+          { environmentId: scope.environmentId, threadId },
+          client.hostedAppUrl,
+        ),
+        runId: run.id,
+        status: runOutcome(run),
+        timedOut: waited.timedOut,
+        reply,
+      };
     }),
     waitForThread: Effect.fn("OrchestratorMcpService.waitForThread")(function* (scope, input) {
       const { parent, target } = yield* loadScopedThread(scope, input.threadId, []);

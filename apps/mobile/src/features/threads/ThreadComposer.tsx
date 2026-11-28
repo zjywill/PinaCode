@@ -1034,7 +1034,7 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
                       environmentId={props.environmentId}
                       key={attachment.id}
                       attachment={attachment}
-                      size={30}
+                      size={44}
                       borderRadius={8}
                       compact
                       onPressPreview={isSubmissionLocked ? undefined : onPressPreview}
